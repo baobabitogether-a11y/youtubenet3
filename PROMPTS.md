@@ -274,5 +274,89 @@ the last task was to update AGENTS.md with the app flow and design setttings
   - **Status**: Completed
   - **Review**: Added Section 8 ("Application Flow, Screen Architecture & Design Decisions") to `AGENTS.md`. Documented target language availability during active playback, controls per screen, screen transition matrix, all 8 playback triggers, cached data keys, and stored per-video settings.
 
+---
+
+## Latest User Prompt (Video Playback Screen Quick Bringup Buttons)
+
+```text
+app design decisions:
+- app screen: video playback 
+-- required quick bringup of view using buttons: 1.log view (including network requests ) 2.edit taget languages for translation
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 12 (Quick Bringup Buttons for Video Playback Screen)**:
+  - **Requirement**: On the video playback screen, provide quick bringup of views using dedicated buttons:
+    1. Log view (including network requests)
+    2. Edit target languages for translation
+  - **Implementation**:
+    1. **Log View Quick Button (`#open-logs-view-btn`)**:
+       - Added to the top control surface of `VideoPlayer.tsx` in both compact full-screen mode and expanded teacher mode.
+       - Decorated with the `Terminal` icon and high-contrast tooltip.
+       - Linked via `onOpenLogs` callback in `App.tsx` to launch `ActivityLogModal`.
+       - Enhanced `ActivityLogModal.tsx` with dedicated `#filter-btn-NETWORK` and real-time HTTP network traffic inspection, body preview, search filtering, and safe ring buffer tracking.
+    2. **Edit Target Languages Quick Button (`#open-target-language-btn`)**:
+       - Positioned on the top bar of `VideoPlayer.tsx` displaying the current language code (e.g., `ES`, `IT`, `LANG`).
+       - Linked via `onOpenTargetLanguageModal` to open `SelectTargetLanguageModal`.
+       - Enables dynamic language switching, TTS rate calibration, and learning language configuration during active playback without pausing or interrupting the video.
+    3. **Architecture Documentation**:
+       - Updated Section 8.2 and added Section 8.7 ("Video Playback Screen Quick Bringup Buttons") in `AGENTS.md`.
+  - **Status**: Completed & Verified
+  - **Verification**: `lint_applet` passed (`tsc --noEmit`), `compile_applet` succeeded.
+
+---
+
+## Current User Prompt (Fix GitHub Actions Workflow Failure)
+
+```text
+fix 
+https://productionresultssa14.blob.core.windows.net/actions-results/3a47b181-02a8-4127-ac74-b93a8c7dc9f7/workflow-job-run-7fea524a-4252-5d08-8fc7-55a6b8b3cdfe/logs/job/job-logs.txt?rsct=text%2Fplain&se=2026-09-13T03%3A16%3A10Z&sig=JztHEw1A%2BH5B0P4E1rEz%2BNuODgVOYSh0a2hsobp9oO4%3D&ske=2026-09-13T06%3A20%3A09Z&skoid=ca7593d4-ee42-46cd-af88-8b886a2f84eb&sks=b&skt=2026-09-13T02%3A20%3A09Z&sktid=398a6654-997b-47e9-b12b-9515b896b4de&skv=2025-11-05&sp=r&spr=https&sr=b&st=2026-09-13T03%3A06%3A05Z&sv=2025-11-05
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 15 (Fix GitHub Actions Workflow Job Failure in Build & Publish APK)**:
+  - **Root Cause Analysis**:
+    - Workflow job `Build & Publish APK` in `.github/workflows/release-apk.yml` failed at step `actions/setup-node@v4` with error:
+      `##[error]Dependencies lock file is not found in /home/runner/work/youtubenet3/youtubenet3. Supported file patterns: package-lock.json,npm-shrinkwrap.json,yarn.lock`
+    - In `release-apk.yml`, `actions/setup-node@v4` was configured with `cache: 'npm'`, which strictly requires a `package-lock.json` file to be checked into git.
+  - **Solution**:
+    1. Removed `cache: 'npm'` from `actions/setup-node@v4` in `.github/workflows/release-apk.yml`, matching the proven and stable pattern used in `.github/workflows/e2e.yml`.
+    2. Generated `package-lock.json` cleanly in the project root via `npm i --package-lock-only`, ensuring lockfile parity for both local and CI builds.
+    3. Verified `npm run build`, `lint_applet`, and `compile_applet` all pass cleanly.
+  - **Status**: Completed & Verified
+
+
+```text
+1. how to access the gh-page which shows the e2e test running on android emulator ?
+2. allow to view a web demo and show the url on readme.
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 13 (Access Android Emulator E2E Test Report on GitHub Pages)**:
+  - **Requirement**: Provide comprehensive explanation and direct URLs to access the GitHub Page demonstrating the E2E test execution on the real Android emulator (Google Pixel 7 / API 34 / Android 14).
+  - **Implementation**:
+    - Direct Standalone Report URL: `https://baobabitogether-a11y.github.io/youtubenet3/android-emulator-report.html`
+    - Embedded Interactive Runner Tab URL: `https://baobabitogether-a11y.github.io/youtubenet3/#android`
+    - Documented how to navigate artifacts, inspect emulator screenshots (`android-emulator-screenshot.png`), audit Android Logcat (`YT_CAPTION_INTERCEPTOR`, `TTS_ENGINE`), and verify the native `shouldInterceptRequest` WebView timedtext interception.
+  - **Status**: Completed
+  - **Review**: Documented in `README.md` under dedicated section "How to Access the Android Emulator E2E Test Report on GitHub Pages" with direct links and navigation instructions.
+
+- [x] **Task 14 (Enable & Display Web Demo URL in README)**:
+  - **Requirement**: Allow users to view a live web demo of the application and prominently display the URLs on `README.md`.
+  - **Implementation**:
+    - Added high-visibility section "Live Web Demo & Interactive Previews" at the top of `README.md`.
+    - Published direct links:
+      1. Standalone Live Web App: `https://baobabitogether-a11y.github.io/youtubenet3/app/`
+      2. Interactive Cypress Runner Demo: `https://baobabitogether-a11y.github.io/youtubenet3/`
+      3. Cloud Run Live Preview: `https://ais-pre-vsignv5vsfihcpe7wtj63o-82169901332.europe-west3.run.app`
+    - Outlined interactive features available in the web demo (playback, CC detection, on-the-fly translation changes, real-time activity and network log inspection, subtitle positioning).
+  - **Status**: Completed
+  - **Review**: Added detailed web demo section and direct URLs to `README.md`, verified build and compilation.
+
+
+
 
 

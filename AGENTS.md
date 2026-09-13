@@ -194,12 +194,12 @@ android_ui:
 
 ### 8.2 App Screens & Available Controls
 1. **Full-Screen Video Player Screen (`compactView: true` — Default)**:
-   - *Top Bar*: Back/Close (`#back-close-button`), Video ID badge, Subtitle Position quick-cycle button (`#cycle-subtitle-position-btn`), Target Language button (`#open-target-language-btn`), Settings button (`#open-settings-button`).
+   - *Top Bar*: Back/Close (`#back-close-button`), Video ID badge, **Log View (including Network Requests)** quick button (`#open-logs-view-btn`), **Edit Target Languages for Translation** quick button (`#open-target-language-btn`), Subtitle Position quick-cycle button (`#cycle-subtitle-position-btn`), Settings button (`#open-settings-button`).
    - *Center*: Tap-to-play/pause toggle (`#center-play-pause-toggle`) and buffering loader.
    - *Subtitle Overlay*: Positioned (`top`, `above`, `under`, `bottom`) with `#active-subtitle-cue-text` and `#active-translated-cue-text` (translated text on top by default).
    - *Bottom Bar*: Play/Pause (`#play-pause-toggle-button`), Caption CC (`#toggle-captions-button`), Volume/Mute (`#volume-mute-toggle`), Seek Scrubber (`#video-progress-scrubber`), timestamp/duration, Fullscreen (`#fullscreen-toggle-button`).
 2. **Subtitles Teacher & Workspace Screen (`compactView: false` — Expanded Mode)**:
-   - Embedded player card, subtitle search input, format indicator badge, sequential sync toggle (alternating TTS and video playback), and subtitle cue table with interactive timestamps, audio TTS buttons, slow speech (0.75x) toggle, cue loop buttons, and multi-column translations.
+   - Embedded player card with quick bringup buttons (`#open-logs-view-btn-expanded`, `#open-target-language-btn-expanded`), subtitle search input, format indicator badge, sequential sync toggle (alternating TTS and video playback), and subtitle cue table with interactive timestamps, audio TTS buttons, slow speech (0.75x) toggle, cue loop buttons, and multi-column translations.
 3. **Video Library & URL Entry Drawer (`LibraryModal.tsx`)**:
    - YouTube URL / Video ID input with "Load Video" submit button, preset video carousel (e.g. Russian interview `FcRzAdI8R9U`), saved video history cards with thumbnails, title, cue count, and delete button.
 4. **Target Language Selection Modal (`SelectTargetLanguageModal.tsx`)**:
@@ -252,6 +252,12 @@ android_ui:
 - **`playOrder`**: Sequential sync preference (`'tts_first'` vs `'video_first'`).
 - **`sourceLang`**: Primary spoken language of the video.
 - **`lastUpdated`**: Epoch timestamp of latest settings update.
+
+### 8.7 Video Playback Screen Quick Bringup Buttons
+- **Mandatory Quick Bringup Buttons on Video Playback Screen**:
+  1. **Log View (including network requests)** (`#open-logs-view-btn`): Directly brings up the Activity & Network Logs view (`ActivityLogModal`), providing instant access to the chronological activity ring buffer, real-time HTTP network traffic (`#filter-btn-NETWORK`), request status codes, durations, response payloads, search filtering, and log clipboard export.
+  2. **Edit Target Languages for Translation** (`#open-target-language-btn`): Directly brings up `SelectTargetLanguageModal` to switch active translation target language on the fly, adjust per-language TTS speech rates, and customize/edit the user's defined learning languages list.
+
 
 
 

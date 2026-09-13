@@ -1035,6 +1035,7 @@ export default function App() {
             alwaysShowKeyControls={settings.alwaysShowKeyControls}
             onChangeSubtitlePosition={(pos) => handleUpdateSettings({ ...settings, subtitlePosition: pos })}
             onOpenTargetLanguageModal={() => setIsTargetLangModalOpen(true)}
+            onOpenLogs={() => setIsLogsModalOpen(true)}
             onOpenSettings={() => {
               try {
                 playerRef.current?.pauseVideo?.();
@@ -1285,6 +1286,7 @@ export default function App() {
             alwaysShowKeyControls={settings.alwaysShowKeyControls}
             onChangeSubtitlePosition={(pos) => handleUpdateSettings({ ...settings, subtitlePosition: pos })}
             onOpenTargetLanguageModal={() => setIsTargetLangModalOpen(true)}
+            onOpenLogs={() => setIsLogsModalOpen(true)}
             onOpenSettings={() => {
               try {
                 playerRef.current?.pauseVideo?.();

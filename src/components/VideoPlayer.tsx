@@ -19,6 +19,7 @@ import {
   Settings,
   Globe,
   Layers,
+  Terminal,
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, formatTypeName } from '../utils/youtube';
 import { YouTubeFormatType, YouTubePlayerHandle, CaptionCue } from '../types';
@@ -47,6 +48,7 @@ interface VideoPlayerProps {
   translatedCueText?: string | null;
   targetLanguage?: string | null;
   onOpenTargetLanguageModal?: () => void;
+  onOpenLogs?: () => void;
   onOpenSettings?: () => void;
   onBackOrClose?: () => void;
   onTimeUpdate?: (currentTime: number) => void;
@@ -75,6 +77,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       translatedCueText = null,
       targetLanguage = null,
       onOpenTargetLanguageModal,
+      onOpenLogs,
       onOpenSettings,
       onBackOrClose,
       onTimeUpdate,
@@ -657,14 +660,32 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Target Language Selection Button (Requirement 2) */}
+                {/* 1. Quick Bringup: Log View (Including Network Requests) */}
+                {onOpenLogs && (
+                  <button
+                    id="open-logs-view-btn"
+                    data-testid="open-logs-view-btn"
+                    type="button"
+                    onClick={onOpenLogs}
+                    aria-label="Activity Logs & Network Requests"
+                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    title="Quick Bringup: Activity Logs & Network Requests"
+                  >
+                    <Terminal className="w-4 h-4 text-cyan-400" />
+                    <span className="hidden xs:inline">Logs</span>
+                  </button>
+                )}
+
+                {/* 2. Quick Bringup: Edit Target Languages for Translation */}
                 {onOpenTargetLanguageModal && (
                   <button
                     id="open-target-language-btn"
+                    data-testid="open-target-language-btn"
                     type="button"
                     onClick={onOpenTargetLanguageModal}
+                    aria-label="Edit Target Languages for Translation"
                     className="min-h-[44px] px-3 rounded-xl bg-indigo-950/80 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
-                    title="Change Target Language"
+                    title="Quick Bringup: Edit Target Languages for Translation"
                   >
                     <Globe className="w-4 h-4 text-indigo-400" />
                     <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
@@ -969,6 +990,34 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               <Repeat className="w-3.5 h-3.5" />
               <span>Loop: {loop ? 'ON' : 'OFF'}</span>
             </button>
+
+            {/* Quick Bringup 1: Log View (Including Network Requests) */}
+            {onOpenLogs && (
+              <button
+                id="open-logs-view-btn-expanded"
+                type="button"
+                onClick={onOpenLogs}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-cyan-300 border border-neutral-700 transition active:scale-95"
+                title="Quick Bringup: Activity Logs & Network Requests"
+              >
+                <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Logs</span>
+              </button>
+            )}
+
+            {/* Quick Bringup 2: Edit Target Languages for Translation */}
+            {onOpenTargetLanguageModal && (
+              <button
+                id="open-target-language-btn-expanded"
+                type="button"
+                onClick={onOpenTargetLanguageModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition active:scale-95"
+                title="Quick Bringup: Edit Target Languages for Translation"
+              >
+                <Globe className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+              </button>
+            )}
 
             {/* Theater mode toggle */}
             <button
