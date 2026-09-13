@@ -13,8 +13,8 @@ You can test and interact with the application live in your browser:
 
 | Live Environment | Direct URL | Description |
 | :--- | :--- | :--- |
-| 🚀 **GitHub Pages Web Demo** | [**https://mostuf25561.github.io/youtubenet3/app/**](https://mostuf25561.github.io/youtubenet3/app/) *(Mirror: [baobabitogether-a11y](https://baobabitogether-a11y.github.io/youtubenet3/app/))* | Standalone live browser build with responsive playback controls, dual-language subtitles (`top`/`above`/`under`/`bottom`), and instant target language translation switching. |
-| ⚡ **Interactive Cypress Runner Demo** | [**https://mostuf25561.github.io/youtubenet3/**](https://mostuf25561.github.io/youtubenet3/) *(Mirror: [baobabitogether-a11y](https://baobabitogether-a11y.github.io/youtubenet3/))* | Live interactive test runner with time-travel DOM snapshots, video playback, and test suite filter tabs. |
+| 🚀 **GitHub Pages Web Demo** | [**https://mostuf25561.github.io/youtubenet3/app/**](https://mostuf25561.github.io/youtubenet3/app/) | Standalone live browser build with responsive playback controls, dual-language subtitles (`top`/`above`/`under`/`bottom`), and instant target language translation switching. |
+| ⚡ **Interactive Cypress Runner Demo** | [**https://mostuf25561.github.io/youtubenet3/**](https://mostuf25561.github.io/youtubenet3/) | Live interactive test runner with time-travel DOM snapshots, video playback, and test suite filter tabs. |
 | ☁️ **Cloud Run Live Preview** | [**https://ais-pre-vsignv5vsfihcpe7wtj63o-82169901332.europe-west3.run.app**](https://ais-pre-vsignv5vsfihcpe7wtj63o-82169901332.europe-west3.run.app) | Full-stack container preview with active backend proxy endpoints and subtitle APIs. |
 
 ### What You Can Try in the Web Demo:
@@ -33,9 +33,9 @@ The end-to-end test execution report running on a real Android emulator (Google 
 
 ### 1. Direct Links to Android Emulator Reports
 - **Standalone Android Emulator Report**:
-  👉 [**https://mostuf25561.github.io/youtubenet3/android-emulator-report.html**](https://mostuf25561.github.io/youtubenet3/android-emulator-report.html) *(Mirror: [baobabitogether-a11y](https://baobabitogether-a11y.github.io/youtubenet3/android-emulator-report.html))*
+  👉 [**https://mostuf25561.github.io/youtubenet3/android-emulator-report.html**](https://mostuf25561.github.io/youtubenet3/android-emulator-report.html)
 - **Embedded in Interactive Cypress Runner**:
-  👉 [**https://mostuf25561.github.io/youtubenet3/#android**](https://mostuf25561.github.io/youtubenet3/#android) *(Mirror: [baobabitogether-a11y](https://baobabitogether-a11y.github.io/youtubenet3/#android))*
+  👉 [**https://mostuf25561.github.io/youtubenet3/#android**](https://mostuf25561.github.io/youtubenet3/#android)
 
 ### 2. How to Navigate and Inspect the Test on the GitHub Page:
 1. **Open the Report Link**: Click either of the direct links above.
@@ -54,50 +54,33 @@ The end-to-end test execution report running on a real Android emulator (Google 
 
 ## 📊 All GitHub Pages Links & Test Dashboards
 
-| Test Suite / Dashboard | Primary Direct Link (`mostuf25561`) | Mirror Direct Link (`baobabitogether-a11y`) | Description |
-| :--- | :--- | :--- | :--- |
-| 🌐 **Live Web Application** | [**Open Web App**](https://mostuf25561.github.io/youtubenet3/app/) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/app/) | Standalone browser build with responsive playback controls, dual-language subtitles, and settings. |
-| ⚡ **Interactive Cypress Runner Dashboard** | [**Open Cypress Runner**](https://mostuf25561.github.io/youtubenet3/) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/) | DOM time-travel step inspection, pinned snapshots, video player with chapter markers, and test filters. |
-| 📱 **Android Real Device Emulation E2E Report** | [**Open Android Report**](https://mostuf25561.github.io/youtubenet3/android-emulator-report.html) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/android-emulator-report.html) | Option C: Native WebView `shouldInterceptRequest` verification on Google Pixel 7 (Android 14 / API 34), Logcat audit, and hardware TTS loop verification. |
-| 📱 **Android Emulation in Runner View** | [**Open in Runner (#android)**](https://mostuf25561.github.io/youtubenet3/#android) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/#android) | Direct tab switch inside the interactive Cypress runner dashboard. |
-| 📋 **Mochawesome Test Report** | [**Open Mochawesome Report**](https://mostuf25561.github.io/youtubenet3/mochawesome.html) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/mochawesome.html) | Suite breakdown, pass/fail metrics, step timing breakdown, and test assertion logs. |
-| 🔍 **Playwright Trace Inspector** | [**Open Playwright Trace**](https://mostuf25561.github.io/youtubenet3/playwright/index.html) | [Open Mirror](https://baobabitogether-a11y.github.io/youtubenet3/playwright/index.html) | Network timeline, console events, and action waterfall inspector. |
+| Test Suite / Dashboard | Direct Link (`mostuf25561`) | Description |
+| :--- | :--- | :--- |
+| 🌐 **Live Web Application** | [**Open Web App**](https://mostuf25561.github.io/youtubenet3/app/) | Standalone browser build with responsive playback controls, dual-language subtitles, and settings. |
+| ⚡ **Interactive Cypress Runner Dashboard** | [**Open Cypress Runner**](https://mostuf25561.github.io/youtubenet3/) | DOM time-travel step inspection, pinned snapshots, video player with chapter markers, and test filters. |
+| 📱 **Android Real Device Emulation E2E Report** | [**Open Android Report**](https://mostuf25561.github.io/youtubenet3/android-emulator-report.html) | Native WebView `shouldInterceptRequest` verification on Google Pixel 7 (Android 14 / API 34), Logcat audit, and hardware TTS loop verification. |
+| 📱 **Android Emulation in Runner View** | [**Open in Runner (#android)**](https://mostuf25561.github.io/youtubenet3/#android) | Direct tab switch inside the interactive Cypress runner dashboard. |
+| 📋 **Mochawesome Test Report** | [**Open Mochawesome Report**](https://mostuf25561.github.io/youtubenet3/mochawesome.html) | Suite breakdown, pass/fail metrics, step timing breakdown, and test assertion logs. |
+| 🔍 **Playwright Trace Inspector** | [**Open Playwright Trace**](https://mostuf25561.github.io/youtubenet3/playwright/index.html) | Network timeline, console events, and action waterfall inspector. |
+
+---
 
 ## 📲 Install & Update Android APK via CLI (Remote One-Liner)
 
-To download and install the latest `YouTube-Viewer-debug.apk` directly onto a connected Android device or emulator via ADB **without cloning this repository or relying on any local files**, run this remote CLI command in your Terminal or Git Bash:
+To download and install the latest `YouTube-Viewer-debug.apk` directly onto a connected Android device or emulator via ADB without cloning this repository or relying on any local files, run this single command in your Terminal or Git Bash:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash -s -- "https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk"
 ```
 
-### Additional CLI Options & Repositories
+The command uses:
+1. **Remote Shell Script URL**: `https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh`
+2. **Remote APK URL**: `https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk`
 
-- **Install from `baobabitogether-a11y` mirror:**
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/baobabitogether-a11y/youtubenet3/main/update.apk.sh | bash
-  ```
-
-- **Install a specific version / tag (e.g. `v1.0.16` or `v1.0.14`):**
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/baobabitogether1-hash/youtubenet4/main/update.apk.sh | bash -s -- v1.0.16
-  ```
-
-- **Install from a direct release asset URL:**
-  ```bash
-  curl -fsSL https://raw.githubusercontent.com/baobabitogether1-hash/youtubenet4/main/update.apk.sh | bash -s -- "https://github.com/baobabitogether1-hash/youtubenet4/releases/download/v1.0.16/YouTube-Viewer-debug.apk"
-  ```
-
-- **Alternative using `wget`:**
-  ```bash
-  wget -qO- https://raw.githubusercontent.com/baobabitogether1-hash/youtubenet4/main/update.apk.sh | bash
-  ```
-
-The remote script automatically:
+The script automatically:
 1. Locates `adb` on Windows (Git Bash / MSYS2), macOS, and Linux.
-2. Queries the GitHub repository releases API for the latest `YouTube-Viewer-debug.apk`.
-3. Downloads the APK to the system Downloads folder.
-4. Runs `adb install -r -d` to install/upgrade the package `com.ytviewer.app`.
-5. Launches `com.ytviewer.app/.MainActivity` on the connected target device.
+2. Downloads the APK directly from the remote release URL to the system Downloads folder.
+3. Runs `adb install -r -d` to install/upgrade the package `com.ytviewer.app`.
+4. Launches `com.ytviewer.app/.MainActivity` on the connected target device.
 
 

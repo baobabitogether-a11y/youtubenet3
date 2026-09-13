@@ -26,7 +26,13 @@ MAIN_ACTIVITY="com.ytviewer.app/.MainActivity"
 if [[ "${ARG_INPUT}" =~ ^https?:// ]]; then
   DOWNLOAD_URL="${ARG_INPUT}"
   # Extract version from URL if available, or extract file name
-  VERSION=$(echo "${ARG_INPUT}" | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
+  if [[ "${ARG_INPUT}" =~ /releases/download/([^/]+)/ ]]; then
+    VERSION="${BASH_REMATCH[1]}"
+  elif [[ "${ARG_INPUT}" =~ /releases/latest/ ]]; then
+    VERSION="latest"
+  else
+    VERSION="remote-url"
+  fi
   if [[ "${ARG_INPUT}" =~ /([^/]+\.apk)$ ]]; then
     APK_NAME="${BASH_REMATCH[1]}"
   fi

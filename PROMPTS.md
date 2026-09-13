@@ -1,6 +1,25 @@
 # User Prompts & Task Tracking (PROMPTS.md)
 
-## Current User Prompt (Language Switching TTS Sync, Stale Repeated Translations & Redundant Reload Fetches)
+## Current User Prompt (Single Remote GitHub Pages & Single Remote APK Update Command in README)
+
+```text
+update readme to show only 1 remote gh-pages and use only 1 script command to update the app on the android device:
+the command should use 1. the remote url of the shell script 2.the remote url of the apk
+```
+
+### Tasks & Review
+
+- [x] **Task 1 (Single Remote GitHub Pages in README)**: Clean up `README.md` to show only one single remote GitHub Pages site (`https://mostuf25561.github.io/youtubenet3/`). Remove all duplicate mirror references, mirror columns, and alternative domain links (`baobabitogether-a11y`, etc.).
+  - **Status**: Completed & Verified
+  - **Review**: Removed all secondary mirror columns, `baobabitogether-a11y` links, and duplicate domain rows from `README.md`. Retained exclusively the single canonical GitHub Pages host (`https://mostuf25561.github.io/youtubenet3/`) across the Live Web Demo table, Android Emulator Report links, and the Test Dashboards table.
+
+- [x] **Task 2 (Single CLI Update Command with Remote Script & Remote APK URLs)**: Update `README.md` to present only 1 script command for updating the app on an Android device via ADB. Ensure the command passes both: (1) the remote URL of the shell script, and (2) the remote URL of the APK. Remove all other CLI alternatives and multiple repository options. Ensure `update.apk.sh` handles the remote APK URL cleanly.
+  - **Status**: Completed & Verified
+  - **Review**: Streamlined Section "Install & Update Android APK via CLI" in `README.md` to present exactly one single CLI command: `curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash -s -- "https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk"`. Documented the explicit usage of (1) the remote shell script URL and (2) the remote APK URL. Removed all redundant mirror options, alternative commands, and wget variations. Enhanced `update.apk.sh` argument parsing to extract version names and repository identifiers cleanly from release URLs including `/releases/latest/download/`. Verified `compile_applet` passes cleanly.
+
+---
+
+## Previous User Prompt (Language Switching TTS Sync, Stale Repeated Translations & Redundant Reload Fetches)
 
 ```text
 changing the languages -
