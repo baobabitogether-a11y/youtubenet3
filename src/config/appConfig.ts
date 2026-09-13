@@ -1,4 +1,5 @@
 import { LibraryVideoItem } from '../types';
+import { FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../../test/fixtures/defaultSubtitles';
 
 /**
  * Global Application Configuration & Default Settings
@@ -26,8 +27,15 @@ export const STORAGE_KEYS = {
   VIDEO_SETTINGS_PREFIX: 'yt_vsettings_',
 } as const;
 
-// Default Library Items
+// Default Library Items (with Authentic Russian Sheinkin40 1,578 SRT cues)
 export const DEFAULT_LIBRARY_ITEMS: LibraryVideoItem[] = [
+  {
+    id: DEFAULT_VIDEO_ID,
+    originalUrl: DEFAULT_VIDEO_URL,
+    title: 'Authentic Russian Interview (Sheinkin40)',
+    cues: FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru,
+    timestamp: Date.now(),
+  },
   {
     id: ME_AT_THE_ZOO_ID,
     originalUrl: ME_AT_THE_ZOO_URL,

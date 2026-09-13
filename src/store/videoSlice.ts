@@ -1,8 +1,8 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { VideoSliceState } from './types';
 
-const DEFAULT_VIDEO_ID = 'jNQXAC9IVRw';
-const DEFAULT_VIDEO_URL = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+const DEFAULT_VIDEO_ID = 'FcRzAdI8R9U';
+const DEFAULT_VIDEO_URL = 'https://www.youtube.com/watch?v=FcRzAdI8R9U';
 
 const initialState: VideoSliceState = {
   videoId: DEFAULT_VIDEO_ID,

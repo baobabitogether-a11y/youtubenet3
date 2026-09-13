@@ -696,8 +696,32 @@ curl --url 'https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=IgqnasHxK-Plx
   - **Status**: Completed & Verified
   - **Review**: Verified that for video `FcRzAdI8R9U`, `hasCachedTargetSubtitles` returns `true` for all 5 languages (`it`: 1578 cues, `ru`: 1578 cues, `he`: 1578 cues, `en`: 1547 cues, `ar`: 1578 cues), and `translateText` delivers the authentic SRT translation line by line with zero network latency.
 
+---
 
+## Current User Prompt (Browse Full .SRT Fixtures & Detection for Favorites Languages)
 
+```text
+the landing page still shows 5 segments without option to browser through the rest of the .srt files on test/fixtures/languages which we want the app to detect as cached subtitles for the favorites langs on the default videoID.
+```
 
+### Task Breakdown & Progress
 
+- [ ] **Task 37 (Eliminate 5-Segment Limit & Load Full 1,578 Segments on Landing Page)**:
+  - **Requirement**: Fix the issue where the landing page shows only 5 segments for the default video (`FcRzAdI8R9U`). Ensure the app initializes with the full authentic 1,578 segments from `test/fixtures/languages/ru.srt` instead of legacy 5-segment mock data, purge any stale 5-segment cache items, and ensure `DEFAULT_LIBRARY_ITEMS` and `videoSlice.ts` point to `FcRzAdI8R9U`.
+  - **Implementation**:
+    - Update `DEFAULT_VIDEO_ID` in `src/store/videoSlice.ts` to `FcRzAdI8R9U`.
+    - Update `DEFAULT_LIBRARY_ITEMS` in `src/config/appConfig.ts` and `src/App.tsx` so `FcRzAdI8R9U` is the primary item preloaded with full authentic cues from `FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru`.
+    - Update `getCachedSubtitles` in `src/utils/subtitleCache.ts` to invalidate stale cache entries for `FcRzAdI8R9U` if length <= 50, replacing with the complete 1,578 SRT cues.
+    - Prevent `getLastActiveVideo` from prioritizing legacy test video `jNQXAC9IVRw` over `FcRzAdI8R9U`.
+  - **Status**: In Progress
+  - **Review**: Pending verification
 
+- [ ] **Task 38 (Interactive .SRT Fixture Browser & Multi-Track Detection for Favorite Languages)**:
+  - **Requirement**: Provide a direct, intuitive option on the landing page (in the Subtitles Teacher Panel and Workspace) to browse through all the `.srt` files on `test/fixtures/languages` (`ru.srt`, `it.srt`, `he.srt`, `en.srt`, `ar.srt`), detected as cached subtitles for the favorite languages on default video ID `FcRzAdI8R9U`.
+  - **Implementation**:
+    - Add an interactive **"Browse Cached .SRT Tracks"** tabs/selector bar in `SubtitlesTeacherPanel.tsx` displaying all detected `.srt` files with language flags, segment counts, and active indicators.
+    - Implement instant track switching: clicking any `.srt` fixture tab loads that full track (e.g. Italian `it.srt` [1,578 cues], Hebrew `he.srt` [1,578 cues], English `en.srt` [1,547 cues], Arabic `ar.srt` [1,578 cues]) into the workspace table and overlay.
+    - Add `SrtFixturesBrowserModal` to inspect each `.srt` file details (path, line count, segment range, preview, switch buttons).
+    - Update `DEFAULT_TARGET_LANGUAGES` in `SubtitlesTeacherPanel.tsx` to include all five favorite languages (`it`, `ru`, `he`, `en`, `ar`) with authentic cached subtitle loading.
+  - **Status**: In Progress
+  - **Review**: Pending verification
