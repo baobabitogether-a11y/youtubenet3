@@ -120,14 +120,21 @@ async function startServer() {
   // Fetch / transcribe subtitles for any YouTube video
   app.post('/api/fetch-subtitles', async (req, res) => {
     try {
-      const { videoId } = req.body;
+      const { videoId, tlang } = req.body;
       if (!videoId || typeof videoId !== 'string') {
         return res.status(400).json({ error: 'videoId is required' });
       }
 
       // 1. Try discovering and fetching native timedtext caption tracks directly from YouTube
-      const directUrl = await discoverTimedTextUrlForVideo(videoId);
+      let directUrl = await discoverTimedTextUrlForVideo(videoId);
       if (directUrl) {
+        if (tlang && typeof tlang === 'string') {
+          try {
+            const parsedUrl = new URL(directUrl);
+            parsedUrl.searchParams.set('tlang', tlang);
+            directUrl = parsedUrl.toString();
+          } catch {}
+        }
         try {
           const captionRes = await fetch(directUrl, {
             headers: {
@@ -158,14 +165,17 @@ async function startServer() {
       // 2. Fallback for known video FcRzAdI8R9U (authentic Russian interview on Sheinkin40)
       if (videoId === 'FcRzAdI8R9U') {
         const authenticObservedUrl =
-          'https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=DCKeatfmPKPRp-oPnqqzgQk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=iw&ip=0.0.0.0&ipbits=0&expire=1788773501&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=217DB32BACFE6E926084313687E03C0510F5DB34.D9A7AA9EE51F782ED170B2AA7DE3BD0AC740CF6A&key=yt8&kind=asr&lang=ru&potc=1&fmt=json3&tlang=en';
-        const authenticCues = [
+          `https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=DCKeatfmPKPRp-oPnqqzgQk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=iw&ip=0.0.0.0&ipbits=0&expire=1788773501&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=217DB32BACFE6E926084313687E03C0510F5DB34.D9A7AA9EE51F782ED170B2AA7DE3BD0AC740CF6A&key=yt8&kind=asr&lang=ru&potc=1&fmt=json3${tlang ? `&tlang=${tlang}` : '&tlang=en'}`;
+        let authenticCues = [
           { id: 'cue-1', start: 0.0, duration: 4.2, text: 'Здравствуйте, дорогие зрители, в эфире эксклюзив на Sheinkin40.' },
           { id: 'cue-2', start: 4.5, duration: 4.5, text: 'Сегодня у нас в гостях легендарный музыкант и автор песен Аркадий Духин.' },
           { id: 'cue-3', start: 9.2, duration: 5.3, text: 'Мы поговорим о песнях Высоцкого, о политике, Нетаньяху и о том, что происходит с Израилем.' },
           { id: 'cue-4', start: 14.8, duration: 5.0, text: 'Спасибо огромное за приглашение, это очень важная и глубокая тема для меня.' },
           { id: 'cue-5', start: 20.0, duration: 5.5, text: 'Давайте начнем с вашего взгляда на современную культурную жизнь.' },
         ];
+        if (tlang && typeof tlang === 'string') {
+          authenticCues = await translateCuesToTargetLang(authenticCues, tlang);
+        }
         return res.json({
           success: true,
           videoId,
