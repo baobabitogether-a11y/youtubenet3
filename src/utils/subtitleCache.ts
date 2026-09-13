@@ -3,6 +3,7 @@ import { cleanAndFixEncoding } from './captionParser';
 import { STORAGE_KEYS } from '../config/appConfig';
 import { SAMPLE_AUTHENTIC_RUSSIAN_URL, SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U } from '../config/fixtures';
 import {
+  FCRZADI8R9U_LANGUAGE_SRT_TRACKS,
   getCachedSrtForVideoAndLanguage,
   hasCachedSrtForVideoAndLanguage,
   getAllCachedLanguageCodesForVideo,
@@ -52,7 +53,17 @@ export function sanitizeCues(cues: CaptionCue[]): CaptionCue[] {
 export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
   if (!videoId) return null;
 
-  // 1. In-memory cache
+  // 1. For default video FcRzAdI8R9U, ensure we always load the full authentic 1,578 SRT cues
+  if (videoId === 'FcRzAdI8R9U') {
+    const srtCues = getCachedSrtForVideoAndLanguage('FcRzAdI8R9U', 'ru') || FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
+    if (srtCues && srtCues.length > 5) {
+      const sanitized = sanitizeCues(srtCues);
+      memoryCache.set(videoId, sanitized);
+      return sanitized;
+    }
+  }
+
+  // 2. In-memory cache
   if (memoryCache.has(videoId)) {
     const mem = memoryCache.get(videoId);
     if (mem && mem.length > 0) {
@@ -60,7 +71,7 @@ export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
     }
   }
 
-  // 2. Dedicated per-video cache item
+  // 3. Dedicated per-video cache item
   if (isStorageAvailable()) {
     try {
       const raw = localStorage.getItem(`${SUBTITLE_CACHE_PREFIX}${videoId}`);
@@ -69,6 +80,19 @@ export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
         const cuesList = Array.isArray(parsed) ? parsed : parsed.cues;
         if (Array.isArray(cuesList) && cuesList.length > 0) {
           const sanitized = sanitizeCues(cuesList);
+          // Auto-upgrade stale mock/partial cache for default video FcRzAdI8R9U to the full authentic 1,578 SRT cues
+          if (videoId === 'FcRzAdI8R9U' && sanitized.length < 500) {
+            const srtCues = getCachedSrtForVideoAndLanguage('FcRzAdI8R9U', 'ru') || FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
+            if (srtCues && srtCues.length > sanitized.length) {
+              const fullSanitized = sanitizeCues(srtCues);
+              memoryCache.set(videoId, fullSanitized);
+              saveCachedSubtitles(videoId, fullSanitized, {
+                title: 'Authentic Russian Interview (Sheinkin40)',
+                originalUrl: 'https://www.youtube.com/watch?v=FcRzAdI8R9U',
+              });
+              return fullSanitized;
+            }
+          }
           if (sanitized.length > 0) {
             memoryCache.set(videoId, sanitized);
             return sanitized;
@@ -80,9 +104,9 @@ export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
     }
   }
 
-  // 3. Built-in authentic SRT fixtures for video FcRzAdI8R9U (Russian source track)
+  // 4. Built-in authentic SRT fixtures for video FcRzAdI8R9U (Russian source track)
   if (videoId === 'FcRzAdI8R9U') {
-    const srtCues = getCachedSrtForVideoAndLanguage('FcRzAdI8R9U', 'ru');
+    const srtCues = getCachedSrtForVideoAndLanguage('FcRzAdI8R9U', 'ru') || FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
     if (srtCues && srtCues.length > 0) {
       const sanitized = sanitizeCues(srtCues);
       memoryCache.set(videoId, sanitized);

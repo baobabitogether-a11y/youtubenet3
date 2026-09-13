@@ -15,13 +15,14 @@ const parsedHe = parseRawCaptionData(heSrtRaw).cues;
 const parsedIt = parseRawCaptionData(itSrtRaw).cues;
 const parsedAr = parseRawCaptionData(arSrtRaw).cues;
 
-export const DEFAULT_FAVORITE_LANGUAGES = ['it', 'ru', 'he', 'en', 'ar'];
+export const DEFAULT_FAVORITE_LANGUAGES = ['ar', 'il', 'ru', 'it', 'he'];
 
 export const FCRZADI8R9U_LANGUAGE_SRT_TRACKS: Record<string, CaptionCue[]> = {
   ru: parsedRu,
   en: parsedEn,
   he: parsedHe,
   iw: parsedHe,
+  il: parsedHe,
   it: parsedIt,
   ar: parsedAr,
 };
@@ -90,7 +91,7 @@ export function hasCachedSrtForVideoAndLanguage(videoId: string, langCode: strin
 
 export function getAllCachedLanguageCodesForVideo(videoId: string): string[] {
   if (videoId === 'FcRzAdI8R9U') {
-    return ['it', 'ru', 'he', 'en', 'ar'];
+    return ['ar', 'il', 'ru', 'it', 'he', 'en'];
   }
   return [];
 }
