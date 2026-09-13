@@ -260,4 +260,19 @@ Individual videos retain their own customized settings stored under `yt_video_se
 - **`sourceLang`**: Detected or declared primary spoken language of the video (e.g., `'ru'`, `'en'`).
 - **`lastUpdated`**: Timestamp recording the last adjustment made to this video's settings.
 
+---
+
+## Current User Prompt (Update AGENTS.md with App Flow & Design Settings)
+
+```text
+the last task was to update AGENTS.md with the app flow and design setttings
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 11 (Update AGENTS.md with App Flow & Design Decisions)**: Port comprehensive application flow, screen hierarchy, video playback triggers, caching architecture, and per-video settings into Section 8 of `AGENTS.md`.
+  - **Status**: Completed
+  - **Review**: Added Section 8 ("Application Flow, Screen Architecture & Design Decisions") to `AGENTS.md`. Documented target language availability during active playback, controls per screen, screen transition matrix, all 8 playback triggers, cached data keys, and stored per-video settings.
+
+
 
