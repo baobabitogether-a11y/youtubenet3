@@ -130,6 +130,7 @@ declare global {
     };
     onNativeCaptionsInterceptedBase64?: (base64Json: string) => void;
     onNativeTTSDone?: (utteranceId: string) => void;
+    onNativeTTSBoundary?: (utteranceId: string, charIndex: number) => void;
     onNativeTTSError?: (utteranceId: string, errorMsg?: string) => void;
     onNativeSharedLinkReceived?: (sharedLink: string) => void;
     __pendingSharedLink?: string;

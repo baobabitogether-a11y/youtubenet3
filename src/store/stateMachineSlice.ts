@@ -20,13 +20,13 @@ const initialState: StateMachineSliceState = {
 // Define valid state transitions (including self-transitions and recovery routes)
 const VALID_TRANSITIONS: Record<AppStateMachineState, AppStateMachineState[]> = {
   idle: ['idle', 'loading_video', 'video_ready', 'fetching_captions', 'error', 'loop_detected'],
-  loading_video: ['loading_video', 'video_ready', 'fetching_captions', 'captions_loaded', 'playing', 'paused', 'error', 'loop_detected', 'idle'],
+  loading_video: ['loading_video', 'video_ready', 'fetching_captions', 'captions_loaded', 'playing', 'paused', 'syncing_tts', 'error', 'loop_detected', 'idle'],
   video_ready: ['video_ready', 'loading_video', 'fetching_captions', 'captions_loaded', 'playing', 'paused', 'syncing_tts', 'error', 'loop_detected'],
-  fetching_captions: ['fetching_captions', 'captions_loaded', 'video_ready', 'playing', 'paused', 'error', 'loop_detected'],
+  fetching_captions: ['fetching_captions', 'captions_loaded', 'video_ready', 'playing', 'paused', 'syncing_tts', 'error', 'loop_detected'],
   captions_loaded: ['captions_loaded', 'playing', 'paused', 'syncing_tts', 'loading_video', 'video_ready', 'error', 'loop_detected'],
-  playing: ['playing', 'paused', 'syncing_tts', 'loading_video', 'video_ready', 'error', 'loop_detected'],
-  paused: ['paused', 'playing', 'syncing_tts', 'loading_video', 'video_ready', 'error', 'loop_detected'],
-  syncing_tts: ['syncing_tts', 'playing', 'paused', 'video_ready', 'error', 'loop_detected'],
+  playing: ['playing', 'paused', 'syncing_tts', 'loading_video', 'video_ready', 'captions_loaded', 'error', 'loop_detected'],
+  paused: ['paused', 'playing', 'syncing_tts', 'loading_video', 'video_ready', 'captions_loaded', 'error', 'loop_detected'],
+  syncing_tts: ['syncing_tts', 'playing', 'paused', 'video_ready', 'captions_loaded', 'loading_video', 'error', 'loop_detected'],
   loop_detected: ['idle', 'loading_video', 'video_ready', 'error'],
   error: ['idle', 'loading_video', 'video_ready', 'fetching_captions', 'error'],
 };

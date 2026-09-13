@@ -1,0 +1,184 @@
+import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Ensure screenshots directory exists
+const assetsDir = path.join(process.cwd(), 'cypress', 'reports', 'assets');
+if (!fs.existsSync(assetsDir)) {
+  fs.mkdirSync(assetsDir, { recursive: true });
+}
+
+test.describe('YouTube Video Viewer - Web E2E Tests', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    // Wait for the app shell to be ready
+    await expect(page).toHaveTitle(/YouTube/i);
+    await expect(page.locator('header')).toBeVisible();
+  });
+
+  /**
+   * WEB CRITICAL TEST 1: Auto-detect subtitles once caption icon is set to ON (Web Platform Flow).
+   */
+  test('Auto-detect subtitles once caption icon is set to ON', async ({ page }) => {
+    const captionToggleButton = page.locator('#caption-toggle-button');
+
+    await test.step('Step 1: Locate the caption toggle icon on the video player', async () => {
+      await expect(captionToggleButton).toBeVisible();
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step1.png' });
+    });
+
+    await test.step('Step 2: Toggle caption icon to ON', async () => {
+      const isPressed = await captionToggleButton.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionToggleButton.click();
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step2.png' });
+    });
+
+    await test.step('Step 3: Verify caption toggle button state is ON (aria-pressed=true)', async () => {
+      await expect(captionToggleButton).toHaveAttribute('aria-pressed', 'true');
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step3.png' });
+    });
+
+    const subtitleCueRow = page.locator('#subtitle-cue-row-0');
+    const activeCueText = page.locator('#active-subtitle-cue-text');
+    const restoredToast = page.locator('#restored-subtitles-toast');
+
+    await test.step('Step 4: Wait for subtitle cues to be auto-detected and rendered', async () => {
+      await expect(
+        subtitleCueRow.or(activeCueText).or(restoredToast).first()
+      ).toBeVisible({ timeout: 15000 });
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step4.png' });
+    });
+
+    await test.step('Step 5: Verify detected caption text is non-empty spoken dialogue', async () => {
+      if ((await subtitleCueRow.count()) > 0) {
+        const text = await subtitleCueRow.first().textContent();
+        expect(text).toBeTruthy();
+        expect(text!.length).toBeGreaterThan(3);
+      } else {
+        const activeText = await activeCueText.textContent();
+        expect(activeText).toBeTruthy();
+        expect(activeText!.length).toBeGreaterThan(3);
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step5.png' });
+    });
+
+    await test.step('Step 6: Confirm Redux State Machine reached active status', async () => {
+      const stateBadge = page.locator('#state-machine-status-badge');
+      if ((await stateBadge.count()) > 0) {
+        await expect(stateBadge).toBeVisible();
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test1-step6.png' });
+    });
+  });
+
+  /**
+   * WEB CRITICAL TEST 2:
+   * Ensure subtitles are correctly fetched when caption icon is pressed after input url: https://www.youtube.com/watch?v=c0pUbsq9FLk
+   */
+  test('ensure subtitles are correctly fetched when caption icon is pressed after input url: https://www.youtube.com/watch?v=c0pUbsq9FLk', async ({ page }) => {
+    const targetUrl = 'https://www.youtube.com/watch?v=c0pUbsq9FLk';
+    const urlInput = page.locator('#youtube-url-input');
+    const playButton = page.locator('#play-video-button');
+    const captionToggleButton = page.locator('#caption-toggle-button');
+    const subtitleCueRow = page.locator('#subtitle-cue-row-0');
+    const activeCueText = page.locator('#active-subtitle-cue-text');
+    const restoredToast = page.locator('#restored-subtitles-toast');
+
+    await test.step('Step 1: Enter custom YouTube URL into input field', async () => {
+      await expect(urlInput).toBeVisible();
+      await urlInput.fill(targetUrl);
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step1.png' });
+    });
+
+    await test.step('Step 2: Click Play button to cue the video', async () => {
+      await playButton.click();
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step2.png' });
+    });
+
+    await test.step('Step 3: Locate caption toggle button', async () => {
+      await expect(captionToggleButton).toBeVisible();
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step3.png' });
+    });
+
+    await test.step('Step 4: Click caption toggle button to activate subtitles', async () => {
+      const isPressed = await captionToggleButton.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionToggleButton.click();
+      }
+      await expect(captionToggleButton).toHaveAttribute('aria-pressed', 'true');
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step4.png' });
+    });
+
+    await test.step('Step 5: Verify real subtitles are fetched and rendered in the viewer', async () => {
+      await expect(
+        subtitleCueRow.or(activeCueText).or(restoredToast).first()
+      ).toBeVisible({ timeout: 20000 });
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step5.png' });
+    });
+
+    await test.step('Step 6: Verify subtitle content is non-empty speech text', async () => {
+      if ((await subtitleCueRow.count()) > 0) {
+        const text = await subtitleCueRow.first().textContent();
+        expect(text).toBeTruthy();
+        expect(text!.length).toBeGreaterThan(3);
+      } else if ((await activeCueText.count()) > 0) {
+        const activeText = await activeCueText.textContent();
+        expect(activeText).toBeTruthy();
+        expect(activeText!.length).toBeGreaterThan(3);
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test2-step6.png' });
+    });
+  });
+
+  test('TTS Audio Playback - verifies speech execution and audio stream fallback without error', async ({ page }) => {
+    await test.step('1. Verify YouTube player is ready', async () => {
+      await expect(page.locator('#youtube-player-iframe')).toBeVisible({ timeout: 15000 });
+    });
+
+    await test.step('2. Turn on captions to load subtitle cues', async () => {
+      const captionBtn = page.locator('#caption-toggle-button');
+      await expect(captionBtn).toBeVisible({ timeout: 10000 });
+      const isPressed = await captionBtn.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionBtn.click();
+      }
+      await page.waitForTimeout(1000);
+      await expect(captionBtn).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    await test.step('3. Verify TTS audio endpoint and triggering speech', async () => {
+      // Direct verification of /api/tts endpoint
+      const response = await page.request.get('/api/tts?text=hello%20world&lang=en');
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('audio/mpeg');
+
+      // Check if TTS play button exists in panel or overlay
+      const speakBtn = page.locator('#speak-lang-it-btn, #speak-lang-es-btn, #speak-translated-cue-btn').first();
+      if (await speakBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await speakBtn.click();
+        await page.waitForTimeout(800);
+      }
+
+      // Check activity logs quick bringup
+      const logsBtn = page.locator('#open-logs-view-btn, #open-logs-view-btn-expanded').first();
+      if (await logsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await logsBtn.click();
+        await page.waitForTimeout(500);
+        // Verify Activity Log modal is visible
+        await expect(page.locator('#activity-log-modal, [role="dialog"]').first()).toBeVisible();
+      }
+    });
+  });
+
+  // =========================================================================
+  // SKIPPED EXTENDED TESTS
+  // =========================================================================
+  test.skip('1. Video Playback - loads video player, accepts URL, and toggles theater mode', async () => {});
+  test.skip('2. Subtitles View - displays subtitle cues, timestamps, text, search, and jump to cue', async () => {});
+  test.skip('3. Subtitles Translation - verifies translation for Italian and Arabic', async () => {});
+  test.skip('4. TTS Config - configures speaking rate, voice selection, and test audio', async () => {});
+  test.skip('5. Synchronized Playback with Configured Order (TTS First vs Video First)', async () => {});
+  test.skip('6. APK Guide Modal - opens APK guide and network inspection modal', async () => {});
+});

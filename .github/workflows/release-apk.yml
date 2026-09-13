@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release-apk-${{ github.workflow }}-${{ github.ref }}
@@ -30,7 +31,7 @@ jobs:
   build-and-release:
     name: Build & Publish APK
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
 
     steps:
       - name: Checkout Code
@@ -42,11 +43,20 @@ jobs:
           node-version: 20
 
       - name: Install Web Dependencies
+        timeout-minutes: 3
         run: npm install
 
       - name: Build Web Application
+        timeout-minutes: 3
         run: |
           npm run build
+
+      - name: Upload Web Build Artifacts (web-dist)
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/
+          retention-days: 14
 
       - name: Bundle Web Assets into Android Project
         run: |
@@ -67,6 +77,7 @@ jobs:
           cache-read-only: false
 
       - name: Configure Android Environment & SDK
+        timeout-minutes: 3
         run: |
           chmod +x android-shell/gradlew
           echo "sdk.dir=$ANDROID_HOME" > android-shell/local.properties
@@ -74,6 +85,7 @@ jobs:
 
       # Main build target: Debug APK (always builds fast and without keystore/signing requirements)
       - name: Build Android Debug APK
+        timeout-minutes: 3
         run: |
           cd android-shell
           ./gradlew assembleDebug --no-daemon -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
@@ -135,6 +147,7 @@ jobs:
       - name: Publish GitHub Release with Working APK
         uses: softprops/action-gh-release@v2
         if: success() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        timeout-minutes: 3
         continue-on-error: true
         with:
           tag_name: ${{ steps.release_info.outputs.TAG }}

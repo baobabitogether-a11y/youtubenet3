@@ -1,0 +1,136 @@
+name: Web E2E Tests
+
+on:
+  workflow_run:
+    workflows: ["Build & Release Android APK"]
+    types:
+      - completed
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: web-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  actions: read
+
+jobs:
+  web-e2e-tests:
+    name: Run Web E2E Tests & Deploy GitHub Pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Web Dependencies
+        timeout-minutes: 3
+        run: npm install
+
+      - name: Install Playwright Browsers with OS Dependencies
+        timeout-minutes: 3
+        run: npx playwright install --with-deps chromium
+
+      - name: Download Web Build Artifact from Release Workflow
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: web-dist
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Web Application
+        timeout-minutes: 3
+        run: |
+          if [ -f "dist/index.html" ] && [ -f "dist/server.cjs" ]; then
+            echo "✅ Pre-built web application artifacts found from release-apk workflow. Skipping duplicate build step."
+          else
+            echo "⚙️ Pre-built web artifacts not found. Building web application..."
+            npm run build
+          fi
+
+      - name: Execute Playwright E2E Tests (Web Specs)
+        timeout-minutes: 3
+        run: npx playwright test e2e/web.spec.ts --timeout=60000
+
+      - name: Run Cypress Tests with Report Generation (Web Specs)
+        timeout-minutes: 3
+        uses: cypress-io/github-action@v6
+        with:
+          install: false
+          start: npm start
+          wait-on: 'http://localhost:3000'
+          wait-on-timeout: 30
+          command: npm run test:cy:report:web
+        continue-on-error: true
+
+      - name: Prepare Video & Step Screenshot Assets for GitHub Pages
+        if: always()
+        run: node scripts/prepare-report.mjs
+
+      - name: Upload Playwright Test Report & Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+      - name: Upload Cypress Test Report & Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-e2e-report
+          path: cypress/reports/
+          retention-days: 14
+
+      # Deploy to GitHub Pages:
+      # 1. Branch-based deployment to 'gh-pages' (compatible with 'Deploy from a branch' setting)
+      # 2. Native Actions deployment artifact (compatible with 'GitHub Actions' setting)
+      - name: Deploy to GitHub Pages (gh-pages branch)
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./cypress/reports
+          publish_branch: gh-pages
+          force_orphan: true
+
+      - name: Setup GitHub Pages (Native Actions Mode)
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Upload GitHub Pages Artifact (Native Actions Mode)
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
+        uses: actions/upload-pages-artifact@v3
+        continue-on-error: true
+        with:
+          path: ./cypress/reports
+
+      - name: Deploy to GitHub Pages (Native Actions Mode)
+        id: deployment
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
+        uses: actions/deploy-pages@v4
+        continue-on-error: true

@@ -38,6 +38,7 @@ import {
   isYouTubeNativeSource,
 } from '../lib/translateService';
 import { formatTimestamp, cleanAndFixEncoding, parseRawCaptionData } from '../utils/captionParser';
+import { HighlightableText } from './HighlightableText';
 import { isAndroidNativeTTS } from '../lib/ttsEngine';
 import { LanguageSettingsModal } from './LanguageSettingsModal';
 import { ObservedTimedTextModal } from './ObservedTimedTextModal';
@@ -271,6 +272,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     isSpeaking,
     currentTTSLang,
     currentTTSText,
+    activeCharIndex,
     translations,
     startSync,
     pauseSync,
@@ -278,6 +280,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     nextCue,
     prevCue,
     testSpeakLang,
+    speakDirectText,
   } = useSyncEngine({
     cues: effectiveCues,
     sourceLang,
@@ -923,13 +926,35 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                   </span>
                 </div>
 
-                <p
-                  id="active-subtitle-cue-text"
-                  data-testid="active-subtitle-cue-text"
-                  className="text-sm font-medium text-neutral-100 leading-relaxed"
-                >
-                  "{currentCue.text}"
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div
+                    id="active-subtitle-cue-text"
+                    data-testid="active-subtitle-cue-text"
+                    className="text-sm font-medium text-neutral-100 leading-relaxed"
+                  >
+                    "
+                    <HighlightableText
+                      text={currentCue.text}
+                      isSpeaking={isSpeaking && (currentTTSLang === sourceLang || currentTTSLang === 'orig')}
+                      activeCharIndex={activeCharIndex}
+                      className="text-neutral-100"
+                    />
+                    "
+                  </div>
+                  <button
+                    type="button"
+                    id="speak-active-orig-cue-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      speakDirectText(currentCue.text, sourceLang !== 'auto' ? sourceLang : 'en');
+                    }}
+                    className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white transition flex items-center gap-1 text-[11px] shrink-0"
+                    title="Speak original subtitle"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Original</span>
+                  </button>
+                </div>
 
                 {/* Active Translations Grid */}
                 <div
@@ -952,23 +977,53 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                             : 'bg-neutral-950/60 border-neutral-800 text-neutral-300'
                         }`}
                       >
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold text-[11px] text-neutral-400">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="font-semibold text-[11px] text-neutral-400 flex items-center gap-1.5">
+                            <span
+                              className="w-2 h-2 rounded-full inline-block"
+                              style={{ backgroundColor: lang.color || '#6366f1' }}
+                            />
                             {lang.name}:
                           </span>
-                          {isCurrentLangSpeaking && (
-                            <span
-                              data-testid={`speaking-indicator-${lang.code}`}
-                              className="flex items-center gap-1 text-[10px] text-indigo-300 font-medium"
+                          <div className="flex items-center gap-1.5">
+                            {isCurrentLangSpeaking && (
+                              <span
+                                data-testid={`speaking-indicator-${lang.code}`}
+                                className="flex items-center gap-1 text-[10px] text-indigo-300 font-medium"
+                              >
+                                <Volume2 className="w-3 h-3 animate-pulse" />
+                                Speaking
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              id={`speak-lang-${lang.code}-btn`}
+                              data-testid={`speak-lang-${lang.code}-btn`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                testSpeakLang(currentCue, lang);
+                              }}
+                              className="p-1 rounded bg-neutral-800/80 hover:bg-indigo-600 text-neutral-300 hover:text-white transition flex items-center gap-1 text-[10px]"
+                              title={`Speak ${lang.name}`}
                             >
-                              <Volume2 className="w-3 h-3 animate-pulse" />
-                              Speaking
-                            </span>
+                              <Volume2 className="w-3 h-3" />
+                              <span>Play</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div data-testid={`translation-text-${lang.code}`} className="text-neutral-200 leading-relaxed">
+                          {translated ? (
+                            <HighlightableText
+                              text={translated}
+                              isSpeaking={isCurrentLangSpeaking}
+                              activeCharIndex={activeCharIndex}
+                              className="text-neutral-200"
+                              activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                            />
+                          ) : (
+                            <span className="text-neutral-500 italic">Translating...</span>
                           )}
                         </div>
-                        <p data-testid={`translation-text-${lang.code}`} className="text-neutral-200">
-                          {translated || 'Translating...'}
-                        </p>
                       </div>
                     );
                   })}
