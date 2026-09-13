@@ -35,6 +35,7 @@ export function useSyncEngine({
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [currentTTSLang, setCurrentTTSLang] = useState<string | null>(null);
   const [currentTTSText, setCurrentTTSText] = useState<string | null>(null);
+  const [activeCharIndex, setActiveCharIndex] = useState<number | null>(null);
   const [translations, setTranslations] = useState<Record<string, Record<string, string>>>({});
 
   const abortRef = useRef<boolean>(false);
@@ -159,10 +160,13 @@ export function useSyncEngine({
 
         setCurrentTTSLang(lang.code);
         setCurrentTTSText(textToSpeak);
+        setActiveCharIndex(0);
         setIsSpeaking(true);
 
         try {
-          await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice);
+          await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice, (charIdx) => {
+            setActiveCharIndex(charIdx);
+          });
         } catch (err) {
           console.warn(`TTS failed for lang ${lang.code}:`, err);
         }
@@ -170,6 +174,7 @@ export function useSyncEngine({
         if (abortRef.current) {
           stopTTS();
           setIsSpeaking(false);
+          setActiveCharIndex(null);
           setCurrentTTSLang(null);
           setCurrentTTSText(null);
           return false;
@@ -181,6 +186,7 @@ export function useSyncEngine({
 
       stopTTS();
       setIsSpeaking(false);
+      setActiveCharIndex(null);
       setCurrentTTSLang(null);
       setCurrentTTSText(null);
       return true;
@@ -399,17 +405,50 @@ export function useSyncEngine({
       playerRef.current?.pause();
       setCurrentTTSLang(lang.code);
       setCurrentTTSText(textToSpeak);
+      setActiveCharIndex(0);
       setIsSpeaking(true);
       try {
-        await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice);
+        await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice, (charIdx) => {
+          setActiveCharIndex(charIdx);
+        });
       } finally {
         stopTTS();
         setIsSpeaking(false);
+        setActiveCharIndex(null);
         setCurrentTTSLang(null);
         setCurrentTTSText(null);
       }
     },
     [getCueTranslation, playerRef]
+  );
+
+  /**
+   * Directly speaks any single text string (e.g. original cue or translation)
+   */
+  const speakDirectText = useCallback(
+    async (text: string, langCode: string = 'en', rate: number = 1.0, voice?: string) => {
+      if (!text) return;
+      stopTTS();
+      playerRef.current?.pause();
+      await new Promise((r) => setTimeout(r, 100));
+
+      setCurrentTTSLang(langCode);
+      setCurrentTTSText(text);
+      setActiveCharIndex(0);
+      setIsSpeaking(true);
+      try {
+        await speakText(text, langCode, rate, voice, (charIdx) => {
+          setActiveCharIndex(charIdx);
+        });
+      } finally {
+        stopTTS();
+        setIsSpeaking(false);
+        setActiveCharIndex(null);
+        setCurrentTTSLang(null);
+        setCurrentTTSText(null);
+      }
+    },
+    [playerRef]
   );
 
   // Active mutual exclusion watchdog: whenever speaking is active, keep video paused
@@ -425,6 +464,7 @@ export function useSyncEngine({
     isSpeaking,
     currentTTSLang,
     currentTTSText,
+    activeCharIndex,
     translations,
     ttsEngineType: getTTSEngineType(),
     startSync,
@@ -433,6 +473,7 @@ export function useSyncEngine({
     nextCue,
     prevCue,
     testSpeakLang,
+    speakDirectText,
     getCueTranslation,
   };
 }

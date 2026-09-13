@@ -30,6 +30,8 @@ import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
 import { SubtitlePosition } from '../utils/appSettings';
+import { HighlightableText } from './HighlightableText';
+import { speakText, stopTTS } from '../lib/ttsEngine';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -118,6 +120,43 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const [isMuted, setIsMuted] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+    // TTS playback state with word boundary syntax highlighting
+    const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
+    const [activeTTSTarget, setActiveTTSTarget] = useState<'translated' | 'original' | null>(null);
+    const [activeTTSCharIndex, setActiveTTSCharIndex] = useState<number | null>(null);
+
+    const handleSpeakCue = async (target: 'translated' | 'original', e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      const text = target === 'translated' ? translatedCueText : activeCue?.text;
+      if (!text) return;
+      const lang = target === 'translated' ? (targetLanguage || 'es') : 'en';
+
+      // Strict Mutual Exclusion: Pause YouTube video during TTS speech
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      try {
+        ytPlayerRef.current?.pauseVideo?.();
+      } catch {}
+      postIframeCommand('pauseVideo');
+
+      setIsTTSSpeakingState(true);
+      setActiveTTSTarget(target);
+      setActiveTTSCharIndex(0);
+
+      try {
+        await speakText(text, lang, 1.0, undefined, (charIdx) => {
+          setActiveTTSCharIndex(charIdx);
+        });
+      } catch (err) {
+        console.warn('TTS playback error in VideoPlayer:', err);
+      } finally {
+        stopTTS();
+        setIsTTSSpeakingState(false);
+        setActiveTTSTarget(null);
+        setActiveTTSCharIndex(null);
+      }
+    };
 
     const ytPlayerRef = useRef<any>(null);
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -552,7 +591,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   : showControls ? 'bottom-20 sm:bottom-24' : 'bottom-4 sm:bottom-6'
               }`}
             >
-              <div className="max-w-xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1 animate-fadeIn">
+              <div className="max-w-xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1.5 animate-fadeIn">
                 {isFetchingSubtitles ? (
                   <div className="flex items-center justify-center gap-2 text-amber-300 text-xs py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -563,37 +602,111 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     {showTranslatedOnTop ? (
                       <>
                         {translatedCueText && (
-                          <p
-                            id="active-translated-cue-text"
-                            className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug pb-0.5 border-b border-neutral-800/60"
-                          >
-                            {translatedCueText}
-                          </p>
+                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                            <p
+                              id="active-translated-cue-text"
+                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                            >
+                              <HighlightableText
+                                text={translatedCueText}
+                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
+                                activeCharIndex={activeTTSCharIndex}
+                                className="text-emerald-400"
+                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                              />
+                            </p>
+                            <button
+                              type="button"
+                              id="speak-translated-cue-btn"
+                              data-testid="speak-translated-cue-btn"
+                              onClick={(e) => handleSpeakCue('translated', e)}
+                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              title="Speak translated text (TTS with word highlight)"
+                            >
+                              <Volume2 className="w-3 h-3" />
+                              <span>Play</span>
+                            </button>
+                          </div>
                         )}
-                        <p
-                          id="active-subtitle-cue-text"
-                          data-testid="active-subtitle-cue-text"
-                          className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
-                        >
-                          {activeCue.text}
-                        </p>
+                        <div className="flex items-center justify-center gap-2 pt-0.5">
+                          <p
+                            id="active-subtitle-cue-text"
+                            data-testid="active-subtitle-cue-text"
+                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                          >
+                            <HighlightableText
+                              text={activeCue.text}
+                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
+                              activeCharIndex={activeTTSCharIndex}
+                              className="text-white"
+                              activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                            />
+                          </p>
+                          <button
+                            type="button"
+                            id="speak-orig-cue-btn"
+                            data-testid="speak-orig-cue-btn"
+                            onClick={(e) => handleSpeakCue('original', e)}
+                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            title="Speak original subtitle (TTS with word highlight)"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <>
-                        <p
-                          id="active-subtitle-cue-text"
-                          data-testid="active-subtitle-cue-text"
-                          className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
-                        >
-                          {activeCue.text}
-                        </p>
-                        {translatedCueText && (
+                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
                           <p
-                            id="active-translated-cue-text"
-                            className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug pt-0.5 border-t border-neutral-800/60"
+                            id="active-subtitle-cue-text"
+                            data-testid="active-subtitle-cue-text"
+                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
                           >
-                            {translatedCueText}
+                            <HighlightableText
+                              text={activeCue.text}
+                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
+                              activeCharIndex={activeTTSCharIndex}
+                              className="text-white"
+                              activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                            />
                           </p>
+                          <button
+                            type="button"
+                            id="speak-orig-cue-btn"
+                            data-testid="speak-orig-cue-btn"
+                            onClick={(e) => handleSpeakCue('original', e)}
+                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            title="Speak original subtitle (TTS with word highlight)"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {translatedCueText && (
+                          <div className="flex items-center justify-center gap-2 pt-0.5">
+                            <p
+                              id="active-translated-cue-text"
+                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                            >
+                              <HighlightableText
+                                text={translatedCueText}
+                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
+                                activeCharIndex={activeTTSCharIndex}
+                                className="text-emerald-400"
+                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                              />
+                            </p>
+                            <button
+                              type="button"
+                              id="speak-translated-cue-btn"
+                              data-testid="speak-translated-cue-btn"
+                              onClick={(e) => handleSpeakCue('translated', e)}
+                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              title="Speak translated text (TTS with word highlight)"
+                            >
+                              <Volume2 className="w-3 h-3" />
+                              <span>Play</span>
+                            </button>
+                          </div>
                         )}
                       </>
                     )}
@@ -870,6 +983,145 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               allowFullScreen
             />
           </div>
+
+          {/* Expanded Mode Subtitle Overlay */}
+          {isCaptionsActive && (
+            <div
+              id="video-subtitles-overlay-expanded"
+              className="absolute left-4 right-4 bottom-4 z-20 flex flex-col items-center pointer-events-none"
+            >
+              <div className="max-w-2xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1.5 animate-fadeIn">
+                {isFetchingSubtitles ? (
+                  <div className="flex items-center justify-center gap-2 text-amber-300 text-xs py-1">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Detecting subtitles...</span>
+                  </div>
+                ) : activeCue ? (
+                  <>
+                    {showTranslatedOnTop ? (
+                      <>
+                        {translatedCueText && (
+                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                            <p
+                              id="active-translated-cue-text"
+                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                            >
+                              <HighlightableText
+                                text={translatedCueText}
+                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
+                                activeCharIndex={activeTTSCharIndex}
+                                className="text-emerald-400"
+                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                              />
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => handleSpeakCue('translated', e)}
+                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              title="Speak translated text (TTS with word highlight)"
+                            >
+                              <Volume2 className="w-3 h-3" />
+                              <span>Play</span>
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-center gap-2 pt-0.5">
+                          <p
+                            id="active-subtitle-cue-text"
+                            data-testid="active-subtitle-cue-text"
+                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                          >
+                            <HighlightableText
+                              text={activeCue.text}
+                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
+                              activeCharIndex={activeTTSCharIndex}
+                              className="text-white"
+                              activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                            />
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => handleSpeakCue('original', e)}
+                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            title="Speak original subtitle (TTS with word highlight)"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                          <p
+                            id="active-subtitle-cue-text"
+                            data-testid="active-subtitle-cue-text"
+                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                          >
+                            <HighlightableText
+                              text={activeCue.text}
+                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
+                              activeCharIndex={activeTTSCharIndex}
+                              className="text-white"
+                              activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                            />
+                          </p>
+                          <button
+                            type="button"
+                            onClick={(e) => handleSpeakCue('original', e)}
+                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            title="Speak original subtitle (TTS with word highlight)"
+                          >
+                            <Volume2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {translatedCueText && (
+                          <div className="flex items-center justify-center gap-2 pt-0.5">
+                            <p
+                              id="active-translated-cue-text"
+                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                            >
+                              <HighlightableText
+                                text={translatedCueText}
+                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
+                                activeCharIndex={activeTTSCharIndex}
+                                className="text-emerald-400"
+                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                              />
+                            </p>
+                            <button
+                              type="button"
+                              onClick={(e) => handleSpeakCue('translated', e)}
+                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              title="Speak translated text (TTS with word highlight)"
+                            >
+                              <Volume2 className="w-3 h-3" />
+                              <span>Play</span>
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </>
+                ) : hasSubtitles ? (
+                  <p
+                    id="active-subtitle-cue-text"
+                    data-testid="active-subtitle-cue-text"
+                    className="text-neutral-400 text-xs italic"
+                  >
+                    Captions active • Spoken dialogue will appear here
+                  </p>
+                ) : (
+                  <p
+                    id="active-subtitle-cue-text"
+                    data-testid="active-subtitle-cue-text"
+                    className="text-neutral-400 text-xs"
+                  >
+                    Turn captions ON to detect dialogue
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Video Details & Action Toolbar */}

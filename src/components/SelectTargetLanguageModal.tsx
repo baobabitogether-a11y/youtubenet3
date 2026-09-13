@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Globe, Check, Settings2, X, ArrowLeft, Volume2, Gauge } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Globe, Check, Settings2, X, ArrowLeft, Volume2, Gauge, Search, Plus } from 'lucide-react';
 import {
   SUPPORTED_LANGUAGES_CATALOG,
   getUserLearningLanguages,
@@ -32,6 +32,7 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
     getUserLearningLanguages()
   );
   const [isManagingList, setIsManagingList] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [ttsRates, setTtsRates] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -41,6 +42,23 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
       setTtsRates(vSettings.ttsRates);
     }
   }, [videoId, isOpen]);
+
+  const filteredCatalog = useMemo(() => {
+    if (!searchQuery.trim()) return SUPPORTED_LANGUAGES_CATALOG;
+    const q = searchQuery.toLowerCase().trim();
+    return SUPPORTED_LANGUAGES_CATALOG.filter(
+      (l) => l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q)
+    );
+  }, [searchQuery]);
+
+  const filteredLearningLangs = useMemo(() => {
+    if (!searchQuery.trim()) return learningLanguages;
+    const q = searchQuery.toLowerCase().trim();
+    return learningLanguages.filter((code) => {
+      const l = SUPPORTED_LANGUAGES_CATALOG.find((item) => item.code === code);
+      return code.toLowerCase().includes(q) || (l && l.name.toLowerCase().includes(q));
+    });
+  }, [learningLanguages, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -92,11 +110,11 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
                 id="target-lang-modal-title"
                 className="text-base font-semibold text-white tracking-tight"
               >
-                {isManagingList ? 'Learning Languages' : 'Target Language & Speech'}
+                {isManagingList ? 'Learning Languages Catalog' : 'Target Language & Speech'}
               </h2>
               <p className="text-xs text-neutral-400">
                 {isManagingList
-                  ? 'Choose languages you want to learn'
+                  ? `Select from ${SUPPORTED_LANGUAGES_CATALOG.length} supported languages`
                   : 'Select translation and TTS rate for this video'}
               </p>
             </div>
@@ -112,14 +130,41 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
           </button>
         </div>
 
+        {/* Search Bar */}
+        <div className="pt-3 pb-1">
+          <div className="relative flex items-center">
+            <Search className="w-4 h-4 absolute left-3 text-neutral-400" />
+            <input
+              type="text"
+              id="search-target-language-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by language name or code (e.g. Spanish, hi, de)..."
+              className="w-full pl-9 pr-3 py-2 bg-neutral-950/80 border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none transition"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 text-neutral-500 hover:text-neutral-300"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Content */}
         {!isManagingList ? (
-          <div className="py-4 space-y-3 flex-1 overflow-y-auto">
-            <div className="text-xs text-neutral-400 font-medium px-1">
-              Your Defined Learning Languages:
+          <div className="py-3 space-y-3 flex-1 overflow-y-auto">
+            <div className="flex items-center justify-between text-xs text-neutral-400 font-medium px-1">
+              <span>Your Defined Learning Languages:</span>
+              <span className="text-[11px] font-mono text-neutral-500">
+                {learningLanguages.length} configured
+              </span>
             </div>
-            <div className="space-y-2.5">
-              {learningLanguages.map((code) => {
+            <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
+              {filteredLearningLangs.map((code) => {
                 const lang =
                   SUPPORTED_LANGUAGES_CATALOG.find((l) => l.code === code) || {
                     code,
@@ -209,18 +254,21 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
                 className="w-full min-h-[44px] py-2.5 px-3 rounded-xl bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 text-neutral-300 hover:text-white text-xs flex items-center justify-center gap-2 transition"
               >
                 <Settings2 className="w-4 h-4 text-neutral-400" />
-                <span>Customize Learning Languages List</span>
+                <span>Customize Learning Languages List ({SUPPORTED_LANGUAGES_CATALOG.length} available)</span>
               </button>
             </div>
           </div>
         ) : (
           /* Manage Defined Languages View */
-          <div className="py-4 space-y-3 flex-1 overflow-y-auto">
-            <div className="text-xs text-neutral-400 px-1">
-              Select all languages you are interested in learning:
+          <div className="py-3 space-y-3 flex-1 overflow-y-auto">
+            <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
+              <span>Select languages for your learning list:</span>
+              <span className="text-[11px] font-mono text-indigo-400">
+                {learningLanguages.length} selected
+              </span>
             </div>
-            <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-              {SUPPORTED_LANGUAGES_CATALOG.map((lang) => {
+            <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
+              {filteredCatalog.map((lang) => {
                 const isChecked = learningLanguages.includes(lang.code);
                 return (
                   <button
@@ -256,7 +304,10 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
             <button
               type="button"
               id="finish-managing-languages-btn"
-              onClick={() => setIsManagingList(false)}
+              onClick={() => {
+                setIsManagingList(false);
+                setSearchQuery('');
+              }}
               className="w-full min-h-[44px] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition"
             >
               <ArrowLeft className="w-4 h-4" />

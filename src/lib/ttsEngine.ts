@@ -2,6 +2,8 @@
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentNativeUtteranceId: string | null = null;
+let activeBoundaryCallback: ((charIndex: number) => void) | null = null;
+let simulatedBoundaryTimer: NodeJS.Timeout | null = null;
 let nativeTTSResolvers: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
 
 // Initialize native TTS callbacks on window once
@@ -14,6 +16,7 @@ if (typeof window !== 'undefined') {
     }
     if (currentNativeUtteranceId === utteranceId) {
       currentNativeUtteranceId = null;
+      activeBoundaryCallback = null;
     }
   };
 
@@ -25,6 +28,13 @@ if (typeof window !== 'undefined') {
     }
     if (currentNativeUtteranceId === utteranceId) {
       currentNativeUtteranceId = null;
+      activeBoundaryCallback = null;
+    }
+  };
+
+  window.onNativeTTSBoundary = (utteranceId: string, charIndex: number) => {
+    if (activeBoundaryCallback && currentNativeUtteranceId === utteranceId) {
+      activeBoundaryCallback(charIndex);
     }
   };
 }
@@ -87,15 +97,22 @@ export function speakText(
 ): Promise<void> {
   const cleanLang = normalizeLanguageCode(lang);
   const cleanRate = Math.max(0.2, Math.min(3.0, rate || 1.0));
+  stopTTS();
+
+  activeBoundaryCallback = onBoundary || null;
 
   // 1. Android Native TTS Bridge
   if (isAndroidNativeTTS() && window.AndroidNativeShell?.speak) {
     return new Promise((resolve, reject) => {
       try {
-        stopTTS();
         const utteranceId = `native_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         currentNativeUtteranceId = utteranceId;
         nativeTTSResolvers.set(utteranceId, { resolve, reject });
+
+        // Start simulated boundary if onBoundary provided
+        if (onBoundary) {
+          startSimulatedBoundaryProgression(text, cleanRate, onBoundary);
+        }
 
         const success = window.AndroidNativeShell!.speak(text, cleanLang, cleanRate, utteranceId);
         if (!success) {
@@ -119,6 +136,55 @@ export function speakText(
   return fallbackWebSpeech(text, cleanLang, cleanRate, voiceName, onBoundary);
 }
 
+function startSimulatedBoundaryProgression(
+  text: string,
+  rate: number,
+  onBoundary: (charIndex: number) => void
+): () => void {
+  if (simulatedBoundaryTimer) {
+    clearTimeout(simulatedBoundaryTimer);
+    simulatedBoundaryTimer = null;
+  }
+
+  // Find all word starting offsets
+  const wordOffsets: number[] = [];
+  const regex = /(\s+|[^\s\w]+|\w+)/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const isWord = /\S/.test(match[0]) && !/^[.,!?;:"'()[\]{}<>]+$/.test(match[0]);
+    if (isWord) {
+      wordOffsets.push(match.index);
+    }
+  }
+
+  if (wordOffsets.length === 0) return () => {};
+
+  // Notify first word immediately
+  onBoundary(wordOffsets[0]);
+
+  let currentWordIdx = 0;
+  // Estimate ~220 words per minute at 1.0x rate (approx 270ms per word)
+  const baseMsPerWord = Math.max(150, Math.min(800, 270 / Math.max(0.4, rate)));
+
+  const scheduleNext = () => {
+    currentWordIdx++;
+    if (currentWordIdx < wordOffsets.length) {
+      onBoundary(wordOffsets[currentWordIdx]);
+      simulatedBoundaryTimer = setTimeout(scheduleNext, baseMsPerWord);
+    }
+  };
+
+  simulatedBoundaryTimer = setTimeout(scheduleNext, baseMsPerWord);
+
+  return () => {
+    if (simulatedBoundaryTimer) {
+      clearTimeout(simulatedBoundaryTimer);
+      simulatedBoundaryTimer = null;
+    }
+  };
+}
+
 function fallbackWebSpeech(
   text: string,
   cleanLang: string,
@@ -126,14 +192,19 @@ function fallbackWebSpeech(
   voiceName?: string,
   onBoundary?: (charIndex: number) => void
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) {
       resolve(); // Do not block if speech synthesis is unavailable
       return;
     }
 
     try {
+      // Resume in case speech synthesis audio context was suspended
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       window.speechSynthesis.cancel();
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = cleanLang;
       utterance.rate = rate;
@@ -160,9 +231,22 @@ function fallbackWebSpeech(
         }
       }
 
+      let hasRealBoundary = false;
+      let clearSimulated: (() => void) | null = null;
+
       if (onBoundary) {
+        // Initial word boundary
+        onBoundary(0);
+        clearSimulated = startSimulatedBoundaryProgression(text, rate, (charIdx) => {
+          if (!hasRealBoundary) {
+            onBoundary(charIdx);
+          }
+        });
+
         utterance.onboundary = (event) => {
-          if (event.name === 'word') {
+          hasRealBoundary = true;
+          if (clearSimulated) clearSimulated();
+          if (event.name === 'word' || !event.name) {
             onBoundary(event.charIndex);
           }
         };
@@ -170,14 +254,19 @@ function fallbackWebSpeech(
 
       // Safety timeout: estimate speaking duration so headless environments don't hang
       const wordCount = text.split(/\s+/).filter(Boolean).length;
-      const estimatedMs = Math.min(7000, Math.max(600, (wordCount / (2.5 * Math.max(0.5, rate))) * 1000 + 500));
+      const estimatedMs = Math.min(12000, Math.max(800, (wordCount / (2.2 * Math.max(0.4, rate))) * 1000 + 800));
       let isResolved = false;
 
       const finish = () => {
         if (!isResolved) {
           isResolved = true;
           clearTimeout(safetyTimer);
+          if (simulatedBoundaryTimer) {
+            clearTimeout(simulatedBoundaryTimer);
+            simulatedBoundaryTimer = null;
+          }
           currentUtterance = null;
+          activeBoundaryCallback = null;
           resolve();
         }
       };
@@ -188,13 +277,16 @@ function fallbackWebSpeech(
         finish();
       };
 
-      utterance.onerror = (e) => {
+      utterance.onerror = () => {
         finish();
       };
 
       currentUtterance = utterance;
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       window.speechSynthesis.speak(utterance);
-    } catch (err) {
+    } catch {
       resolve();
     }
   });
@@ -204,6 +296,12 @@ function fallbackWebSpeech(
  * Stops any active TTS playback immediately
  */
 export function stopTTS(): void {
+  if (simulatedBoundaryTimer) {
+    clearTimeout(simulatedBoundaryTimer);
+    simulatedBoundaryTimer = null;
+  }
+  activeBoundaryCallback = null;
+
   if (typeof window !== 'undefined') {
     if (window.AndroidNativeShell?.stopSpeaking) {
       try {

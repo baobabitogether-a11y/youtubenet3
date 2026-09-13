@@ -379,7 +379,42 @@ https://productionresultssa14.blob.core.windows.net/actions-results/3a47b181-02a
       2. Interactive Cypress Runner Demo: `https://baobabitogether-a11y.github.io/youtubenet3/`
 ---
 
-## Current User Prompt (Split E2E Workflows into web.yml & emulation.yml with 3-minute Timeouts)
+## Current User Prompt (Expand Language Catalog, Activate TTS Play, & Word Boundary Syntax Highlighting)
+
+```text
+1. the list of available languages is currently very limited so its impossible to construct the list of desired langs
+2. the translated subtitles are available (tested on the web demo) but tts-play is not activated. 
+3. use tts play with syntax highlight per word boundry
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 18 (Comprehensive Language Catalog Expansion)**:
+  - **Requirement**: Expand the limited language catalog to support building any desired list of target translation and learning languages.
+  - **Implementation**:
+    - Expanded `SUPPORTED_LANGUAGES_CATALOG` in `src/utils/appSettings.ts` and `SUPPORTED_TARGET_LANGUAGES` in `src/lib/translateService.ts` from ~10 languages to a comprehensive catalog of 80+ world languages (including Spanish, Italian, French, German, Arabic, Russian, Chinese, Japanese, Korean, Portuguese, Hindi, Turkish, Polish, Ukrainian, Dutch, Swedish, Greek, Vietnamese, Thai, Indonesian, and many more).
+    - Upgraded `SelectTargetLanguageModal.tsx` with live search filtering, language count badges, and clear button.
+  - **Status**: Completed & Verified
+  - **Review**: Users can now search and select from 80+ languages on the fly, with instant target language switching during video playback.
+
+- [x] **Task 19 (Activate & Robustify TTS Playback Across Web & Native)**:
+  - **Requirement**: Activate and fix TTS playback for translated subtitles on the web companion and Android native environments.
+  - **Implementation**:
+    - Updated `src/lib/ttsEngine.ts` to ensure audio context activation and handle Web Speech API engine quirks (`window.speechSynthesis.resume()`, safe fallback voice selection, and timer boundary estimation).
+    - Wired direct TTS trigger play buttons in `VideoPlayer.tsx` (on both translated and original subtitle overlays in compact and expanded modes) and in `SubtitlesTeacherPanel.tsx`.
+    - Enforced strict mutual exclusion: whenever TTS narration begins, the YouTube video player is automatically paused.
+  - **Status**: Completed & Verified
+  - **Review**: TTS playback is fully activated and responsive across both web demo and Android shell environments.
+
+- [x] **Task 20 (TTS Word Boundary Syntax Highlighting)**:
+  - **Requirement**: Highlight words with dynamic syntax highlighting per word boundary as TTS audio plays.
+  - **Implementation**:
+    - Created `src/components/HighlightableText.tsx` with precision word tokenization, boundary tracking, and high-contrast amber active-word pill styling (`bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5`).
+    - Extended `speakText` in `src/lib/ttsEngine.ts` with `onBoundary` callbacks, bridging Web Speech `utterance.onboundary`, Android native `onNativeTTSBoundary`, and automatic simulated boundary progression fallback (~220 WPM rate adjusted).
+    - Integrated `HighlightableText` into `VideoPlayer.tsx` subtitle overlay (top/above/under/bottom layouts), `SubtitlesTeacherPanel.tsx` active cue cards, and multi-column subtitle table rows.
+  - **Status**: Completed & Verified
+  - **Review**: Word boundary syntax highlighting dynamically moves with audio speech in real time across original subtitles and translated text.
+
 
 ```text
 split the e2e for web.yml and emulation. use timeout of 3 minutes for actual tests on each workflow file, dont run the tests on your env because it takes too long.
