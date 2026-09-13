@@ -8,6 +8,10 @@ import {
   ON_DEMAND_FALLBACK_COUNT,
 } from '../lib/translateService';
 import { logSync, logTTS } from '../utils/logBuffer';
+import {
+  getCachedSrtForVideoAndLanguage,
+  hasCachedSrtForVideoAndLanguage,
+} from '../../test/fixtures/defaultSubtitles';
 
 interface UseSyncEngineProps {
   cues: CaptionCue[];
@@ -36,12 +40,31 @@ export function useSyncEngine({
   const [currentTTSLang, setCurrentTTSLang] = useState<string | null>(null);
   const [currentTTSText, setCurrentTTSText] = useState<string | null>(null);
   const [activeCharIndex, setActiveCharIndex] = useState<number | null>(null);
-  const [translations, setTranslations] = useState<Record<string, Record<string, string>>>({});
+  const [translations, setTranslations] = useState<Record<string, Record<string, string>>>(() => {
+    const vId = videoId || 'FcRzAdI8R9U';
+    const initialMap: Record<string, Record<string, string>> = {};
+    const langs = ['ar', 'en', 'he', 'it', 'ru'];
+    langs.forEach((l) => {
+      const srtCues = getCachedSrtForVideoAndLanguage(vId, l);
+      if (srtCues) {
+        srtCues.forEach((c) => {
+          if (c.id && c.text) {
+            if (!initialMap[c.id]) initialMap[c.id] = {};
+            initialMap[c.id][l] = c.text;
+          }
+        });
+      }
+    });
+    return initialMap;
+  });
 
   const abortRef = useRef<boolean>(false);
   const isLoopRunningRef = useRef<boolean>(false);
   const translationsRef = useRef(translations);
   translationsRef.current = translations;
+
+  const languagesRef = useRef(languages);
+  languagesRef.current = languages;
 
   const externalTranslationsRef = useRef(externalTranslations);
   externalTranslationsRef.current = externalTranslations;
@@ -53,6 +76,18 @@ export function useSyncEngine({
       stopTTS();
     };
   }, []);
+
+  // When target languages or settings change, stop any active TTS speech so new settings take effect immediately
+  useEffect(() => {
+    languagesRef.current = languages;
+    if (isSpeaking) {
+      stopTTS();
+      setIsSpeaking(false);
+      setActiveCharIndex(null);
+      setCurrentTTSLang(null);
+      setCurrentTTSText(null);
+    }
+  }, [languages]);
 
   // Step 2.3 & 4.4: On-demand fallback translation for next X=4 records ONLY when playback reaches a cue
   useEffect(() => {
@@ -113,6 +148,20 @@ export function useSyncEngine({
   const getCueTranslation = useCallback(
     async (cue: CaptionCue, targetLangCode: string): Promise<string> => {
       const cueId = cue.id;
+      const cleanLang = targetLangCode.toLowerCase().split('-')[0];
+      const vId = videoId || 'FcRzAdI8R9U';
+
+      // 1. Check local authentic SRT fixture first!
+      if (hasCachedSrtForVideoAndLanguage(vId, cleanLang)) {
+        const srtCues = getCachedSrtForVideoAndLanguage(vId, cleanLang);
+        if (srtCues && srtCues.length > 0) {
+          const match = srtCues.find((c) => c.id === cueId) || (cues ? srtCues[cues.findIndex((c) => c.id === cueId)] : null);
+          if (match && match.text) {
+            return match.text;
+          }
+        }
+      }
+
       const fromRef = translationsRef.current[cueId]?.[targetLangCode];
       if (fromRef && fromRef.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
         return fromRef;
@@ -135,7 +184,7 @@ export function useSyncEngine({
       }
       return translated;
     },
-    [sourceLang]
+    [cues, sourceLang, videoId]
   );
 
   /**
@@ -152,6 +201,11 @@ export function useSyncEngine({
       for (const lang of enabledLangs) {
         if (abortRef.current) return false;
 
+        // Check if language is still enabled in latest settings
+        const isStillEnabled = languagesRef.current.some((l) => l.code === lang.code && l.enabled);
+        if (!isStillEnabled) continue;
+        const currentLangConfig = languagesRef.current.find((l) => l.code === lang.code) || lang;
+
         const textToSpeak = await getCueTranslation(cue, lang.code);
         if (abortRef.current) return false;
         if (!textToSpeak) continue;
@@ -165,7 +219,7 @@ export function useSyncEngine({
         setIsSpeaking(true);
 
         try {
-          await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice, (charIdx) => {
+          await speakText(textToSpeak, lang.code, currentLangConfig.ttsRate, currentLangConfig.voice, (charIdx) => {
             setActiveCharIndex(charIdx);
           });
         } catch (err) {
@@ -279,9 +333,12 @@ export function useSyncEngine({
         setActiveCueIndex(idx);
         logSync('SyncLoop', `Block ${idx + 1}/${cues.length} [${playOrder}] starting: "${cue.text.substring(0, 35)}..."`);
 
+        // Dynamically get the current enabled languages on every single block iteration
+        const currentEnabledLangs = languagesRef.current.filter((l) => l.enabled);
+
         // Background prefetch translations for upcoming cues
-        if (enabledLangs.length > 0) {
-          enabledLangs.forEach((l) => {
+        if (currentEnabledLangs.length > 0) {
+          currentEnabledLangs.forEach((l) => {
             prefetchCueTranslations(cues, idx, 4, sourceLang, l.code);
           });
         }
@@ -298,9 +355,9 @@ export function useSyncEngine({
           if (abortRef.current) break;
 
           // 2. TTS-play translations in sequence (Video is paused)
-          if (enabledLangs.length > 0) {
+          if (currentEnabledLangs.length > 0) {
             logSync('SyncLoop', `[Block ${idx + 1}] Step 2: Playing sequential TTS translations`);
-            const completed = await playCueTTSSequence(cue, enabledLangs);
+            const completed = await playCueTTSSequence(cue, currentEnabledLangs);
             if (!completed || abortRef.current) break;
           }
         } else {
@@ -310,8 +367,8 @@ export function useSyncEngine({
           await new Promise((r) => setTimeout(r, 120));
           if (abortRef.current) break;
 
-          if (enabledLangs.length > 0) {
-            const completed = await playCueTTSSequence(cue, enabledLangs);
+          if (currentEnabledLangs.length > 0) {
+            const completed = await playCueTTSSequence(cue, currentEnabledLangs);
             if (!completed || abortRef.current) break;
           }
 

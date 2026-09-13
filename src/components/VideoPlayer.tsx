@@ -33,6 +33,7 @@ import { SubtitlePosition } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
+import { getCachedTargetSubtitles } from '../utils/subtitleCache';
 import { isRtl } from '../utils/rtlUtils';
 
 interface VideoPlayerProps {
@@ -174,10 +175,20 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       const lang = target === 'translated' ? (targetLanguage || 'es') : 'auto';
 
       if (target === 'translated' && !text && activeCue?.text) {
-        try {
-          text = await translateText(activeCue.text, 'auto', lang);
-        } catch {
-          text = activeCue.text;
+        const clean = lang.toLowerCase().split('-')[0];
+        const srtCues = getCachedTargetSubtitles(videoId, clean);
+        if (srtCues && srtCues.length > 0) {
+          const match = srtCues.find((c) => c.id === activeCue.id);
+          if (match && match.text) {
+            text = match.text;
+          }
+        }
+        if (!text) {
+          try {
+            text = await translateText(activeCue.text, 'auto', lang);
+          } catch {
+            text = activeCue.text;
+          }
         }
       }
 
@@ -259,10 +270,20 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           let textToSpeak = translatedCueText;
 
           if (!textToSpeak && activeCue.text) {
-            try {
-              textToSpeak = await translateText(activeCue.text, 'auto', targetLang);
-            } catch {
-              textToSpeak = activeCue.text;
+            const clean = targetLang.toLowerCase().split('-')[0];
+            const srtCues = getCachedTargetSubtitles(videoId, clean);
+            if (srtCues && srtCues.length > 0) {
+              const match = srtCues.find((c) => c.id === activeCue.id);
+              if (match && match.text) {
+                textToSpeak = match.text;
+              }
+            }
+            if (!textToSpeak) {
+              try {
+                textToSpeak = await translateText(activeCue.text, 'auto', targetLang);
+              } catch {
+                textToSpeak = activeCue.text;
+              }
             }
           }
 

@@ -75,7 +75,8 @@ export function getMockedSubtitlesForVideo(videoId: string): CaptionCue[] {
 
 export function getCachedSrtForVideoAndLanguage(videoId: string, langCode: string): CaptionCue[] | null {
   if (videoId === 'FcRzAdI8R9U') {
-    const clean = (langCode || '').toLowerCase().split('-')[0];
+    let clean = (langCode || '').toLowerCase().split('-')[0];
+    if (clean === 'iw' || clean === 'il') clean = 'he';
     return FCRZADI8R9U_LANGUAGE_SRT_TRACKS[clean] || null;
   }
   return null;
@@ -83,7 +84,8 @@ export function getCachedSrtForVideoAndLanguage(videoId: string, langCode: strin
 
 export function hasCachedSrtForVideoAndLanguage(videoId: string, langCode: string): boolean {
   if (videoId === 'FcRzAdI8R9U') {
-    const clean = (langCode || '').toLowerCase().split('-')[0];
+    let clean = (langCode || '').toLowerCase().split('-')[0];
+    if (clean === 'iw' || clean === 'il') clean = 'he';
     return !!FCRZADI8R9U_LANGUAGE_SRT_TRACKS[clean];
   }
   return false;
