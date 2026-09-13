@@ -2,7 +2,8 @@
 # YouTube Subtitle & Speech Flow Viewer
 
 [![Build & Release Android APK](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/release-apk.yml/badge.svg)](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/release-apk.yml)
-[![End-to-End Test Suite](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/e2e.yml/badge.svg)](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/e2e.yml)
+[![Web E2E Tests](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/web.yml/badge.svg)](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/web.yml)
+[![Android Emulator E2E Tests](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/emulation.yml/badge.svg)](https://github.com/baobabitogether-a11y/youtubenet3/actions/workflows/emulation.yml)
 
 ---
 

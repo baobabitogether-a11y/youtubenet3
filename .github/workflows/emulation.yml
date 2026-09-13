@@ -1,4 +1,4 @@
-name: End-to-End (E2E) Tests
+name: Android Emulator E2E Tests
 
 on:
   workflow_run:
@@ -12,111 +12,20 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: e2e-gh-pages-${{ github.ref }}
+  group: emulator-e2e-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: write
   pages: write
   id-token: write
+  actions: read
 
 jobs:
-  e2e-tests:
-    name: Run E2E Tests & Deploy GitHub Pages
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Web Dependencies
-        run: npm install
-
-      - name: Install Playwright Browsers with OS Dependencies
-        run: npx playwright install --with-deps chromium
-
-      - name: Build Web Application
-        run: npm run build
-
-      - name: Execute Playwright E2E Tests
-        run: npx playwright test
-
-      - name: Run Cypress Tests with Report Generation
-        uses: cypress-io/github-action@v6
-        with:
-          install: false
-          start: npm start
-          wait-on: 'http://localhost:3000'
-          wait-on-timeout: 30
-          command: npm run test:cy:report
-        continue-on-error: true
-
-      - name: Prepare Video & Step Screenshot Assets for GitHub Pages
-        if: always()
-        run: node scripts/prepare-report.mjs
-
-      - name: Upload Playwright Test Report & Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-e2e-report
-          path: |
-            playwright-report/
-            test-results/
-          retention-days: 14
-
-      - name: Upload Cypress Test Report & Artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cypress-e2e-report
-          path: cypress/reports/
-          retention-days: 14
-
-      # Deploy to GitHub Pages:
-      # 1. Branch-based deployment to 'gh-pages' (compatible with 'Deploy from a branch' setting)
-      # 2. Native Actions deployment artifact (compatible with 'GitHub Actions' setting)
-      - name: Deploy to GitHub Pages (gh-pages branch)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && !cancelled()
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./cypress/reports
-          publish_branch: gh-pages
-          force_orphan: true
-
-      - name: Setup GitHub Pages (Native Actions Mode)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && !cancelled()
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-
-      - name: Upload GitHub Pages Artifact (Native Actions Mode)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && !cancelled()
-        uses: actions/upload-pages-artifact@v3
-        continue-on-error: true
-        with:
-          path: ./cypress/reports
-
-      - name: Deploy to GitHub Pages (Native Actions Mode)
-        id: deployment
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch') && !cancelled()
-        uses: actions/deploy-pages@v4
-        continue-on-error: true
-
   android-emulator-e2e:
     name: Android Emulator E2E Tests (Option C)
     runs-on: macos-14
-    timeout-minutes: 10
+    timeout-minutes: 6
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     continue-on-error: true
 
@@ -129,39 +38,80 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Web Dependencies
+      - name: Download APK Artifact from Release Workflow
+        if: github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: youtube-viewer-apks
+          path: release-artifacts
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify and Stage Pre-Built Android APK
+        id: stage_apk
         run: |
-          npm install --include=optional
-          npm install @rollup/rollup-darwin-arm64 lightningcss-darwin-arm64 @tailwindcss/oxide-darwin-arm64 --no-save || true
+          mkdir -p android-shell/app/build/outputs/apk/debug
+          if [ -f "release-artifacts/YouTube-Viewer-debug.apk" ]; then
+            echo "✅ Using pre-built Android APK from release-apk workflow. Skipping duplicate compilation."
+            cp release-artifacts/YouTube-Viewer-debug.apk android-shell/app/build/outputs/apk/debug/app-debug.apk
+            echo "have_apk=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Pre-built APK not found from upstream workflow. Will compile from source."
+            echo "have_apk=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Build Web Application
-        run: npm run build
+      - name: Download Web Build Artifact (Fallback for source build)
+        if: steps.stage_apk.outputs.have_apk != 'true' && github.event_name == 'workflow_run'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: web-dist
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Bundle Web Assets into Android Native Shell
+      - name: Install Web Dependencies (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
+        run: npm install
+
+      - name: Build Web Application (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
+        run: |
+          if [ ! -f "dist/index.html" ]; then
+            npm run build
+          fi
+
+      - name: Bundle Web Assets into Android Native Shell (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
         run: |
           mkdir -p android-shell/app/src/main/assets
           cp -r dist/* android-shell/app/src/main/assets/
           echo "Bundled web assets:"
           ls -la android-shell/app/src/main/assets/
 
-      - name: Set up Java 17
+      - name: Set up Java 17 (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Gradle (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
         uses: gradle/actions/setup-gradle@v3
         with:
           build-root-directory: android-shell
 
-      - name: Build Android Debug APK
+      - name: Build Android Debug APK (Fallback)
+        if: steps.stage_apk.outputs.have_apk != 'true'
         run: |
           chmod +x android-shell/gradlew
           cd android-shell
           ./gradlew assembleDebug --stacktrace
 
       - name: Run E2E Test on Android Emulator (Option C)
+        timeout-minutes: 3
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -169,7 +119,7 @@ jobs:
           arch: arm64-v8a
           force-avd-creation: true
           ram-size: 2048M
-          emulator-boot-timeout: 180
+          emulator-boot-timeout: 120
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |

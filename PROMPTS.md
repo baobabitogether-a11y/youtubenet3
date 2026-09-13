@@ -307,7 +307,32 @@ app design decisions:
 
 ---
 
-## Current User Prompt (Fix GitHub Actions Workflow Failure)
+## Current User Prompt (Eliminate Duplicated Build Steps in GitHub Actions by Sharing Build Artifacts)
+
+```text
+github actions - e2e.yml duplicate the build step instead of using the build artifact product of release-apk.yml. orchestrate them to run in effective order to eliminate duplicated build step
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 16 (Orchestrate CI Workflows & Eliminate Duplicated Build Steps via Artifact Sharing)**:
+  - **Identified Redundancies**:
+    1. `release-apk.yml` compiled the web application (`npm run build` -> `dist/`) and Android Debug APK (`./gradlew assembleDebug` -> `YouTube-Viewer-debug.apk`), but did not publish the `dist/` directory as an artifact.
+    2. `e2e.yml` was triggered on `workflow_run` (after `release-apk.yml`), but in job `e2e-tests` it re-executed `npm run build` from scratch instead of reusing the pre-compiled `dist/`.
+    3. In job `android-emulator-e2e`, `e2e.yml` re-executed `npm run build` for a third time, re-copied web assets into Android, re-configured Java 17 and Gradle, and re-compiled the entire Android APK with `./gradlew assembleDebug`, ignoring the pre-built APK already created by `release-apk.yml`.
+  - **Implementation & Orchestration**:
+    1. **`.github/workflows/release-apk.yml`**:
+       - Added `actions: write` permission for artifact sharing.
+       - Added step `Upload Web Build Artifacts (web-dist)` after `Build Web Application` uploading `dist/` with 14-day retention.
+       - Existing `youtube-viewer-apks` artifact already packages `YouTube-Viewer-debug.apk`.
+    2. **`.github/workflows/e2e.yml`**:
+       - Added `actions: read` permission to allow cross-workflow artifact downloads.
+       - In `e2e-tests` job: Added `Download Web Build Artifact from Release Workflow` using `actions/download-artifact@v4` with `run-id: ${{ github.event.workflow_run.id }}`. Updated `Build Web Application` step to check if `dist/index.html` and `dist/server.cjs` exist, skipping `npm run build` when pre-built artifacts are present.
+       - In `android-emulator-e2e` job: Added `needs: e2e-tests` and `Download APK Artifact from Release Workflow` targeting `youtube-viewer-apks`. Added `Verify and Stage Pre-Built Android APK` step that stages `YouTube-Viewer-debug.apk` directly to `android-shell/app/build/outputs/apk/debug/app-debug.apk`.
+       - Guarded fallback steps (Web Dependencies, Web Build, Bundle Assets, Java 17, Gradle, assembleDebug) to only run if pre-built APK is not found, skipping unnecessary minutes of compilation on macOS-14 runners.
+       - Updated GitHub Pages deployment trigger condition to include `(github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')`.
+  - **Status**: Completed & Verified
+  - **Verification**: `lint_applet` passed (`tsc --noEmit`), `compile_applet` succeeded.
 
 ```text
 fix 
@@ -352,10 +377,38 @@ https://productionresultssa14.blob.core.windows.net/actions-results/3a47b181-02a
     - Published direct links:
       1. Standalone Live Web App: `https://baobabitogether-a11y.github.io/youtubenet3/app/`
       2. Interactive Cypress Runner Demo: `https://baobabitogether-a11y.github.io/youtubenet3/`
-      3. Cloud Run Live Preview: `https://ais-pre-vsignv5vsfihcpe7wtj63o-82169901332.europe-west3.run.app`
-    - Outlined interactive features available in the web demo (playback, CC detection, on-the-fly translation changes, real-time activity and network log inspection, subtitle positioning).
-  - **Status**: Completed
-  - **Review**: Added detailed web demo section and direct URLs to `README.md`, verified build and compilation.
+---
+
+## Current User Prompt (Split E2E Workflows into web.yml & emulation.yml with 3-minute Timeouts)
+
+```text
+split the e2e for web.yml and emulation. use timeout of 3 minutes for actual tests on each workflow file, dont run the tests on your env because it takes too long.
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 17 (Split E2E Workflows into web.yml and emulation.yml with 3-minute Test Timeouts)**:
+  - **Requirement**:
+    1. Split unified `e2e.yml` into two decoupled GitHub Actions workflows: `.github/workflows/web.yml` and `.github/workflows/emulation.yml`.
+    2. Enforce a 3-minute execution timeout (`timeout-minutes: 3`) on the actual test execution steps in each workflow.
+    3. Do not run heavy end-to-end browser/emulator tests locally in the agent development environment.
+  - **Implementation**:
+    1. **Created `.github/workflows/web.yml`**:
+       - Configured job `web-e2e-tests` on `ubuntu-latest`.
+       - Download & reuse pre-built `web-dist` artifact when triggered via `workflow_run` from `release-apk.yml`.
+       - Added explicit `timeout-minutes: 3` on Playwright (`npx playwright test --timeout=180000`) and Cypress (`cypress-io/github-action@v6`) test execution steps.
+       - Prepares artifacts and deploys web test dashboards to GitHub Pages (`gh-pages`).
+    2. **Created `.github/workflows/emulation.yml`**:
+       - Configured job `android-emulator-e2e` on `macos-14`.
+       - Downloads and stages pre-built `youtube-viewer-apks` from `release-apk.yml`, skipping redundant compilation steps.
+       - Added explicit `timeout-minutes: 3` on the Android Emulator test runner step (`reactivecircus/android-emulator-runner@v2`).
+       - Synchronizes emulator report into Cypress reports and deploys to GitHub Pages with `keep_files: true`.
+    3. **Deleted `.github/workflows/e2e.yml`**:
+       - Removed legacy combined workflow file.
+    4. **Updated `README.md`**:
+       - Updated CI status badges to point to `web.yml` and `emulation.yml`.
+  - **Status**: Completed & Verified
+  - **Verification**: `lint_applet` passed (`tsc --noEmit`), `compile_applet` passed. Local E2E execution skipped as requested.
 
 
 

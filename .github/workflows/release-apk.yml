@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 concurrency:
   group: release-apk-${{ github.workflow }}-${{ github.ref }}
@@ -47,6 +48,13 @@ jobs:
       - name: Build Web Application
         run: |
           npm run build
+
+      - name: Upload Web Build Artifacts (web-dist)
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: dist/
+          retention-days: 14
 
       - name: Bundle Web Assets into Android Project
         run: |
