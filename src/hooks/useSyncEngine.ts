@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, type RefObject } from 'react';
 import { CaptionCue, TargetLanguage, SyncPlayOrder, YouTubePlayerHandle } from '../types';
-import { speakText, stopTTS, isTTSSpeaking, getTTSEngineType } from '../lib/ttsEngine';
+import { speakText, stopTTS, isTTSSpeaking, getTTSEngineType, unlockTTSAudio } from '../lib/ttsEngine';
 import {
   translateText,
   translateOnDemandCues,
@@ -145,6 +145,7 @@ export function useSyncEngine({
   const playCueTTSSequence = useCallback(
     async (cue: CaptionCue, enabledLangs: TargetLanguage[]): Promise<boolean> => {
       // RULE: Never play both tts-play and youtube playback together!
+      unlockTTSAudio();
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
 

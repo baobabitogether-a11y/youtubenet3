@@ -551,5 +551,43 @@ fix all tests: https://github.com/mostuf25561/youtubenet3/actions
   - **Status**: Completed & Verified
   - **Review**: TTS playback is robustly guaranteed across all platforms. On Android, native TTS provides zero-latency speech; on web browsers, Web Speech is supplemented by an instant neural audio stream fallback with full audit trails in the Activity Log.
 
+- [x] **Task 27 (Resolve Web TTS Playback, Word Boundary Highlighting & Audio Resilience)**:
+  - **Requirement**: Resolve reported issue where web app did not play TTS and Redux state machine was stuck in `loading_video`/`buffering` without speech or word highlight. Ensure automated and manual TTS narration operates reliably with synchronized word-by-word syntax highlighting.
+  - **Root Cause Analysis**:
+    1. **Autoplay Policies & AudioContext Restrictions**: Web browsers (Chromium/WebKit) suspend audio contexts and reject `HTMLAudioElement.play()` or `speechSynthesis.speak()` without explicit user audio unlocking.
+    2. **State Machine Transitions**: `stateMachineSlice.ts` did not allow direct transitions between `syncing_tts` and `loading_video`/`fetching_captions`, causing state machine rejections when TTS triggered while YouTube iframe was buffering.
+    3. **Chromium Synthesis Paused State**: Chromium can silently lock `speechSynthesis` into a paused state; explicit calls to `speechSynthesis.resume()` and `speechSynthesis.cancel()` are needed before dispatching new utterances.
+    4. **Missing Visual Word Progression on Audio Restriction**: When browser audio playback was restricted or blocked, word-boundary callbacks (`onBoundary`) were not fired, leaving subtitle text unhighlighted.
+  - **Implementation**:
+    - **State Machine Transitions (`src/store/stateMachineSlice.ts`)**: Added bidirectional transitions between `loading_video`, `fetching_captions`, and `syncing_tts` so video buffering during TTS never causes state machine rejection errors.
+    - **Chromium Unpause & Fast Cancel (`src/lib/ttsEngine.ts`)**: Enhanced `attemptWebSpeechSynthesis` with automatic `speechSynthesis.resume()` if paused and clean cancellation before speaking.
+    - **Resilient Word Boundary Fallback (`src/lib/ttsEngine.ts`)**: In `speakViaAudioStream`, if `audio.play()` rejects or is restricted by browser autoplay policy, it automatically calls `unlockTTSAudio()` and advances simulated word-boundary highlighting (`startSimulatedBoundaryProgression`), ensuring visual syntax highlighting completes smoothly across all words.
+    - **Auto-TTS Narration Loop (`src/components/VideoPlayer.tsx`)**:
+      - Implemented automatic cue speech whenever captions are active and playback progresses to a new subtitle cue.
+      - Enforced strict mutual exclusion: YouTube video automatically pauses during speech, word-boundary syntax highlighting shines on active words with `HighlightableText`, and video automatically resumes upon completion.
+      - Provided dedicated controls: `#toggle-auto-tts-button` (top bar), `#control-auto-tts-button` (bottom bar), and `#toggle-auto-tts-btn-expanded` (expanded view toolbar), with persistence in `localStorage('yt_auto_tts_enabled')`.
+      - Enhanced manual speech (`handleSpeakCue`) with on-the-fly translation fallback so clicking speech on an untranslated cue automatically fetches translation and speaks immediately without silent failures.
+  - **Status**: Completed & Verified
+  - **Review**: TTS playback, audio unlocking, and synchronized word-boundary syntax highlighting operate consistently across Android WebView, standard desktop browsers, and headless test runners with zero deadlocks.
+
+- [x] **Task 28 (Target Language Catalog Accessibility & Instant Switching)**:
+  - **Requirement**: Verify target translation languages can be selected and updated dynamically during video playback without interruption.
+  - **Implementation**:
+    - Confirmed `#open-target-language-btn` is permanently visible in the top bar (`alwaysShowKeyControls: true`).
+    - Verified `SelectTargetLanguageModal` instantly updates `selectedTargetLang`, persists to per-video storage, and recomputes subtitle translations on the fly.
+  - **Status**: Completed & Verified
+  - **Review**: Full catalog of target languages (Spanish, Italian, French, German, Russian, Arabic, etc.) is seamlessly accessible before and during video playback.
+
+- [x] **Task 29 (CI/CD Workflow Test Timeouts Capped at 3 Minutes)**:
+  - **Requirement**: Enforce a strict 3-minute timeout on the actual test execution steps in both `.github/workflows/web.yml` and `.github/workflows/emulation.yml`.
+  - **Implementation**:
+    - **`web.yml`**:
+      - Playwright test step: `timeout-minutes: 3` (`npx playwright test e2e/web.spec.ts`).
+      - Cypress test step: `timeout-minutes: 3` (`npm run test:cy:report:web`).
+    - **`emulation.yml`**:
+      - Android Emulator test step: `timeout-minutes: 3` (`reactivecircus/android-emulator-runner@v2`).
+  - **Status**: Completed & Verified
+  - **Review**: Workflows enforce the 3-minute cap on actual test execution while maintaining suitable environment setup time for runner provisioning and SDK installation.
+
 
 

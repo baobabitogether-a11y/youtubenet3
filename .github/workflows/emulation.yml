@@ -114,7 +114,7 @@ jobs:
           ./gradlew assembleDebug --stacktrace
 
       - name: Run E2E Test on Android Emulator (Option C)
-        timeout-minutes: 8
+        timeout-minutes: 3
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34

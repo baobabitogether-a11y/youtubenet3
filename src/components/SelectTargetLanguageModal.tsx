@@ -31,7 +31,7 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
   const [learningLanguages, setLearningLanguages] = useState<string[]>(() =>
     getUserLearningLanguages()
   );
-  const [isManagingList, setIsManagingList] = useState(false);
+  const [activeTab, setActiveTab] = useState<'my_languages' | 'all_languages'>('my_languages');
   const [searchQuery, setSearchQuery] = useState('');
   const [ttsRates, setTtsRates] = useState<Record<string, number>>({});
 
@@ -60,11 +60,23 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
     });
   }, [learningLanguages, searchQuery]);
 
+  // Languages in search results that are NOT in the user's current learning list
+  const nonLearningSearchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    return filteredCatalog.filter((l) => !learningLanguages.includes(l.code));
+  }, [filteredCatalog, learningLanguages, searchQuery]);
+
   if (!isOpen) return null;
 
   const handleSelect = (code: string) => {
+    if (!learningLanguages.includes(code)) {
+      const updated = [...learningLanguages, code];
+      setLearningLanguages(updated);
+      setUserLearningLanguages(updated);
+    }
     setVideoTargetLang(videoId, code);
     onSelectLanguage(code);
+    onClose();
   };
 
   const handleRateChange = (code: string, rate: number) => {
@@ -110,12 +122,10 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
                 id="target-lang-modal-title"
                 className="text-base font-semibold text-white tracking-tight"
               >
-                {isManagingList ? 'Learning Languages Catalog' : 'Target Language & Speech'}
+                Target Languages &amp; Speech
               </h2>
               <p className="text-xs text-neutral-400">
-                {isManagingList
-                  ? `Select from ${SUPPORTED_LANGUAGES_CATALOG.length} supported languages`
-                  : 'Select translation and TTS rate for this video'}
+                Choose from {SUPPORTED_LANGUAGES_CATALOG.length} languages &amp; configure TTS speed
               </p>
             </div>
           </div>
@@ -131,7 +141,7 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
         </div>
 
         {/* Search Bar */}
-        <div className="pt-3 pb-1">
+        <div className="pt-3 pb-2">
           <div className="relative flex items-center">
             <Search className="w-4 h-4 absolute left-3 text-neutral-400" />
             <input
@@ -139,7 +149,7 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
               id="search-target-language-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by language name or code (e.g. Spanish, hi, de)..."
+              placeholder="Search 70+ languages (e.g. Russian, Arabic, Spanish, hi)..."
               className="w-full pl-9 pr-3 py-2 bg-neutral-950/80 border border-neutral-800 focus:border-indigo-500 rounded-xl text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none transition"
             />
             {searchQuery && (
@@ -154,15 +164,43 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
           </div>
         </div>
 
-        {/* Content */}
-        {!isManagingList ? (
-          <div className="py-3 space-y-3 flex-1 overflow-y-auto">
-            <div className="flex items-center justify-between text-xs text-neutral-400 font-medium px-1">
-              <span>Your Defined Learning Languages:</span>
-              <span className="text-[11px] font-mono text-neutral-500">
-                {learningLanguages.length} configured
-              </span>
-            </div>
+        {/* Segmented Tabs: My Learning List vs All Catalog */}
+        <div className="grid grid-cols-2 gap-1 p-1 bg-neutral-950/80 rounded-xl border border-neutral-800/70 mb-2">
+          <button
+            type="button"
+            id="tab-my-languages"
+            onClick={() => setActiveTab('my_languages')}
+            className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+              activeTab === 'my_languages'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            }`}
+          >
+            <span>My List</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+              {learningLanguages.length}
+            </span>
+          </button>
+          <button
+            type="button"
+            id="tab-all-languages"
+            onClick={() => setActiveTab('all_languages')}
+            className={`py-1.5 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+              activeTab === 'all_languages'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-neutral-400 hover:text-white hover:bg-neutral-800/60'
+            }`}
+          >
+            <span>All Catalog</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-black/40 text-[10px] font-mono">
+              {SUPPORTED_LANGUAGES_CATALOG.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Tab 1: My Learning List */}
+        {activeTab === 'my_languages' && (
+          <div className="py-2 space-y-3 flex-1 overflow-y-auto">
             <div className="space-y-2.5 max-h-[50vh] overflow-y-auto pr-1">
               {filteredLearningLangs.map((code) => {
                 const lang =
@@ -243,60 +281,122 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
                   </div>
                 );
               })}
+
+              {/* If user is searching and there are more languages in the catalog */}
+              {nonLearningSearchResults.length > 0 && (
+                <div className="pt-3 border-t border-neutral-800 space-y-2">
+                  <div className="text-xs font-medium text-neutral-400 flex items-center justify-between">
+                    <span>Available in Full Catalog:</span>
+                    <span className="text-[11px] font-mono text-indigo-400">
+                      {nonLearningSearchResults.length} matches
+                    </span>
+                  </div>
+                  {nonLearningSearchResults.slice(0, 10).map((lang) => (
+                    <div
+                      key={lang.code}
+                      className="p-2.5 rounded-xl bg-neutral-950/60 border border-neutral-800 hover:border-neutral-700 flex items-center justify-between gap-2 transition"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono uppercase text-[11px] px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-300">
+                          {lang.code}
+                        </span>
+                        <span className="text-xs font-medium text-white">{lang.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLanguageInList(lang.code)}
+                          className="px-2 py-1 rounded-lg border border-neutral-700 bg-neutral-900 text-neutral-300 hover:text-white text-xs"
+                          title="Add to My Learning List"
+                        >
+                          + Add to List
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSelect(lang.code)}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                          title="Select as active translation"
+                        >
+                          Use
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Manage languages button */}
+            {/* Quick button to switch to all languages */}
             <div className="pt-2">
               <button
                 type="button"
                 id="manage-learning-languages-btn"
-                onClick={() => setIsManagingList(true)}
+                onClick={() => setActiveTab('all_languages')}
                 className="w-full min-h-[44px] py-2.5 px-3 rounded-xl bg-neutral-800/60 hover:bg-neutral-800 border border-neutral-700/50 text-neutral-300 hover:text-white text-xs flex items-center justify-center gap-2 transition"
               >
-                <Settings2 className="w-4 h-4 text-neutral-400" />
-                <span>Customize Learning Languages List ({SUPPORTED_LANGUAGES_CATALOG.length} available)</span>
+                <Plus className="w-4 h-4 text-indigo-400" />
+                <span>Add More from All {SUPPORTED_LANGUAGES_CATALOG.length} Languages</span>
               </button>
             </div>
           </div>
-        ) : (
-          /* Manage Defined Languages View */
-          <div className="py-3 space-y-3 flex-1 overflow-y-auto">
+        )}
+
+        {/* Tab 2: All 70+ Languages Catalog */}
+        {activeTab === 'all_languages' && (
+          <div className="py-2 space-y-3 flex-1 overflow-y-auto">
             <div className="flex items-center justify-between text-xs text-neutral-400 px-1">
-              <span>Select languages for your learning list:</span>
+              <span>Toggle to add/remove from your learning list:</span>
               <span className="text-[11px] font-mono text-indigo-400">
-                {learningLanguages.length} selected
+                {learningLanguages.length} in list
               </span>
             </div>
             <div className="space-y-1.5 max-h-[50vh] overflow-y-auto pr-1">
               {filteredCatalog.map((lang) => {
                 const isChecked = learningLanguages.includes(lang.code);
+                const isSelected = currentSelectedLang === lang.code;
+
                 return (
-                  <button
+                  <div
                     key={lang.code}
-                    type="button"
-                    onClick={() => handleToggleLanguageInList(lang.code)}
                     className={`w-full min-h-[44px] px-3 py-2 rounded-xl border flex items-center justify-between text-left transition text-xs ${
                       isChecked
-                        ? 'bg-indigo-950/40 border-indigo-800 text-indigo-200'
+                        ? 'bg-indigo-950/30 border-indigo-800/80 text-indigo-200'
                         : 'bg-neutral-800/50 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <span className="font-mono uppercase text-[11px] px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-300">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleLanguageInList(lang.code)}
+                        className={`w-5 h-5 rounded flex items-center justify-center border shrink-0 transition ${
+                          isChecked
+                            ? 'bg-indigo-600 border-indigo-500 text-white'
+                            : 'border-neutral-600 bg-neutral-900'
+                        }`}
+                        title={isChecked ? 'Remove from My List' : 'Add to My List'}
+                      >
+                        {isChecked && <Check className="w-3.5 h-3.5" />}
+                      </button>
+                      <span className="font-mono uppercase text-[11px] px-1.5 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-300 shrink-0">
                         {lang.code}
                       </span>
-                      <span className="font-medium">{lang.name}</span>
+                      <span className="font-medium text-neutral-200 truncate">{lang.name}</span>
                     </div>
-                    <div
-                      className={`w-5 h-5 rounded flex items-center justify-center border ${
-                        isChecked
-                          ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'border-neutral-600 bg-neutral-900'
-                      }`}
-                    >
-                      {isChecked && <Check className="w-3.5 h-3.5" />}
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleSelect(lang.code)}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white'
+                        }`}
+                      >
+                        {isSelected ? 'Active' : 'Select'}
+                      </button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>
@@ -305,13 +405,13 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
               type="button"
               id="finish-managing-languages-btn"
               onClick={() => {
-                setIsManagingList(false);
+                setActiveTab('my_languages');
                 setSearchQuery('');
               }}
               className="w-full min-h-[44px] py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Back to Selection</span>
+              <span>Back to My Learning List</span>
             </button>
           </div>
         )}

@@ -2,6 +2,7 @@
 import { logTTS, logError, logWarn, logInfo } from '../utils/logBuffer';
 import { store } from '../store/index';
 import { addError } from '../store/errorsSlice';
+import { recordRequestStart, recordRequestComplete, recordRequestFailed } from '../store/networkSlice';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
@@ -9,6 +10,32 @@ let currentNativeUtteranceId: string | null = null;
 let activeBoundaryCallback: ((charIndex: number) => void) | null = null;
 let simulatedBoundaryTimer: NodeJS.Timeout | null = null;
 let nativeTTSResolvers: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
+
+/**
+ * Unlocks browser audio playback and speech synthesis on user interaction.
+ * Call this upon any click, tap, or play button interaction.
+ */
+export function unlockTTSAudio(): void {
+  if (typeof window === 'undefined') return;
+  // 1. Resume Web Speech if paused or suspended
+  if (window.speechSynthesis && window.speechSynthesis.paused) {
+    try {
+      window.speechSynthesis.resume();
+    } catch {}
+  }
+  // 2. Resume browser AudioContext
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioCtx) {
+      if (!(window as any).__unlockedAudioCtx) {
+        (window as any).__unlockedAudioCtx = new AudioCtx();
+      }
+      if ((window as any).__unlockedAudioCtx.state === 'suspended') {
+        (window as any).__unlockedAudioCtx.resume().catch(() => {});
+      }
+    }
+  } catch {}
+}
 
 // Helper to report errors to both logBuffer and Redux errorsSlice
 function reportTTSError(message: string, details?: any) {
@@ -156,6 +183,7 @@ export async function speakText(
 
   const cleanRate = Math.max(0.2, Math.min(3.0, rate || 1.0));
   stopTTS();
+  unlockTTSAudio();
 
   logTTS(`Speech requested: "${text.substring(0, 45)}..." [lang: ${cleanLang}, rate: ${cleanRate}x, engine: ${getTTSEngineType()}]`);
   activeBoundaryCallback = onBoundary || null;
@@ -335,10 +363,12 @@ function attemptWebSpeechSynthesis(
       const wordCount = text.split(/\s+/).filter(Boolean).length;
       const estimatedMs = Math.min(15000, Math.max(1000, (wordCount / (2.2 * Math.max(0.4, rate))) * 1000 + 1000));
       let isSettled = false;
+      let hasStarted = false;
 
       const finishSuccess = () => {
         if (!isSettled) {
           isSettled = true;
+          clearTimeout(startCheckTimer);
           clearTimeout(safetyTimer);
           if (simulatedBoundaryTimer) {
             clearTimeout(simulatedBoundaryTimer);
@@ -354,6 +384,7 @@ function attemptWebSpeechSynthesis(
       const finishFailure = (reason: string) => {
         if (!isSettled) {
           isSettled = true;
+          clearTimeout(startCheckTimer);
           clearTimeout(safetyTimer);
           if (simulatedBoundaryTimer) {
             clearTimeout(simulatedBoundaryTimer);
@@ -366,7 +397,29 @@ function attemptWebSpeechSynthesis(
         }
       };
 
-      const safetyTimer = setTimeout(finishSuccess, estimatedMs);
+      // Fast-fail detection: If synthesis hasn't fired onstart within 600ms, immediately failover to Audio Stream
+      const startCheckTimer = setTimeout(() => {
+        if (!hasStarted && !isSettled) {
+          try {
+            window.speechSynthesis.cancel();
+          } catch {}
+          finishFailure('did_not_start_within_600ms');
+        }
+      }, 600);
+
+      const safetyTimer = setTimeout(() => {
+        if (!hasStarted) {
+          finishFailure('timeout_before_start');
+        } else {
+          finishSuccess();
+        }
+      }, estimatedMs);
+
+      utterance.onstart = () => {
+        hasStarted = true;
+        clearTimeout(startCheckTimer);
+        logTTS(`[Web Speech] Speech output started for "${text.substring(0, 40)}..."`);
+      };
 
       utterance.onend = () => {
         finishSuccess();
@@ -378,6 +431,7 @@ function attemptWebSpeechSynthesis(
           // Intentional stop
           if (!isSettled) {
             isSettled = true;
+            clearTimeout(startCheckTimer);
             clearTimeout(safetyTimer);
             resolve(true);
           }
@@ -387,6 +441,12 @@ function attemptWebSpeechSynthesis(
       };
 
       logTTS(`[Web Speech] Speaking "${text.substring(0, 40)}..." [lang: ${cleanLang}, voice: ${utterance.voice?.name || 'default'}]`);
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+        window.speechSynthesis.cancel();
+      } catch {}
       window.speechSynthesis.speak(utterance);
     } catch (err: any) {
       reportTTSError(`Web speech synthesis threw exception: ${err?.message || err}`, { error: err });
@@ -409,6 +469,19 @@ function speakViaAudioStream(
       const primaryUrl = `/api/tts?text=${encodeURIComponent(text.substring(0, 500))}&lang=${encodeURIComponent(cleanLang)}`;
       const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.substring(0, 500))}&tl=${encodeURIComponent(cleanLang)}&client=tw-ob`;
 
+      const reqId = `tts-net-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const startTime = Date.now();
+      try {
+        store.dispatch(
+          recordRequestStart({
+            id: reqId,
+            url: primaryUrl,
+            method: 'GET',
+            type: 'translation_api',
+          })
+        );
+      } catch {}
+
       const audio = new Audio(primaryUrl);
       currentAudioElement = audio;
       audio.playbackRate = Math.max(0.5, Math.min(2.0, rate || 1.0));
@@ -416,7 +489,7 @@ function speakViaAudioStream(
       let clearBoundary: (() => void) | null = null;
       let isSettled = false;
 
-      const finish = () => {
+      const finish = (success = true, errMsg?: string) => {
         if (!isSettled) {
           isSettled = true;
           if (clearBoundary) clearBoundary();
@@ -427,7 +500,28 @@ function speakViaAudioStream(
           if (currentAudioElement === audio) {
             currentAudioElement = null;
           }
-          logTTS(`[Audio Stream] Completed playback for "${text.substring(0, 40)}..."`);
+          try {
+            if (success) {
+              store.dispatch(
+                recordRequestComplete({
+                  id: reqId,
+                  status: 200,
+                  statusText: 'OK',
+                  duration: Date.now() - startTime,
+                  responseBody: `Audio stream completed for "${text.substring(0, 30)}..."`,
+                })
+              );
+              logTTS(`[Audio Stream] Completed playback for "${text.substring(0, 40)}..."`);
+            } else {
+              store.dispatch(
+                recordRequestFailed({
+                  id: reqId,
+                  error: errMsg || 'Audio playback failed',
+                  duration: Date.now() - startTime,
+                })
+              );
+            }
+          } catch {}
           resolve();
         }
       };
@@ -440,7 +534,7 @@ function speakViaAudioStream(
       };
 
       audio.onended = () => {
-        finish();
+        finish(true);
       };
 
       audio.onerror = () => {
@@ -450,17 +544,25 @@ function speakViaAudioStream(
           audio.src = fallbackUrl;
           audio.play().catch((playErr) => {
             reportTTSError(`Audio stream fallback playback failed: ${playErr?.message || playErr}`, { error: playErr });
-            finish();
+            finish(false, String(playErr));
           });
         } else {
           reportTTSError('Audio stream playback failed on all endpoints');
-          finish();
+          finish(false, 'Audio stream failed on all endpoints');
         }
       };
 
       audio.play().catch((playErr) => {
-        reportTTSError(`Audio element play() rejected: ${playErr?.message || playErr}`, { error: playErr });
-        finish();
+        logWarn('TTS', `[Audio Stream] play() rejected (${playErr?.message || playErr}); running visual word-boundary progression`);
+        unlockTTSAudio();
+        if (onBoundary) {
+          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary);
+        }
+        const wordCount = text.split(/\s+/).filter(Boolean).length;
+        const estDurationMs = Math.min(8000, Math.max(1000, (wordCount / (2.2 * Math.max(0.5, rate))) * 1000));
+        setTimeout(() => {
+          finish(true);
+        }, estDurationMs);
       });
     } catch (err: any) {
       reportTTSError(`Failed to initialize audio stream: ${err?.message || err}`, { error: err });
