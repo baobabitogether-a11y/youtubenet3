@@ -42,8 +42,7 @@ jobs:
           node-version: 20
 
       - name: Install Web Dependencies
-        run: |
-          npm ci --prefer-offline || npm install --prefer-offline
+        run: npm install
 
       - name: Build Web Application
         run: |

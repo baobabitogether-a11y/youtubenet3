@@ -323,8 +323,9 @@ https://productionresultssa14.blob.core.windows.net/actions-results/3a47b181-02a
     - In `release-apk.yml`, `actions/setup-node@v4` was configured with `cache: 'npm'`, which strictly requires a `package-lock.json` file to be checked into git.
   - **Solution**:
     1. Removed `cache: 'npm'` from `actions/setup-node@v4` in `.github/workflows/release-apk.yml`, matching the proven and stable pattern used in `.github/workflows/e2e.yml`.
-    2. Generated `package-lock.json` cleanly in the project root via `npm i --package-lock-only`, ensuring lockfile parity for both local and CI builds.
-    3. Verified `npm run build`, `lint_applet`, and `compile_applet` all pass cleanly.
+    2. Updated dependency installation step in `release-apk.yml` to standard `npm install` for bulletproof cross-environment reliability.
+    3. Generated `package-lock.json` cleanly in the project root via `npm i --package-lock-only`, ensuring lockfile parity for both local and CI builds.
+    4. Verified `npm run build`, `lint_applet`, and `compile_applet` all pass cleanly.
   - **Status**: Completed & Verified
 
 
