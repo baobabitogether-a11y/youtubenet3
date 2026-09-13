@@ -19,6 +19,7 @@ You can test and interact with the application live in your browser:
 
 ### What You Can Try in the Web Demo:
 - **Full-Screen Video Player**: Tap to play/pause, scrub through videos, and toggle volume/captions.
+- **Cached Authentic Multi-Language Subtitles (.srt)**: Pre-cached subtitle tracks for Russian video `FcRzAdI8R9U` across default favorite languages (`it`, `ru`, `he`, `en`, `ar`), auto-detected and loaded with zero latency.
 - **On-The-Fly Target Language Translation**: Click the **Lang** button (`#open-target-language-btn`) in the top bar to switch languages during active playback without stopping the video.
 - **Quick Bringup Activity & Network Logs**: Click the **Logs** button (`#open-logs-view-btn`) in the top bar to view real-time HTTP requests, response payloads, status codes, and the state machine ring buffer.
 - **Configurable Subtitle Overlay**: Cycle positions (`top`, `above`, `under`, `bottom`) with translated subtitles stacked on top by default.

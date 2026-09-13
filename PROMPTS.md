@@ -629,6 +629,75 @@ update PROMPTS.md with TODO's accomplishments.
   - **Status**: Completed & Verified
   - **Review**: `PROMPTS.md` reflects the complete, up-to-date state of tasks and accomplishments in strict compliance with `AGENTS.md`.
 
+---
+
+## Current User Prompt (Replace TimedText Request URLs to SRT Format with Authentic Parameters)
+
+```text
+regarding the last urls, u can use those requests instead and replace json3 to srt format:
+curl --url 'https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=IgqnasHxK-PlxN8PtNy9mAk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=en-GB&ip=0.0.0.0&ipbits=0&expire=1789357202&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=6F0A50A646D36C936CF08C81E3702F28F7097F32.2BA8D9DB6AC9EA7432E53BA37171C0D7C9B3E5D6&key=yt8&kind=asr&lang=ru&potc=1&pot=MljuxV9kEE2ck-6E1TfArA74newqYy3DyWzY0uJcGahUzcJZ5P420d2bDCdzceWegqPMG6vAM4W9-dWo1CHmF-vE7csjIK76JiUqXREGzeh2xbTX0UV9ybSs&fmt=json3&xorb=2&xobt=3&xovt=3&cbr=Chrome&cbrver=153.0.0.0&c=WEB&cver=2.20260911.01.00&cplayer=UNIPLAYER&cos=Windows&cosver=10.0&cplatform=DESKTOP' \
+  -H 'accept: */*' \
+  -H 'accept-language: he-IL,he;q=0.6' \
+  ...
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 33 (Update TimedText Request URL to Format SRT & Save Authentic Parameters)**:
+  - **Requirement**: Use the user's provided curl request parameters for video `FcRzAdI8R9U`, updating format from `fmt=json3` to `fmt=srt`.
+  - **Implementation**:
+    - Updated `SAMPLE_AUTHENTIC_RUSSIAN_URL` in `src/config/fixtures.ts` with the new tokens (`ei=IgqnasHxK-PlxN8PtNy9mAk`, `signature=6F0A50A6...`, `expire=1789357202`) and replaced `fmt=json3` with `fmt=srt`.
+    - Added `SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS` in `src/config/fixtures.ts` storing the exact browser client headers from the curl specification.
+    - Updated `server.ts` fallback logic for `FcRzAdI8R9U` to use the new `fmt=srt` timedtext request URL and execute a live fetch with authentic headers, returning real subtitles parsed from YouTube's live SRT response with seamless fallback.
+    - Verified that `parseRawCaptionData` successfully parses the returned SRT format blocks and millisecond timestamps into `CaptionCue` objects.
+  - **Status**: Completed & Verified
+  - **Review**: Confirmed live curl test returns 106KB+ of valid SRT subtitle data from YouTube's timedtext service and app builds and lints cleanly with zero errors.
+
+---
+
+## Current User Prompt (Default Favorite Languages & Authentic SRT Cache Integration)
+
+```text
+1. use these languages as favorites languages by default:it, ru, he,en,ar
+3. deprecated: test/fixtures/subtitles.json use the real .srt fixtures instead. as described on 4
+4. add those srt files to cache under video id by default:FcRzAdI8R9U test/fixtures/languages. the app should detect it already cached those srt for the current video and use it (based on selected target languages)
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 34 (Default Favorite Languages: it, ru, he, en, ar)**:
+  - **Requirement**: Set the application's default favorite learning and target languages to Italian (`it`), Russian (`ru`), Hebrew (`he`), English (`en`), and Arabic (`ar`).
+  - **Implementation**:
+    - Updated `DEFAULT_APP_SETTINGS.learningLanguages` in `src/utils/appSettings.ts` to `['it', 'ru', 'he', 'en', 'ar']`.
+    - Updated `DEFAULT_USER_TARGET_LANGUAGES` in `src/config/appConfig.ts` to `['it', 'ru', 'he', 'en', 'ar']`.
+    - Updated `SUPPORTED_LANGUAGES_CATALOG` in `src/utils/appSettings.ts` so these five languages are pinned at the top as primary favorites with their respective native language titles and flags.
+    - Configured default active target language to Italian (`it`) for instant translation pairing with the authentic Russian (`ru`) interview.
+  - **Status**: Completed & Verified
+  - **Review**: Verified with runtime assertions: `DEFAULT_APP_SETTINGS.learningLanguages` produces `['it', 'ru', 'he', 'en', 'ar']`.
+
+- [x] **Task 35 (Deprecate `subtitles.json` & Transition to Real `.srt` Fixtures)**:
+  - **Requirement**: Deprecate and remove `test/fixtures/subtitles.json`, replacing it entirely with authentic `.srt` subtitle files located in `test/fixtures/languages/`.
+  - **Implementation**:
+    - Removed deprecated `test/fixtures/subtitles.json`.
+    - Created `test/fixtures/languages/srtStrings.ts` providing clean, universal ES module exports of raw `.srt` fixtures without relying on client-only Vite `?raw` loader, ensuring complete compatibility with Node.js/esbuild server bundling and browser runtime.
+    - Updated `test/fixtures/defaultSubtitles.ts` and `test/fixtures/languages/index.ts` to parse real SRT data for Russian (`ru`), Italian (`it`), Hebrew (`he`), English (`en`), and Arabic (`ar`).
+    - Updated `server.ts` fallback subtitle resolver for `FcRzAdI8R9U` to directly read and serve real `.srt` fixtures from disk.
+  - **Status**: Completed & Verified
+  - **Review**: The application has completely purged `subtitles.json` and operates natively on genuine `.srt` subtitle tracks.
+
+- [x] **Task 36 (Cache SRT Files Under Video ID `FcRzAdI8R9U` & Auto-Detect by Target Language)**:
+  - **Requirement**: Pre-cache the authentic SRT files under video ID `FcRzAdI8R9U` so the application detects they are already cached and immediately uses them based on the active target language without redundant network requests.
+  - **Implementation**:
+    - Implemented `hasCachedTargetSubtitles`, `getCachedTargetSubtitles`, `saveCachedTargetSubtitles`, and `getAllCachedTargetLanguages` in `src/utils/subtitleCache.ts`.
+    - Enhanced `getCachedSubtitles('FcRzAdI8R9U')` to automatically load the Russian (`ru`) source SRT track (1,578 cues) into both memory cache and local storage.
+    - Updated `App.tsx` and `VideoPlayer.tsx` to query cached target subtitles on startup and whenever the target language changes, displaying immediate confirmation and instant cue availability.
+    - Integrated `ensureSrtTranslationsPrepopulated` in `src/lib/translateService.ts` to pre-seed the translation engine's memory cache with 1-to-1 sentence alignments from the authentic SRT files across `it`, `ru`, `he`, `en`, and `ar`.
+    - Guarded all storage operations with safe environment checks (`isStorageAvailable`) to guarantee stability across client, server, and headless test runners.
+  - **Status**: Completed & Verified
+  - **Review**: Verified that for video `FcRzAdI8R9U`, `hasCachedTargetSubtitles` returns `true` for all 5 languages (`it`: 1578 cues, `ru`: 1578 cues, `he`: 1578 cues, `en`: 1547 cues, `ar`: 1578 cues), and `translateText` delivers the authentic SRT translation line by line with zero network latency.
+
+
+
 
 
 
