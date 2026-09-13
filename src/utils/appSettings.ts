@@ -22,8 +22,9 @@ export interface AppSettings {
   subtitlePosition: SubtitlePosition;
   showTranslatedOnTop: boolean;
 
-  // General languages user wants to learn from as target for future translation
+  // Learning Languages & Pagination
   learningLanguages: string[];
+  subtitlesPerPage: number; // Number of records per page in Subtitles Teacher Panel (e.g. 10, 25, 50, 100, 0=All)
 
   // Auto-fetch target translation subtitles via tlang once after default subs loaded (Requirement 6)
   autoFetchTargetTranslationsWithTlang: boolean;
@@ -143,8 +144,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   subtitlePosition: 'top',
   showTranslatedOnTop: true,
 
-  // Favorite languages / learning targets by default: it, ru, he, en, ar
-  learningLanguages: ['it', 'ru', 'he', 'en', 'ar'],
+  // Favorite languages / learning targets by default: ar, il, ru, it, he
+  learningLanguages: ['ar', 'il', 'ru', 'it', 'he'],
+  subtitlesPerPage: 25,
 
   // By default try to subtitle fetch using tlang param change once after default subs loaded (Requirement 6)
   autoFetchTargetTranslationsWithTlang: true,

@@ -191,6 +191,44 @@ export function SettingsModal({
                 />
               </div>
 
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200">
+                    Subtitles Table Records Per Page
+                  </div>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {settings.subtitlesPerPage === 0 ? 'All' : `${settings.subtitlesPerPage || 25} segments`}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-400">
+                  Choose how many subtitle segments to display per page in the Subtitles Teacher Table.
+                </div>
+                <div className="grid grid-cols-5 gap-2 pt-1">
+                  {[
+                    { value: 10, label: '10' },
+                    { value: 25, label: '25' },
+                    { value: 50, label: '50' },
+                    { value: 100, label: '100' },
+                    { value: 0, label: 'All' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() =>
+                        onUpdateSettings({ ...settings, subtitlesPerPage: opt.value })
+                      }
+                      className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                        (settings.subtitlesPerPage ?? 25) === opt.value
+                          ? 'bg-emerald-950/70 border-emerald-500/80 text-emerald-200 shadow-sm'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
                 <div>
                   <div className="font-medium text-xs sm:text-sm text-neutral-200">

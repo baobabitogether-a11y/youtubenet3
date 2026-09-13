@@ -7,6 +7,7 @@
 export const RTL_LANG_CODES = new Set([
   'he', // Hebrew (modern)
   'iw', // Hebrew (legacy Java/Android/Google code)
+  'il', // Hebrew / Israel alias
   'ar', // Arabic
   'fa', // Persian / Farsi
   'ur', // Urdu

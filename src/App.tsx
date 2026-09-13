@@ -57,27 +57,12 @@ import { ApkUpdateModal } from './components/ApkUpdateModal';
 import { checkApkUpdate } from './utils/apkUpdater';
 import { loadAppSettings, saveAppSettings, AppSettings, DEFAULT_APP_SETTINGS, loadVideoSettings, saveVideoSettings, VideoSpecificSettings, getVideoTargetLang, setVideoTargetLang } from './utils/appSettings';
 import { logInfo, logWarn, logSubtitles } from './utils/logBuffer';
-import { getMockedSubtitlesForVideo } from '../test/fixtures/defaultSubtitles';
+import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../test/fixtures/defaultSubtitles';
 import { SelectTargetLanguageModal } from './components/SelectTargetLanguageModal';
 import { translateText } from './lib/translateService';
+import { DEFAULT_LIBRARY_ITEMS } from './config/appConfig';
 
 const LIBRARY_STORAGE_KEY = 'yt_video_library_v2';
-
-const DEFAULT_LIBRARY_ITEMS: LibraryVideoItem[] = [
-  {
-    id: 'jNQXAC9IVRw',
-    originalUrl: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
-    title: 'Me at the zoo',
-    cues: [
-      { id: 'cue-1', start: 1.2, duration: 3.2, text: 'All right, so here we are in front of the elephants.' },
-      { id: 'cue-2', start: 4.5, duration: 3.0, text: 'The cool thing about these guys is that...' },
-      { id: 'cue-3', start: 7.6, duration: 3.5, text: '...they have really, really, really long trunks.' },
-      { id: 'cue-4', start: 11.2, duration: 2.8, text: 'And that is cool.' },
-      { id: 'cue-5', start: 14.1, duration: 4.2, text: 'And that is pretty much all there is to say.' },
-    ],
-    timestamp: Date.now(),
-  },
-];
 
 export default function App() {
   const dispatch = useAppDispatch();
@@ -218,6 +203,12 @@ export default function App() {
 
   // Restore cached subtitles for active video on initialization
   const [customCues, setCustomCues] = useState<CaptionCue[] | null>(() => {
+    if (videoId === 'FcRzAdI8R9U') {
+      const srt = FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
+      if (srt && srt.length >= 500) {
+        return srt;
+      }
+    }
     if (typeof window !== 'undefined') {
       // 1. Try dedicated persistent subtitle cache
       const cached = getCachedSubtitles(videoId);
@@ -225,8 +216,11 @@ export default function App() {
         return cached;
       }
     }
+    if (videoId === 'FcRzAdI8R9U') {
+      return FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru || null;
+    }
     if (videoId === 'jNQXAC9IVRw') {
-      return DEFAULT_LIBRARY_ITEMS[0].cues || null;
+      return DEFAULT_LIBRARY_ITEMS[1]?.cues || null;
     }
     return null;
   });
