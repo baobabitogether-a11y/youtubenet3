@@ -6,8 +6,8 @@
 
 # Test info
 
-- Name: app.spec.ts >> YouTube Video Viewer - Subtitle Auto-Detection Tests >> Auto-detect subtitles once caption icon is set to ON
-- Location: e2e/app.spec.ts:23:3
+- Name: web.spec.ts >> YouTube Video Viewer - Web E2E Tests >> Auto-detect subtitles once caption icon is set to ON
+- Location: e2e/web.spec.ts:22:3
 
 # Error details
 

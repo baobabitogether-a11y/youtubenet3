@@ -93,7 +93,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const dispatch = useAppDispatch();
     const [localCaptionsEnabled, setLocalCaptionsEnabled] = useState(controlledCaptionsEnabled ?? false);
     const captionsActive = controlledCaptionsEnabled !== undefined ? controlledCaptionsEnabled : localCaptionsEnabled;
-    const isCaptionsActive = Boolean(captionsActive || hasSubtitles);
+    const isCaptionsActive = Boolean(captionsActive);
 
     const handleToggleCaptions = (e?: React.MouseEvent) => {
       e?.stopPropagation();

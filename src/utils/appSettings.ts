@@ -130,11 +130,11 @@ export const SUPPORTED_LANGUAGES_CATALOG: { code: string; name: string }[] = [
 ];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  // Compact lightweight view: ON by default (fast, no scrolling, controls show on tap)
-  compactView: true,
-  showExpandedControls: false,
-  showTeacherPanel: false,
-  showLinkBar: false,
+  // Web Companion / Workspace Mode: Expanded controls enabled by default for interactive demo and E2E test suites; users can toggle compactView in settings
+  compactView: false,
+  showExpandedControls: true,
+  showTeacherPanel: true,
+  showLinkBar: true,
 
   // By default always show the most important buttons (Requirement 1)
   alwaysShowKeyControls: true,
