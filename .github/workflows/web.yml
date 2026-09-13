@@ -41,9 +41,11 @@ jobs:
           node-version: 20
 
       - name: Install Web Dependencies
+        timeout-minutes: 3
         run: npm install
 
       - name: Install Playwright Browsers with OS Dependencies
+        timeout-minutes: 3
         run: npx playwright install --with-deps chromium
 
       - name: Download Web Build Artifact from Release Workflow
@@ -57,6 +59,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Web Application
+        timeout-minutes: 3
         run: |
           if [ -f "dist/index.html" ] && [ -f "dist/server.cjs" ]; then
             echo "✅ Pre-built web application artifacts found from release-apk workflow. Skipping duplicate build step."
