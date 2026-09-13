@@ -9,10 +9,12 @@
 
 set -uo pipefail
 
-REPO_OWNER="baobabitogether1-hash"
-REPO_NAME="youtubenet4"
+REPO_OWNER="mostuf25561"
+REPO_NAME="youtubenet3"
 ALT_REPO_OWNER="baobabitogether-a11y"
 ALT_REPO_NAME="youtubenet3"
+FALLBACK_REPO_OWNER="baobabitogether1-hash"
+FALLBACK_REPO_NAME="youtubenet4"
 ARG_INPUT="${1:-latest}"
 APK_NAME="YouTube-Viewer-debug.apk"
 PACKAGE_NAME="com.ytviewer.app"
@@ -43,6 +45,13 @@ elif [[ "${ARG_INPUT}" == "latest" || -z "${ARG_INPUT}" ]]; then
     if [ -n "${VERSION}" ]; then
       REPO_OWNER="${ALT_REPO_OWNER}"
       REPO_NAME="${ALT_REPO_NAME}"
+    else
+      API_RESP=$(curl -s "https://api.github.com/repos/${FALLBACK_REPO_OWNER}/${FALLBACK_REPO_NAME}/releases/latest" 2>/dev/null || true)
+      VERSION=$(echo "${API_RESP}" | grep -oE '"tag_name": *"[^"]+"' | head -1 | cut -d'"' -f4)
+      if [ -n "${VERSION}" ]; then
+        REPO_OWNER="${FALLBACK_REPO_OWNER}"
+        REPO_NAME="${FALLBACK_REPO_NAME}"
+      fi
     fi
   fi
   VERSION="${VERSION:-v1.0.16}"
