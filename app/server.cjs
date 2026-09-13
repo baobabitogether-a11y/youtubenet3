@@ -431,6 +431,45 @@ if (typeof window !== "undefined") {
   };
 }
 
+// src/config/appConfig.ts
+var DEFAULT_VIDEO_ID = "FcRzAdI8R9U";
+var DEFAULT_VIDEO_URL = `https://www.youtube.com/watch?v=${DEFAULT_VIDEO_ID}`;
+var ANDROID_TEST_VIDEO_ID = "HGEyIt2bMiE";
+var ANDROID_TEST_VIDEO_URL = `https://www.youtube.com/watch?v=${ANDROID_TEST_VIDEO_ID}`;
+var ME_AT_THE_ZOO_ID = "jNQXAC9IVRw";
+var ME_AT_THE_ZOO_URL = `https://www.youtube.com/watch?v=${ME_AT_THE_ZOO_ID}`;
+var TUTORIAL_TEST_VIDEO_ID = "c0pUbsq9FLk";
+var TUTORIAL_TEST_VIDEO_URL = `https://www.youtube.com/watch?v=${TUTORIAL_TEST_VIDEO_ID}`;
+var STORAGE_KEYS = {
+  SUBTITLE_CACHE_PREFIX: "yt_subtitles_",
+  LIBRARY_STORAGE_KEY: "yt_video_library_v2",
+  LAST_ACTIVE_VIDEO_KEY: "yt_last_active_video_v1",
+  TIMEDTEXT_URL_PREFIX: "yt_observed_timedtext_",
+  SETTINGS_STORAGE_KEY: "yt_app_settings_v4",
+  VIDEO_SETTINGS_PREFIX: "yt_vsettings_"
+};
+var DEFAULT_LIBRARY_ITEMS = [
+  {
+    id: ME_AT_THE_ZOO_ID,
+    originalUrl: ME_AT_THE_ZOO_URL,
+    title: "Me at the zoo",
+    cues: [
+      { id: "cue-1", start: 1.2, duration: 3.2, text: "All right, so here we are in front of the elephants." },
+      { id: "cue-2", start: 4.5, duration: 3, text: "The cool thing about these guys is that..." },
+      { id: "cue-3", start: 7.6, duration: 3.5, text: "...they have really, really, really long trunks." },
+      { id: "cue-4", start: 11.2, duration: 2.8, text: "And that is cool." },
+      { id: "cue-5", start: 14.1, duration: 4.2, text: "And that is pretty much all there is to say." }
+    ],
+    timestamp: Date.now()
+  }
+];
+
+// src/utils/subtitleCache.ts
+var SUBTITLE_CACHE_PREFIX = STORAGE_KEYS.SUBTITLE_CACHE_PREFIX;
+var LIBRARY_STORAGE_KEY = STORAGE_KEYS.LIBRARY_STORAGE_KEY;
+var LAST_ACTIVE_VIDEO_KEY = STORAGE_KEYS.LAST_ACTIVE_VIDEO_KEY;
+var TIMEDTEXT_URL_PREFIX = STORAGE_KEYS.TIMEDTEXT_URL_PREFIX;
+
 // src/lib/translateService.ts
 function buildYouTubeTranslatedTimedTextUrl(observedUrl, targetLangCode, format = "srt") {
   try {
@@ -570,12 +609,20 @@ async function startServer() {
   });
   app.post("/api/fetch-subtitles", async (req, res) => {
     try {
-      const { videoId } = req.body;
+      const { videoId, tlang } = req.body;
       if (!videoId || typeof videoId !== "string") {
         return res.status(400).json({ error: "videoId is required" });
       }
-      const directUrl = await discoverTimedTextUrlForVideo(videoId);
+      let directUrl = await discoverTimedTextUrlForVideo(videoId);
       if (directUrl) {
+        if (tlang && typeof tlang === "string") {
+          try {
+            const parsedUrl = new URL(directUrl);
+            parsedUrl.searchParams.set("tlang", tlang);
+            directUrl = parsedUrl.toString();
+          } catch {
+          }
+        }
         try {
           const captionRes = await fetch(directUrl, {
             headers: {
@@ -602,14 +649,17 @@ async function startServer() {
         }
       }
       if (videoId === "FcRzAdI8R9U") {
-        const authenticObservedUrl = "https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=DCKeatfmPKPRp-oPnqqzgQk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=iw&ip=0.0.0.0&ipbits=0&expire=1788773501&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=217DB32BACFE6E926084313687E03C0510F5DB34.D9A7AA9EE51F782ED170B2AA7DE3BD0AC740CF6A&key=yt8&kind=asr&lang=ru&potc=1&fmt=json3&tlang=en";
-        const authenticCues = [
+        const authenticObservedUrl = `https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=DCKeatfmPKPRp-oPnqqzgQk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=iw&ip=0.0.0.0&ipbits=0&expire=1788773501&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=217DB32BACFE6E926084313687E03C0510F5DB34.D9A7AA9EE51F782ED170B2AA7DE3BD0AC740CF6A&key=yt8&kind=asr&lang=ru&potc=1&fmt=json3${tlang ? `&tlang=${tlang}` : "&tlang=en"}`;
+        let authenticCues = [
           { id: "cue-1", start: 0, duration: 4.2, text: "\u0417\u0434\u0440\u0430\u0432\u0441\u0442\u0432\u0443\u0439\u0442\u0435, \u0434\u043E\u0440\u043E\u0433\u0438\u0435 \u0437\u0440\u0438\u0442\u0435\u043B\u0438, \u0432 \u044D\u0444\u0438\u0440\u0435 \u044D\u043A\u0441\u043A\u043B\u044E\u0437\u0438\u0432 \u043D\u0430 Sheinkin40." },
           { id: "cue-2", start: 4.5, duration: 4.5, text: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F \u0443 \u043D\u0430\u0441 \u0432 \u0433\u043E\u0441\u0442\u044F\u0445 \u043B\u0435\u0433\u0435\u043D\u0434\u0430\u0440\u043D\u044B\u0439 \u043C\u0443\u0437\u044B\u043A\u0430\u043D\u0442 \u0438 \u0430\u0432\u0442\u043E\u0440 \u043F\u0435\u0441\u0435\u043D \u0410\u0440\u043A\u0430\u0434\u0438\u0439 \u0414\u0443\u0445\u0438\u043D." },
           { id: "cue-3", start: 9.2, duration: 5.3, text: "\u041C\u044B \u043F\u043E\u0433\u043E\u0432\u043E\u0440\u0438\u043C \u043E \u043F\u0435\u0441\u043D\u044F\u0445 \u0412\u044B\u0441\u043E\u0446\u043A\u043E\u0433\u043E, \u043E \u043F\u043E\u043B\u0438\u0442\u0438\u043A\u0435, \u041D\u0435\u0442\u0430\u043D\u044C\u044F\u0445\u0443 \u0438 \u043E \u0442\u043E\u043C, \u0447\u0442\u043E \u043F\u0440\u043E\u0438\u0441\u0445\u043E\u0434\u0438\u0442 \u0441 \u0418\u0437\u0440\u0430\u0438\u043B\u0435\u043C." },
           { id: "cue-4", start: 14.8, duration: 5, text: "\u0421\u043F\u0430\u0441\u0438\u0431\u043E \u043E\u0433\u0440\u043E\u043C\u043D\u043E\u0435 \u0437\u0430 \u043F\u0440\u0438\u0433\u043B\u0430\u0448\u0435\u043D\u0438\u0435, \u044D\u0442\u043E \u043E\u0447\u0435\u043D\u044C \u0432\u0430\u0436\u043D\u0430\u044F \u0438 \u0433\u043B\u0443\u0431\u043E\u043A\u0430\u044F \u0442\u0435\u043C\u0430 \u0434\u043B\u044F \u043C\u0435\u043D\u044F." },
           { id: "cue-5", start: 20, duration: 5.5, text: "\u0414\u0430\u0432\u0430\u0439\u0442\u0435 \u043D\u0430\u0447\u043D\u0435\u043C \u0441 \u0432\u0430\u0448\u0435\u0433\u043E \u0432\u0437\u0433\u043B\u044F\u0434\u0430 \u043D\u0430 \u0441\u043E\u0432\u0440\u0435\u043C\u0435\u043D\u043D\u0443\u044E \u043A\u0443\u043B\u044C\u0442\u0443\u0440\u043D\u0443\u044E \u0436\u0438\u0437\u043D\u044C." }
         ];
+        if (tlang && typeof tlang === "string") {
+          authenticCues = await translateCuesToTargetLang(authenticCues, tlang);
+        }
         return res.json({
           success: true,
           videoId,
@@ -622,7 +672,7 @@ async function startServer() {
       return res.status(404).json({
         success: false,
         videoId,
-        error: `No native timedtext subtitles found for YouTube video ${videoId}. Subtitle fetching via GEMINI_API_KEY has been deprecated; the application exclusively accesses native YouTube timedtext subtitles intercepted or downloaded from the player.`,
+        error: `No native timedtext subtitles found for YouTube video ${videoId}. The application exclusively accesses native YouTube timedtext subtitles intercepted or downloaded from the player.`,
         source: "none"
       });
     } catch (err) {
@@ -635,50 +685,61 @@ async function startServer() {
   let apkReleaseCache = null;
   app.get("/api/check-apk-update", async (req, res) => {
     try {
-      const repo = req.query.repo || "baobabitogether-a11y/youtubenet3";
+      const requestedRepo = req.query.repo;
+      const candidateRepos = requestedRepo ? [requestedRepo] : ["baobabitogether1-hash/youtubenet4", "baobabitogether-a11y/youtubenet3"];
       const now = Date.now();
-      if (apkReleaseCache && now - apkReleaseCache.timestamp < 6e4 && !req.query.force) {
+      const targetRepoKey = candidateRepos.join(",");
+      if (apkReleaseCache && apkReleaseCache.repo === targetRepoKey && now - apkReleaseCache.timestamp < 6e4 && !req.query.force) {
         return res.json(apkReleaseCache.data);
       }
-      const response = await fetch(`https://api.github.com/repos/${repo}/releases`, {
-        headers: {
-          "User-Agent": "YouTubeViewer-App/1.0",
-          Accept: "application/vnd.github.v3+json"
-        }
-      });
-      if (!response.ok) {
-        return res.status(response.status).json({
-          error: `GitHub API returned ${response.status}`,
-          repo
-        });
-      }
-      const releases = await response.json();
-      if (!Array.isArray(releases) || releases.length === 0) {
-        return res.status(404).json({ error: "No releases found", repo });
-      }
-      for (const release of releases) {
-        const apkAsset = release.assets?.find(
-          (a) => a.name.toLowerCase().includes("youtube-viewer-debug.apk") || a.name.toLowerCase().endsWith(".apk")
-        );
-        if (apkAsset) {
-          const result = {
-            success: true,
-            tagName: release.tag_name,
-            name: release.name || release.tag_name,
-            publishedAt: release.published_at,
-            body: release.body || "",
-            htmlUrl: release.html_url,
-            asset: {
-              name: apkAsset.name,
-              size: apkAsset.size,
-              downloadUrl: apkAsset.browser_download_url
+      let bestResult = null;
+      for (const repo of candidateRepos) {
+        try {
+          const response = await fetch(`https://api.github.com/repos/${repo}/releases`, {
+            headers: {
+              "User-Agent": "YouTubeViewer-App/1.0",
+              Accept: "application/vnd.github.v3+json"
             }
-          };
-          apkReleaseCache = { data: result, timestamp: now };
-          return res.json(result);
+          });
+          if (!response.ok) continue;
+          const releases = await response.json();
+          if (!Array.isArray(releases) || releases.length === 0) continue;
+          for (const release of releases) {
+            const apkAsset = release.assets?.find(
+              (a) => a.name.toLowerCase().includes("youtube-viewer-debug.apk") || a.name.toLowerCase().endsWith(".apk")
+            );
+            if (apkAsset) {
+              const result = {
+                success: true,
+                repo,
+                tagName: release.tag_name,
+                name: release.name || release.tag_name,
+                publishedAt: release.published_at,
+                body: release.body || "",
+                htmlUrl: release.html_url,
+                asset: {
+                  name: apkAsset.name,
+                  size: apkAsset.size,
+                  downloadUrl: apkAsset.browser_download_url
+                }
+              };
+              bestResult = result;
+              break;
+            }
+          }
+          if (bestResult) break;
+        } catch (subErr) {
+          console.warn(`[Server] Error querying repo ${repo} for APK releases:`, subErr);
         }
       }
-      return res.status(404).json({ error: "No APK assets found in recent releases", repo });
+      if (bestResult) {
+        apkReleaseCache = { data: bestResult, timestamp: now, repo: targetRepoKey };
+        return res.json(bestResult);
+      }
+      return res.status(404).json({
+        error: "No APK assets found in releases",
+        checkedRepos: candidateRepos
+      });
     } catch (err) {
       console.error("[Server] Error checking APK update:", err);
       return res.status(500).json({ error: err.message || "Failed to check APK updates" });
@@ -712,6 +773,7 @@ async function startServer() {
         res.setHeader("Content-Length", contentLength);
       }
       res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Disposition, Content-Type");
       if (!upstream.body) {
         return res.status(500).json({ error: "No response body received from APK host" });
       }
