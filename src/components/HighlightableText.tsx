@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { isRtl } from '../utils/rtlUtils';
 
 interface HighlightableTextProps {
   text: string;
@@ -8,6 +9,8 @@ interface HighlightableTextProps {
   activeWordClassName?: string;
   pastWordClassName?: string;
   futureWordClassName?: string;
+  dir?: 'rtl' | 'ltr' | 'auto';
+  lang?: string;
 }
 
 interface Token {
@@ -26,13 +29,17 @@ export const HighlightableText: React.FC<HighlightableTextProps> = ({
   activeWordClassName = 'bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow-md ring-2 ring-amber-300 transition-all duration-100 scale-105 inline-block mx-0.5',
   pastWordClassName = 'text-neutral-300 opacity-90',
   futureWordClassName = 'text-neutral-100',
+  dir,
+  lang,
 }) => {
-  // Parse tokens (words and separators) with exact char ranges
+  const effectiveDir = dir || (isRtl(lang, text) ? 'rtl' : 'ltr');
+
+  // Parse tokens (words and separators) with exact char ranges across Unicode scripts
   const tokens = useMemo<Token[]>(() => {
     if (!text) return [];
     const result: Token[] = [];
-    // Regex splits by word characters vs whitespace/punctuation
-    const regex = /(\s+|[^\s\w]+|\w+)/g;
+    // Unicode regex splits letters/numbers vs whitespace vs punctuation
+    const regex = /(\s+|[^\s\p{L}\p{N}]+|[\p{L}\p{N}]+)/gu;
     let match: RegExpExecArray | null;
     let idx = 0;
 
@@ -40,7 +47,7 @@ export const HighlightableText: React.FC<HighlightableTextProps> = ({
       const matchText = match[0];
       const start = match.index;
       const end = start + matchText.length;
-      const isWord = /\S/.test(matchText) && !/^[.,!?;:"'()[\]{}<>]+$/.test(matchText);
+      const isWord = /\S/.test(matchText) && !/^[.,!?;:"'()[\]{}<>«»„“—–]+$/.test(matchText);
 
       result.push({
         id: idx++,
@@ -80,11 +87,19 @@ export const HighlightableText: React.FC<HighlightableTextProps> = ({
   if (!text) return null;
 
   if (!isSpeaking || activeTokenIndex === -1) {
-    return <span className={className}>{text}</span>;
+    return (
+      <span dir={effectiveDir} className={className}>
+        {text}
+      </span>
+    );
   }
 
   return (
-    <span className={`${className} inline`} data-testid="highlightable-text-container">
+    <span
+      dir={effectiveDir}
+      className={`${className} inline`}
+      data-testid="highlightable-text-container"
+    >
       {tokens.map((token, i) => {
         if (!token.isWord) {
           return <span key={token.id}>{token.text}</span>;
