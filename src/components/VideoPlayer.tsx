@@ -33,6 +33,7 @@ import { SubtitlePosition } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
+import { isRtl } from '../utils/rtlUtils';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -686,6 +687,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const progressPercent = duration > 0 ? Math.min(100, Math.max(0, (currentTime / duration) * 100)) : 0;
 
+    const isTranslatedRtl = isRtl(targetLanguage, translatedCueText);
+    const isOriginalRtl = isRtl(undefined, activeCue?.text);
+
     // ------------------------------------------------------------------------
     // Compact View (Default: Android UI Guidelines)
     // - Display: Full screen / Container fit
@@ -743,12 +747,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
                             <p
                               id="active-translated-cue-text"
-                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
+                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                              }`}
                             >
                               <HighlightableText
                                 text={translatedCueText}
                                 isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
                                 activeCharIndex={activeTTSCharIndex}
+                                lang={targetLanguage || undefined}
+                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />
@@ -770,12 +780,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
-                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                            dir={isOriginalRtl ? 'rtl' : 'ltr'}
+                            data-rtl={isOriginalRtl ? 'true' : 'false'}
+                            className={`text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug ${
+                              isOriginalRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                            }`}
                           >
                             <HighlightableText
                               text={activeCue.text}
                               isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
                               activeCharIndex={activeTTSCharIndex}
+                              dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                             />
@@ -798,12 +813,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
-                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                            dir={isOriginalRtl ? 'rtl' : 'ltr'}
+                            data-rtl={isOriginalRtl ? 'true' : 'false'}
+                            className={`text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug ${
+                              isOriginalRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                            }`}
                           >
                             <HighlightableText
                               text={activeCue.text}
                               isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
                               activeCharIndex={activeTTSCharIndex}
+                              dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                             />
@@ -823,12 +843,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <div className="flex items-center justify-center gap-2 pt-0.5">
                             <p
                               id="active-translated-cue-text"
-                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
+                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                              }`}
                             >
                               <HighlightableText
                                 text={translatedCueText}
                                 isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
                                 activeCharIndex={activeTTSCharIndex}
+                                lang={targetLanguage || undefined}
+                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />
@@ -1187,12 +1213,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
                             <p
                               id="active-translated-cue-text"
-                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
+                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                              }`}
                             >
                               <HighlightableText
                                 text={translatedCueText}
                                 isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
                                 activeCharIndex={activeTTSCharIndex}
+                                lang={targetLanguage || undefined}
+                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />
@@ -1214,12 +1246,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
-                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                            dir={isOriginalRtl ? 'rtl' : 'ltr'}
+                            data-rtl={isOriginalRtl ? 'true' : 'false'}
+                            className={`text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug ${
+                              isOriginalRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                            }`}
                           >
                             <HighlightableText
                               text={activeCue.text}
                               isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
                               activeCharIndex={activeTTSCharIndex}
+                              dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                             />
@@ -1242,12 +1279,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
-                            className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                            dir={isOriginalRtl ? 'rtl' : 'ltr'}
+                            data-rtl={isOriginalRtl ? 'true' : 'false'}
+                            className={`text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug ${
+                              isOriginalRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                            }`}
                           >
                             <HighlightableText
                               text={activeCue.text}
                               isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
                               activeCharIndex={activeTTSCharIndex}
+                              dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                             />
@@ -1265,12 +1307,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           <div className="flex items-center justify-center gap-2 pt-0.5">
                             <p
                               id="active-translated-cue-text"
-                              className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug"
+                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
+                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
+                              }`}
                             >
                               <HighlightableText
                                 text={translatedCueText}
                                 isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
                                 activeCharIndex={activeTTSCharIndex}
+                                lang={targetLanguage || undefined}
+                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />

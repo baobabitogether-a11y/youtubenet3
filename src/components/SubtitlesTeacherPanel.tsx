@@ -43,6 +43,7 @@ import { isAndroidNativeTTS } from '../lib/ttsEngine';
 import { LanguageSettingsModal } from './LanguageSettingsModal';
 import { ObservedTimedTextModal } from './ObservedTimedTextModal';
 import { loadVideoSettings, saveVideoSettings, VideoSpecificSettings } from '../utils/appSettings';
+import { isRtl } from '../utils/rtlUtils';
 import { useAppDispatch } from '../store/hooks';
 import { transition } from '../store/stateMachineSlice';
 import { logInfo } from '../utils/logBuffer';
@@ -61,6 +62,8 @@ interface SubtitlesTeacherPanelProps {
   onUpdateVideoSettings?: (videoId: string, settings: Partial<VideoSpecificSettings>) => void;
   selectedTargetLang?: string | null;
   onSelectTargetLang?: (langCode: string) => void;
+  activeCue?: CaptionCue | null;
+  onJumpToCue?: (cue: CaptionCue, index: number) => void;
 }
 
 const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
@@ -114,6 +117,8 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   onUpdateVideoSettings,
   selectedTargetLang,
   onSelectTargetLang,
+  activeCue,
+  onJumpToCue,
 }: SubtitlesTeacherPanelProps) => {
   const dispatch = useAppDispatch();
   const [targetLanguages, setTargetLanguages] = useState<TargetLanguage[]>(() => {
@@ -291,6 +296,29 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     videoId,
     externalTranslations: tableTranslations,
   });
+
+  // Calculate effective active index from sync engine or passed activeCue
+  const effectiveActiveIndex = useMemo(() => {
+    if (isSyncActive && activeCueIndex >= 0) {
+      return activeCueIndex;
+    }
+    if (activeCue) {
+      const match = effectiveCues.findIndex((c) => c.id === activeCue.id);
+      if (match !== -1) return match;
+    }
+    if (activeCueIndex >= 0) return activeCueIndex;
+    return -1;
+  }, [isSyncActive, activeCueIndex, activeCue, effectiveCues]);
+
+  // Bidirectional sync: Auto-scroll active cue row into view as playback progresses
+  useEffect(() => {
+    if (effectiveActiveIndex >= 0) {
+      const row = document.getElementById(`subtitle-cue-row-${effectiveActiveIndex}`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }, [effectiveActiveIndex]);
 
   // Default to YouTube native translation (repeating observed request with tlang & fmt=srt)
   // and use current translation service as fallback.
@@ -1091,7 +1119,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                     {filteredCues.map((cue, idx) => {
                       const realIndex = effectiveCues.findIndex((c) => c.id === cue.id);
                       const targetIndex = realIndex !== -1 ? realIndex : idx;
-                      const isSelected = activeCueIndex === targetIndex;
+                      const isSelected = effectiveActiveIndex === targetIndex || (activeCue && activeCue.id === cue.id);
 
                       return (
                         <tr
@@ -1099,8 +1127,12 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                           id={`subtitle-cue-row-${targetIndex}`}
                           data-testid={`subtitle-cue-row-${targetIndex}`}
                           data-cue-id={cue.id}
+                          data-selected={isSelected ? 'true' : 'false'}
                           onClick={() => {
                             jumpToCue(targetIndex);
+                            playerRef.current?.seekTo(cue.start);
+                            playerRef.current?.play();
+                            onJumpToCue?.(cue, targetIndex);
                           }}
                           className={`cursor-pointer transition group ${
                             isSelected
@@ -1116,7 +1148,14 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                                 title="Play from this timeframe"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  startSync(targetIndex);
+                                  if (isSyncActive) {
+                                    startSync(targetIndex);
+                                  } else {
+                                    playerRef.current?.seekTo(cue.start);
+                                    playerRef.current?.play();
+                                    jumpToCue(targetIndex);
+                                    onJumpToCue?.(cue, targetIndex);
+                                  }
                                 }}
                                 className={`w-7 h-7 rounded-lg flex items-center justify-center transition ${
                                   isSelected && isSyncActive
@@ -1136,21 +1175,33 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                           </td>
 
                           {/* Column 2: Original Subtitle text */}
-                          <td className="py-2.5 px-4 font-medium text-neutral-200">
-                            {cue.text}
-                          </td>
+                          {(() => {
+                            const origRtl = isRtl(sourceLang, cue.text);
+                            return (
+                              <td
+                                dir={origRtl ? 'rtl' : 'ltr'}
+                                data-rtl={origRtl ? 'true' : 'false'}
+                                className={`py-2.5 px-4 font-medium text-neutral-200 ${
+                                  origRtl ? 'text-right dir-rtl font-sans' : 'text-left'
+                                }`}
+                              >
+                                {cue.text}
+                              </td>
+                            );
+                          })()}
 
                           {/* Columns 3+: Target Translation columns */}
                           {enabledTargetLangs.map((lang) => {
                             const trans = getCueTranslation(cue, lang.code);
-                            const isRtl = lang.code === 'ar' || lang.code === 'he' || lang.code === 'fa';
+                            const rtl = isRtl(lang.code, trans);
 
                             return (
                               <td
                                 key={lang.id}
-                                dir={isRtl ? 'rtl' : 'ltr'}
+                                dir={rtl ? 'rtl' : 'ltr'}
+                                data-rtl={rtl ? 'true' : 'false'}
                                 className={`py-2.5 px-4 text-neutral-300 ${
-                                  isRtl ? 'text-right font-arabic' : ''
+                                  rtl ? 'text-right dir-rtl font-sans' : 'text-left'
                                 }`}
                               >
                                 {trans ? (

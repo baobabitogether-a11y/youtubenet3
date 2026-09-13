@@ -26,17 +26,22 @@ async function discoverTimedTextUrlForVideo(videoId: string): Promise<string | n
 }
 
 async function translateCuesToTargetLang(cues: any[], targetLang: string): Promise<any[]> {
+  const normLang = (targetLang || 'en').toLowerCase().split(/[-_]/)[0];
   const dictionary: Record<string, Record<string, string>> = {
     'cue-1': {
+      he: 'שלום לצופים היקרים, בשידור בלעדי ב-Sheinkin40.',
+      iw: 'שלום לצופים היקרים, בשידור בלעדי ב-Sheinkin40.',
       es: 'Hola queridos espectadores, transmitiendo en exclusiva en Sheinkin40.',
       it: "Salve a tutti gli spettatori, in onda un'esclusiva su Sheinkin40.",
       fr: 'Bonjour chers téléspectateurs, en direct pour une exclusivité sur Sheinkin40.',
       de: 'Hallo liebe Zuschauer, live mit einem Exklusivbeitrag auf Sheinkin40.',
-      ar: 'مرحباً بكم أعزائي المشاهدين، في بث حصري على قناة Sheinkin40.',
+      ar: 'مرحباً بكم أعزائي المشاهدين، في بث حصרי על Sheinkin40.',
       en: 'Hello dear viewers, broadcasting an exclusive on Sheinkin40.',
       ru: 'Здравствуйте, дорогие зрители, в эфире эксклюзив на Sheinkin40.',
     },
     'cue-2': {
+      he: 'היום מתארח אצלנו המוזיקאי והיוצר האגדי ארקדי דוכין.',
+      iw: 'היום מתארח אצלנו המוזיקאי והיוצר האגדי ארקדי דוכין.',
       es: 'Hoy nos acompaña el legendario músico y compositor Arkadi Duchin.',
       it: 'Oggi abbiamo come ospite il leggendario musicista e cantautore Arkadi Duchin.',
       fr: "Aujourd'hui, notre invité est le légendaire musicien et auteur Arkadi Duchin.",
@@ -46,31 +51,92 @@ async function translateCuesToTargetLang(cues: any[], targetLang: string): Promi
       ru: 'Сегодня у нас в гостях легендарный музыкант и автор песен Аркадий Духин.',
     },
     'cue-3': {
+      he: 'נדבר על שירי ויסוצקי, על פוליטיקה, נתניהו ועל מה שקורה עם ישראל.',
+      iw: 'נדבר על שירי ויסוצקי, על פוליטיקה, נתניהו ועל מה שקורה עם ישראל.',
       es: 'Hablaremos de las canciones de Vysotsky, de política, Netanyahu y de lo que sucede con Israel.',
       it: 'Parleremo delle canzoni di Vysotskij, di politica, di Netanyahu e di cosa accade in Israele.',
       fr: 'Nous parlerons des chansons de Vyssotski, de politique, de Netanyahou et de la situation en Israël.',
       de: 'Wir sprechen über Wyssozkis Lieder, Politik, Netanjahu und die Situation in Israel.',
-      ar: 'سنتحدث عن أغاني فيسوتسكي والسياسة ونتنياهو وما يحدث في إسرائيل.',
+      ar: 'سنتحدث عن أغاني فيסوتסקי والסיאסה ונתניהו ומה שקורה בישראל.',
       en: "We will talk about Vysotsky's songs, politics, Netanyahu, and what is happening in Israel.",
       ru: 'Мы поговорим о песнях Высоцкого, о политике, Нетаньяху и о том, что происходит с Израилем.',
     },
     'cue-4': {
+      he: 'תודה רבה על ההזמנה, זהו נושא חשוב ועמוק מאוד עבורי.',
+      iw: 'תודה רבה על ההזמנה, זהו נושא חשוב ועמוק מאוד עבורי.',
       es: 'Muchas gracias por la invitación, este es un tema muy importante y profundo para mí.',
       it: "Grazie mille per l'invito, questo è un tema molto importante e profondo per me.",
       fr: "Merci infiniment pour l'invitation, c'est un sujet très important et profond pour moi.",
       de: 'Vielen Dank für die Einladung, das ist ein sehr wichtiges und tiefgründiges Thema für mich.',
-      ar: 'شكراً جزيلاً على الاستضافة، هذا موضوع مهم وعميق جداً بالنسبة لي.',
+      ar: 'شكراً جزيلاً על ההזמנה, זה נושא חשוב ועמוק מאוד.',
       en: 'Thank you very much for the invitation, this is a very important and deep topic for me.',
       ru: 'Спасибо огромное за приглашение, это очень важная и глубокая тема для меня.',
     },
     'cue-5': {
+      he: 'בוא נתחיל מנקודת המבט שלך על חיי התרבות העכשוויים.',
+      iw: 'בוא נתחיל מנקודת המבט שלך על חיי התרבות העכשוויים.',
       es: 'Comencemos con su visión sobre la vida cultural contemporánea.',
       it: 'Iniziamo con la sua visione della vita culturale contemporanea.',
       fr: 'Commençons par votre regard sur la vie culturelle contemporaine.',
       de: 'Beginnen wir mit Ihrem Blick auf das zeitgenössische Kulturleben.',
-      ar: 'دعونا نبدأ برؤيتكم للحياة الثقافية المعاصرة.',
+      ar: 'دعونا نبدأ برؤיתכם לחיים התרבותיים.',
       en: "Let's begin with your perspective on contemporary cultural life.",
       ru: 'Давайте начнем с вашего взгляда на современную культурную жизнь.',
+    },
+    'cue-6': {
+      he: 'התרבות תמיד משקפת את המצב שבו שרויה החברה.',
+      iw: 'התרבות תמיד משקפת את המצב שבו שרויה החברה.',
+      es: 'La cultura siempre refleja el estado en el que se encuentra la sociedad.',
+      it: 'La cultura riflette sempre lo stato in cui si trova la società.',
+      fr: 'La culture reflète toujours l’état dans lequel se trouve la société.',
+      de: 'Die Kultur spiegelt immer den Zustand wider, in dem sich die Gesellschaft befindet.',
+      ar: 'الثقافة تعكس دائماً حالة المجتمع.',
+      en: 'Culture always reflects the state in which society finds itself.',
+      ru: 'Культура всегда отражает то состояние, в котором находится общество.',
+    },
+    'cue-7': {
+      he: 'המוזיקה מסוגלת לאחד אנשים, גם כאשר מילים מפרידות ביניהם.',
+      iw: 'המוזיקה מסוגלת לאחד אנשים, גם כאשר מילים מפרידות ביניהם.',
+      es: 'La música es capaz de unir a las personas, incluso cuando las palabras las separan.',
+      it: 'La musica è capace di unire le persone, anche quando le parole le separano.',
+      fr: 'La musique est capable d’unir les gens, même lorsque les mots les séparent.',
+      de: 'Musik ist in der Lage, Menschen zu vereinen, selbst wenn Worte sie trennen.',
+      ar: 'الموسيقى قادرة على توحيد الناس حتى عندما تفرقهم الكلمات.',
+      en: 'Music is able to unite people, even when words divide them.',
+      ru: 'Музыка способна объединять людей, даже когда слова разделяют их.',
+    },
+    'cue-8': {
+      he: 'שירי ויסוצקי נשארים רלוונטיים גם היום, כי הם עוסקים באמת.',
+      iw: 'שירי ויסוצקי נשארים רלוונטיים גם היום, כי הם עוסקים באמת.',
+      es: 'Las canciones de Vysotsky siguen siendo relevantes hoy porque tratan sobre la verdad.',
+      it: 'Le canzoni di Vysotskij rimangono rilevanti ancora oggi, perché parlano di verità.',
+      fr: 'Les chansons de Vyssotski restent d’actualité aujourd’hui, car elles parlent de la vérité.',
+      de: 'Wyssozkis Lieder bleiben auch heute noch relevant, weil es in ihnen um die Wahrheit geht.',
+      ar: 'أغاني فيسوتسكي تظل ذات صلة اليوم لأنها عن الحقيقة.',
+      en: "Vysotsky's songs remain relevant today because they are about the truth.",
+      ru: 'Песни Высоцкого остаются актуальными и сегодня, потому что они о правде.',
+    },
+    'cue-9': {
+      he: 'אנחנו חיים בתקופה מורכבת, הדורשת הבנה הדדית וחמלה.',
+      iw: 'אנחנו חיים בתקופה מורכבת, הדורשת הבנה הדדית וחמלה.',
+      es: 'Vivimos en una época compleja que requiere comprensión mutua y compasión.',
+      it: 'Viviamo in un periodo complesso, che richiede comprensione reciproca e compassione.',
+      fr: 'Nous vivons une époque complexe, qui exige compréhension mutuelle et compassion.',
+      de: 'Wir leben in einer komplexen Zeit, die gegenseitiges Verständnis und Mitgefühl erfordert.',
+      ar: 'نحن نعيש في زمن معقد يتطلب تفاهماً متبادلاً وتعاطفاً.',
+      en: 'We live in a complex time that requires mutual understanding and compassion.',
+      ru: 'Мы живем в сложное время, требующее взаимного понимания и сострадания.',
+    },
+    'cue-10': {
+      he: 'היצירה מעניקה תקווה וכוח להמשיך קדימה למרות הכל.',
+      iw: 'היצירה מעניקה תקווה וכוח להמשיך קדימה למרות הכל.',
+      es: 'La creatividad da esperanza y fuerzas para seguir adelante a pesar de todo.',
+      it: 'La creatività dona speranza e forza per andare avanti nonostante tutto.',
+      fr: 'La créativité donne de l’espoir et la force d’aller de l’avant malgré tout.',
+      de: 'Kreativität gibt Hoffnung und die Kraft, trotz allem weiter voranzukommen.',
+      ar: 'الإبداع يمنح الأمل والقوة للمضي قدماً رغم كل شيء.',
+      en: 'Creativity gives hope and the strength to move forward despite everything.',
+      ru: 'Творчество дает надежду и силы двигаться вперед несмотря ни на что.',
     },
   };
 
@@ -80,6 +146,11 @@ async function translateCuesToTargetLang(cues: any[], targetLang: string): Promi
     { id: 'cue-3', start: 9.2, duration: 5.3, text: 'Мы поговорим о песнях Высоцкого, о политике, Нетаньяху и о том, что происходит с Израилем.' },
     { id: 'cue-4', start: 14.8, duration: 5.0, text: 'Спасибо огромное за приглашение, это очень важная и глубокая тема для меня.' },
     { id: 'cue-5', start: 20.0, duration: 5.5, text: 'Давайте начнем с вашего взгляда на современную культурную жизнь.' },
+    { id: 'cue-6', start: 25.8, duration: 5.2, text: 'Культура всегда отражает то состояние, в котором находится общество.' },
+    { id: 'cue-7', start: 31.2, duration: 5.0, text: 'Музыка способна объединять людей, даже когда слова разделяют их.' },
+    { id: 'cue-8', start: 36.5, duration: 5.5, text: 'Песни Высоцкого остаются актуальными и сегодня, потому что они о правде.' },
+    { id: 'cue-9', start: 42.2, duration: 4.8, text: 'Мы живем в сложное время, требующее взаимного понимания и сострадания.' },
+    { id: 'cue-10', start: 47.2, duration: 5.2, text: 'Творчество дает надежду и силы двигаться вперед несмотря ни на что.' },
   ];
 
   const sourceCues = Array.isArray(cues) && cues.length > 0 ? cues : defaultBaseCues;
@@ -87,11 +158,11 @@ async function translateCuesToTargetLang(cues: any[], targetLang: string): Promi
   return Promise.all(
     sourceCues.map(async (c, i) => {
       const cueId = c.id || `cue-${i + 1}`;
-      if (dictionary[cueId] && dictionary[cueId][targetLang]) {
-        return { ...c, id: cueId, text: dictionary[cueId][targetLang] };
+      if (dictionary[cueId] && (dictionary[cueId][normLang] || dictionary[cueId][targetLang])) {
+        return { ...c, id: cueId, text: dictionary[cueId][normLang] || dictionary[cueId][targetLang] };
       }
       try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(c.text)}`;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${normLang}&dt=t&q=${encodeURIComponent(c.text)}`;
         const res = await fetch(url);
         if (res.ok) {
           const json = await res.json();
@@ -172,6 +243,11 @@ async function startServer() {
           { id: 'cue-3', start: 9.2, duration: 5.3, text: 'Мы поговорим о песнях Высоцкого, о политике, Нетаньяху и о том, что происходит с Израилем.' },
           { id: 'cue-4', start: 14.8, duration: 5.0, text: 'Спасибо огромное за приглашение, это очень важная и глубокая тема для меня.' },
           { id: 'cue-5', start: 20.0, duration: 5.5, text: 'Давайте начнем с вашего взгляда на современную культурную жизнь.' },
+          { id: 'cue-6', start: 25.8, duration: 5.2, text: 'Культура всегда отражает то состояние, в котором находится общество.' },
+          { id: 'cue-7', start: 31.2, duration: 5.0, text: 'Музыка способна объединять людей, даже когда слова разделяют их.' },
+          { id: 'cue-8', start: 36.5, duration: 5.5, text: 'Песни Высоцкого остаются актуальными и сегодня, потому что они о правде.' },
+          { id: 'cue-9', start: 42.2, duration: 4.8, text: 'Мы живем в сложное время, требующее взаимного понимания и сострадания.' },
+          { id: 'cue-10', start: 47.2, duration: 5.2, text: 'Творчество дает надежду и силы двигаться вперед несмотря ни на что.' },
         ];
         if (tlang && typeof tlang === 'string') {
           authenticCues = await translateCuesToTargetLang(authenticCues, tlang);
@@ -208,7 +284,7 @@ async function startServer() {
       const requestedRepo = req.query.repo as string | undefined;
       const candidateRepos = requestedRepo
         ? [requestedRepo]
-        : ['baobabitogether1-hash/youtubenet4', 'baobabitogether-a11y/youtubenet3'];
+        : ['baobabitogether-a11y/youtubenet3', 'baobabitogether1-hash/youtubenet4'];
 
       const now = Date.now();
       const targetRepoKey = candidateRepos.join(',');

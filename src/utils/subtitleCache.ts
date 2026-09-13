@@ -1,7 +1,7 @@
 import { CaptionCue, LibraryVideoItem } from '../types';
 import { cleanAndFixEncoding } from './captionParser';
 import { STORAGE_KEYS } from '../config/appConfig';
-import { SAMPLE_AUTHENTIC_RUSSIAN_URL } from '../config/fixtures';
+import { SAMPLE_AUTHENTIC_RUSSIAN_URL, SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U } from '../config/fixtures';
 
 const SUBTITLE_CACHE_PREFIX = STORAGE_KEYS.SUBTITLE_CACHE_PREFIX;
 const LIBRARY_STORAGE_KEY = STORAGE_KEYS.LIBRARY_STORAGE_KEY;
@@ -250,3 +250,11 @@ export function getObservedTimedTextUrl(videoId: string): string | null {
   }
   return null;
 }
+
+/**
+ * Returns authentic Hebrew subtitles for the default video FcRzAdI8R9U
+ */
+export function getAuthenticHebrewCuesForDefaultVideo(): CaptionCue[] {
+  return SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U;
+}
+

@@ -1343,6 +1343,10 @@ export default function App() {
             onFetchSubtitles={() => handleFetchSubtitles(videoId, false)}
             isFetchingSubtitles={isFetchingSubtitles}
             fetchError={fetchError}
+            activeCue={activeCue}
+            onJumpToCue={(cue) => {
+              setActiveCue(cue);
+            }}
           />
         </div>
       </main>

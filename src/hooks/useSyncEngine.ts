@@ -360,6 +360,25 @@ export function useSyncEngine({
     playerRef.current?.pause();
   }, [playerRef]);
 
+  // Bidirectional sync: when video is playing without sync loop, update activeCueIndex based on player time
+  useEffect(() => {
+    if (isSyncActive || !cues || cues.length === 0) return;
+    const interval = setInterval(() => {
+      try {
+        const t = playerRef.current?.getCurrentTime?.();
+        if (typeof t === 'number' && !isNaN(t) && t >= 0) {
+          const matchIndex = cues.findIndex(
+            (c) => t >= c.start && t <= c.start + (c.duration || 2.5)
+          );
+          if (matchIndex !== -1) {
+            setActiveCueIndex((prev) => (prev === matchIndex ? prev : matchIndex));
+          }
+        }
+      } catch {}
+    }, 250);
+    return () => clearInterval(interval);
+  }, [cues, isSyncActive, playerRef]);
+
   /**
    * Jump to a specific cue
    */
@@ -372,9 +391,8 @@ export function useSyncEngine({
       } else {
         const cue = cues[index];
         stopTTS();
-        playerRef.current?.pause();
         playerRef.current?.seekTo(cue.start);
-        playerRef.current?.pause();
+        playerRef.current?.play();
       }
     },
     [cues, isSyncActive, startSync, playerRef]
