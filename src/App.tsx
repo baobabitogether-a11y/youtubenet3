@@ -42,6 +42,8 @@ import {
   getCachedSubtitles,
   saveCachedSubtitles,
   hasCachedSubtitles,
+  getCachedTargetSubtitles,
+  hasCachedTargetSubtitles,
   getLastActiveVideo,
   saveLastActiveVideo,
   getObservedTimedTextUrl,
@@ -432,6 +434,17 @@ export default function App() {
     if (!settings.autoFetchTargetTranslationsWithTlang) return;
     const targetLang = selectedTargetLang || (settings.learningLanguages && settings.learningLanguages[0]);
     if (!targetLang) return;
+
+    // Check if target subtitles are already cached (e.g. authentic SRT fixtures under video id FcRzAdI8R9U)
+    if (hasCachedTargetSubtitles(idToFetch, targetLang)) {
+      const cachedTarget = getCachedTargetSubtitles(idToFetch, targetLang);
+      if (cachedTarget && cachedTarget.length > 0) {
+        logSubtitles(`[Target Lang] Found cached target subtitles for ${idToFetch} in ${targetLang.toUpperCase()} (${cachedTarget.length} cues)`);
+        setRestoredToast(`Loaded cached ${targetLang.toUpperCase()} subtitles (${cachedTarget.length} cues)`);
+        setTimeout(() => setRestoredToast(null), 3500);
+        return;
+      }
+    }
 
     try {
       logSubtitles(`[Target Lang] Trying tlang subtitle fetch with tlang=${targetLang} for ${idToFetch}`);
@@ -851,7 +864,16 @@ export default function App() {
     }
 
     logInfo('Language', `Target language updated to "${langCode}" for video ${videoId}`);
-    setRestoredToast(`Target language updated to ${langCode.toUpperCase()}`);
+    if (hasCachedTargetSubtitles(videoId, langCode)) {
+      const cached = getCachedTargetSubtitles(videoId, langCode);
+      if (cached && cached.length > 0) {
+        setRestoredToast(`Loaded cached ${langCode.toUpperCase()} subtitles (${cached.length} cues)`);
+      } else {
+        setRestoredToast(`Target language updated to ${langCode.toUpperCase()}`);
+      }
+    } else {
+      setRestoredToast(`Target language updated to ${langCode.toUpperCase()}`);
+    }
     setTimeout(() => setRestoredToast(null), 3000);
   };
 

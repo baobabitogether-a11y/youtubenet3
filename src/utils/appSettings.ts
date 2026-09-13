@@ -143,8 +143,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   subtitlePosition: 'top',
   showTranslatedOnTop: true,
 
-  // General learning target languages list (including Hebrew for default video learning)
-  learningLanguages: ['es', 'it', 'fr', 'de', 'ru', 'he', 'ar', 'zh-CN', 'ja', 'ko', 'pt', 'tr', 'hi', 'nl', 'pl', 'en'],
+  // Favorite languages / learning targets by default: it, ru, he, en, ar
+  learningLanguages: ['it', 'ru', 'he', 'en', 'ar'],
 
   // By default try to subtitle fetch using tlang param change once after default subs loaded (Requirement 6)
   autoFetchTargetTranslationsWithTlang: true,

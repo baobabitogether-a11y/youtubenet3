@@ -90,7 +90,7 @@ export interface InterceptedCaptionData {
   method: string;
   status: number;
   contentType: string;
-  format: 'xml' | 'json3' | 'vtt' | 'unknown';
+  format: 'xml' | 'json3' | 'vtt' | 'srt' | 'unknown';
   rawData: string;
   bytes: number;
   cues: CaptionCue[];
@@ -108,7 +108,7 @@ export interface YouTubeNativeTranslationResult {
   success: boolean;
   source: TranslationSource;
   targetLang: string;
-  format?: 'xml' | 'json3' | 'vtt' | 'unknown';
+  format?: 'xml' | 'json3' | 'vtt' | 'srt' | 'unknown';
   cues?: CaptionCue[];
   translations?: Record<string, string>;
   error?: string;

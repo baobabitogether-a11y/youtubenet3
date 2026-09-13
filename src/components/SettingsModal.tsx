@@ -218,24 +218,24 @@ export function SettingsModal({
             <div className="flex items-center justify-between">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-2">
                 <Globe className="w-4 h-4 text-indigo-400" />
-                <span>General Learning Languages (Translation Targets)</span>
+                <span>Favorite Languages (Default Translation Targets)</span>
               </h3>
               <span className="text-[11px] text-neutral-500">
                 {(settings.learningLanguages || []).length} active
               </span>
             </div>
             <p className="text-xs text-neutral-400">
-              When loading any new video, the app will ask which of your chosen languages you want to translate into.
+              When loading any new video, the app will ask which of your chosen favorite languages (default: IT, RU, HE, EN, AR) you want to translate into.
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
               {SUPPORTED_LANGUAGES_CATALOG.map((lang) => {
-                const isSelected = (settings.learningLanguages || ['es', 'fr', 'de', 'it', 'ja']).includes(lang.code);
+                const isSelected = (settings.learningLanguages || ['it', 'ru', 'he', 'en', 'ar']).includes(lang.code);
                 return (
                   <button
                     key={lang.code}
                     type="button"
                     onClick={() => {
-                      const current = settings.learningLanguages || ['es', 'fr', 'de', 'it', 'ja'];
+                      const current = settings.learningLanguages || ['it', 'ru', 'he', 'en', 'ar'];
                       let updated: string[];
                       if (isSelected) {
                         if (current.length <= 1) return; // Keep at least one

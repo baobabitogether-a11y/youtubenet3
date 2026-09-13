@@ -539,3 +539,44 @@ export const SAMPLE_INVALID_LINKS = [
   { label: 'General Website', url: 'https://www.wikipedia.org', reason: 'Non-video website' },
   { label: 'Arbitrary Text', url: 'hello world non-video text', reason: 'Plain text without YouTube ID' },
 ];
+
+/**
+ * Repeats an observed YouTube timedtext subtitle request URL
+ * but changes the target language code (tlang) and format (fmt=srt, json3, or xml).
+ */
+export function buildYouTubeTranslatedTimedTextUrl(
+  observedUrl: string,
+  targetLangCode: string,
+  format: 'srt' | 'json3' | 'vtt' | 'xml' | '' = 'srt'
+): string {
+  try {
+    const urlObj = new URL(observedUrl);
+    urlObj.searchParams.set('tlang', targetLangCode);
+    if (format === 'srt' || format === 'json3' || format === 'vtt') {
+      urlObj.searchParams.set('fmt', format);
+    } else if (format === 'xml' || format === '') {
+      urlObj.searchParams.delete('fmt');
+    }
+    return urlObj.toString();
+  } catch {
+    // If not parseable as full URL, safely apply query replacements
+    let modified = observedUrl;
+    if (/[?&]tlang=[^&]*/.test(modified)) {
+      modified = modified.replace(/([?&])tlang=[^&]*/, `$1tlang=${encodeURIComponent(targetLangCode)}`);
+    } else {
+      const sep = modified.includes('?') ? '&' : '?';
+      modified = `${modified}${sep}tlang=${encodeURIComponent(targetLangCode)}`;
+    }
+    if (format === 'srt' || format === 'json3' || format === 'vtt') {
+      if (/[?&]fmt=[^&]*/.test(modified)) {
+        modified = modified.replace(/([?&])fmt=[^&]*/, `$1fmt=${format}`);
+      } else {
+        modified = `${modified}&fmt=${format}`;
+      }
+    } else if (format === 'xml' || format === '') {
+      modified = modified.replace(/[?&]fmt=[^&]*/, '');
+    }
+    return modified;
+  }
+}
+

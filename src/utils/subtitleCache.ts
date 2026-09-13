@@ -2,6 +2,11 @@ import { CaptionCue, LibraryVideoItem } from '../types';
 import { cleanAndFixEncoding } from './captionParser';
 import { STORAGE_KEYS } from '../config/appConfig';
 import { SAMPLE_AUTHENTIC_RUSSIAN_URL, SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U } from '../config/fixtures';
+import {
+  getCachedSrtForVideoAndLanguage,
+  hasCachedSrtForVideoAndLanguage,
+  getAllCachedLanguageCodesForVideo,
+} from '../../test/fixtures/defaultSubtitles';
 
 const SUBTITLE_CACHE_PREFIX = STORAGE_KEYS.SUBTITLE_CACHE_PREFIX;
 const LIBRARY_STORAGE_KEY = STORAGE_KEYS.LIBRARY_STORAGE_KEY;
@@ -9,6 +14,10 @@ const LAST_ACTIVE_VIDEO_KEY = STORAGE_KEYS.LAST_ACTIVE_VIDEO_KEY;
 
 // In-memory cache for fast synchronous access
 const memoryCache = new Map<string, CaptionCue[]>();
+
+function isStorageAvailable(): boolean {
+  return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+}
 
 export interface CachedSubtitleData {
   videoId: string;
@@ -52,46 +61,66 @@ export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
   }
 
   // 2. Dedicated per-video cache item
-  try {
-    const raw = localStorage.getItem(`${SUBTITLE_CACHE_PREFIX}${videoId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const cuesList = Array.isArray(parsed) ? parsed : parsed.cues;
-      if (Array.isArray(cuesList) && cuesList.length > 0) {
-        const sanitized = sanitizeCues(cuesList);
-        if (sanitized.length > 0) {
-          memoryCache.set(videoId, sanitized);
-          return sanitized;
-        }
-      }
-    }
-  } catch (err) {
-    console.warn(`[SubtitleCache] Failed reading dedicated cache for ${videoId}:`, err);
-  }
-
-  // 3. Fallback to general library storage
-  try {
-    const rawLib = localStorage.getItem(LIBRARY_STORAGE_KEY);
-    if (rawLib) {
-      const lib = JSON.parse(rawLib);
-      if (Array.isArray(lib)) {
-        const matched = lib.find((item: LibraryVideoItem) => item.id === videoId);
-        if (matched && Array.isArray(matched.cues) && matched.cues.length > 0) {
-          const sanitized = sanitizeCues(matched.cues);
+  if (isStorageAvailable()) {
+    try {
+      const raw = localStorage.getItem(`${SUBTITLE_CACHE_PREFIX}${videoId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const cuesList = Array.isArray(parsed) ? parsed : parsed.cues;
+        if (Array.isArray(cuesList) && cuesList.length > 0) {
+          const sanitized = sanitizeCues(cuesList);
           if (sanitized.length > 0) {
             memoryCache.set(videoId, sanitized);
-            // Also store into dedicated key for faster future lookup
-            saveCachedSubtitles(videoId, sanitized, {
-              title: matched.title,
-              originalUrl: matched.originalUrl,
-            });
             return sanitized;
           }
         }
       }
+    } catch (err) {
+      console.warn(`[SubtitleCache] Failed reading dedicated cache for ${videoId}:`, err);
     }
-  } catch (err) {
-    console.warn(`[SubtitleCache] Failed reading library cache for ${videoId}:`, err);
+  }
+
+  // 3. Built-in authentic SRT fixtures for video FcRzAdI8R9U (Russian source track)
+  if (videoId === 'FcRzAdI8R9U') {
+    const srtCues = getCachedSrtForVideoAndLanguage('FcRzAdI8R9U', 'ru');
+    if (srtCues && srtCues.length > 0) {
+      const sanitized = sanitizeCues(srtCues);
+      memoryCache.set(videoId, sanitized);
+      try {
+        saveCachedSubtitles(videoId, sanitized, {
+          title: 'Authentic Russian Interview (Sheinkin40)',
+          originalUrl: 'https://www.youtube.com/watch?v=FcRzAdI8R9U',
+        });
+      } catch {}
+      return sanitized;
+    }
+  }
+
+  // 4. Fallback to general library storage
+  if (isStorageAvailable()) {
+    try {
+      const rawLib = localStorage.getItem(LIBRARY_STORAGE_KEY);
+      if (rawLib) {
+        const lib = JSON.parse(rawLib);
+        if (Array.isArray(lib)) {
+          const matched = lib.find((item: LibraryVideoItem) => item.id === videoId);
+          if (matched && Array.isArray(matched.cues) && matched.cues.length > 0) {
+            const sanitized = sanitizeCues(matched.cues);
+            if (sanitized.length > 0) {
+              memoryCache.set(videoId, sanitized);
+              // Also store into dedicated key for faster future lookup
+              saveCachedSubtitles(videoId, sanitized, {
+                title: matched.title,
+                originalUrl: matched.originalUrl,
+              });
+              return sanitized;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[SubtitleCache] Failed reading library cache for ${videoId}:`, err);
+    }
   }
 
   return null;
@@ -102,18 +131,21 @@ export function getCachedSubtitles(videoId: string): CaptionCue[] | null {
  */
 export function hasCachedSubtitles(videoId: string): boolean {
   if (!videoId) return false;
+  if (videoId === 'FcRzAdI8R9U') return true;
   if (memoryCache.has(videoId)) {
     const mem = memoryCache.get(videoId);
     if (mem && mem.length > 0) return true;
   }
-  try {
-    const raw = localStorage.getItem(`${SUBTITLE_CACHE_PREFIX}${videoId}`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const cues = Array.isArray(parsed) ? parsed : parsed.cues;
-      if (Array.isArray(cues) && cues.length > 0) return true;
-    }
-  } catch {}
+  if (isStorageAvailable()) {
+    try {
+      const raw = localStorage.getItem(`${SUBTITLE_CACHE_PREFIX}${videoId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const cues = Array.isArray(parsed) ? parsed : parsed.cues;
+        if (Array.isArray(cues) && cues.length > 0) return true;
+      }
+    } catch {}
+  }
   return false;
 }
 
@@ -132,6 +164,8 @@ export function saveCachedSubtitles(
 
   // 1. Update in-memory cache
   memoryCache.set(videoId, sanitized);
+
+  if (!isStorageAvailable()) return;
 
   // 2. Update dedicated per-video localStorage entry
   const dataToSave: CachedSubtitleData = {
@@ -165,6 +199,7 @@ export function saveCachedSubtitles(
  * Remove oldest cached items if storage quota is tight
  */
 function pruneOldSubtitleCaches(): void {
+  if (!isStorageAvailable()) return;
   try {
     const keys: { key: string; time: number }[] = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -191,6 +226,7 @@ function pruneOldSubtitleCaches(): void {
  * Remember the last active video ID and URL
  */
 export function saveLastActiveVideo(videoId: string, url: string): void {
+  if (!isStorageAvailable()) return;
   try {
     localStorage.setItem(
       LAST_ACTIVE_VIDEO_KEY,
@@ -203,6 +239,7 @@ export function saveLastActiveVideo(videoId: string, url: string): void {
  * Get the last active video from previous session
  */
 export function getLastActiveVideo(): { videoId: string; url: string } | null {
+  if (!isStorageAvailable()) return null;
   try {
     const raw = localStorage.getItem(LAST_ACTIVE_VIDEO_KEY);
     if (raw) {
@@ -226,6 +263,7 @@ export const SAMPLE_OBSERVED_TIMEDTEXT_URL = SAMPLE_AUTHENTIC_RUSSIAN_URL;
 export function saveObservedTimedTextUrl(videoId: string, url: string): void {
   if (!videoId || !url) return;
   observedTimedTextCache.set(videoId, url);
+  if (!isStorageAvailable()) return;
   try {
     localStorage.setItem(`${TIMEDTEXT_URL_PREFIX}${videoId}`, url);
   } catch {}
@@ -236,13 +274,15 @@ export function getObservedTimedTextUrl(videoId: string): string | null {
   if (observedTimedTextCache.has(videoId)) {
     return observedTimedTextCache.get(videoId)!;
   }
-  try {
-    const saved = localStorage.getItem(`${TIMEDTEXT_URL_PREFIX}${videoId}`);
-    if (saved) {
-      observedTimedTextCache.set(videoId, saved);
-      return saved;
-    }
-  } catch {}
+  if (isStorageAvailable()) {
+    try {
+      const saved = localStorage.getItem(`${TIMEDTEXT_URL_PREFIX}${videoId}`);
+      if (saved) {
+        observedTimedTextCache.set(videoId, saved);
+        return saved;
+      }
+    } catch {}
+  }
 
   // Built-in sample fallback for video FcRzAdI8R9U
   if (videoId === 'FcRzAdI8R9U') {
@@ -257,4 +297,125 @@ export function getObservedTimedTextUrl(videoId: string): string | null {
 export function getAuthenticHebrewCuesForDefaultVideo(): CaptionCue[] {
   return SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U;
 }
+
+/**
+ * Checks if target language subtitles are cached for a video ID
+ */
+export function hasCachedTargetSubtitles(videoId: string, targetLang: string): boolean {
+  if (!videoId || !targetLang) return false;
+  const cleanLang = targetLang.toLowerCase().split('-')[0];
+  const targetKey = `${SUBTITLE_CACHE_PREFIX}${videoId}_${cleanLang}`;
+  if (memoryCache.has(targetKey)) return true;
+  if (hasCachedSrtForVideoAndLanguage(videoId, cleanLang)) return true;
+  if (isStorageAvailable()) {
+    try {
+      const raw = localStorage.getItem(targetKey);
+      return !!raw;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+/**
+ * Gets cached target language subtitles for a video ID (from memory, localStorage, or real SRT fixtures)
+ */
+export function getCachedTargetSubtitles(videoId: string, targetLang: string): CaptionCue[] | null {
+  if (!videoId || !targetLang) return null;
+  const cleanLang = targetLang.toLowerCase().split('-')[0];
+  const targetKey = `${SUBTITLE_CACHE_PREFIX}${videoId}_${cleanLang}`;
+
+  // 1. Check in-memory cache
+  if (memoryCache.has(targetKey)) {
+    const mem = memoryCache.get(targetKey);
+    if (mem && mem.length > 0) return mem;
+  }
+
+  // 2. Check localStorage
+  if (isStorageAvailable()) {
+    try {
+      const raw = localStorage.getItem(targetKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        const cuesList = Array.isArray(parsed) ? parsed : parsed.cues;
+        if (Array.isArray(cuesList) && cuesList.length > 0) {
+          const sanitized = sanitizeCues(cuesList);
+          memoryCache.set(targetKey, sanitized);
+          return sanitized;
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Real SRT fixtures under video ID (e.g. FcRzAdI8R9U: it, ru, he, en, ar)
+  const srtCues = getCachedSrtForVideoAndLanguage(videoId, cleanLang);
+  if (srtCues && srtCues.length > 0) {
+    const sanitized = sanitizeCues(srtCues);
+    memoryCache.set(targetKey, sanitized);
+    if (isStorageAvailable()) {
+      try {
+        localStorage.setItem(
+          targetKey,
+          JSON.stringify({
+            videoId,
+            lang: cleanLang,
+            cues: sanitized,
+            timestamp: Date.now(),
+          })
+        );
+      } catch {}
+    }
+    return sanitized;
+  }
+
+  return null;
+}
+
+/**
+ * Saves cached target language subtitles for a video ID
+ */
+export function saveCachedTargetSubtitles(videoId: string, targetLang: string, cues: CaptionCue[]): void {
+  if (!videoId || !targetLang || !cues || cues.length === 0) return;
+  const cleanLang = targetLang.toLowerCase().split('-')[0];
+  const targetKey = `${SUBTITLE_CACHE_PREFIX}${videoId}_${cleanLang}`;
+  const sanitized = sanitizeCues(cues);
+  memoryCache.set(targetKey, sanitized);
+  if (!isStorageAvailable()) return;
+  try {
+    localStorage.setItem(
+      targetKey,
+      JSON.stringify({
+        videoId,
+        lang: cleanLang,
+        cues: sanitized,
+        timestamp: Date.now(),
+      })
+    );
+  } catch {}
+}
+
+/**
+ * Lists all target languages with cached SRT files for a given video
+ */
+export function getAllCachedTargetLanguages(videoId: string): string[] {
+  const set = new Set<string>();
+  if (videoId === 'FcRzAdI8R9U') {
+    getAllCachedLanguageCodesForVideo(videoId).forEach((code) => set.add(code));
+  }
+  if (isStorageAvailable()) {
+    try {
+      const prefix = `${SUBTITLE_CACHE_PREFIX}${videoId}_`;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(prefix)) {
+          const lang = k.replace(prefix, '');
+          if (lang) set.add(lang);
+        }
+      }
+    } catch {}
+  }
+  return Array.from(set);
+}
+
 

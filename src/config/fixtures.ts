@@ -6,7 +6,36 @@ import { CaptionCue } from '../types';
  */
 
 export const SAMPLE_AUTHENTIC_RUSSIAN_URL =
-  'https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=DCKeatfmPKPRp-oPnqqzgQk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=iw&ip=0.0.0.0&ipbits=0&expire=1788773501&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=217DB32BACFE6E926084313687E03C0510F5DB34.D9A7AA9EE51F782ED170B2AA7DE3BD0AC740CF6A&key=yt8&kind=asr&lang=ru&potc=1&pot=MlMn_joq5JrJpSfCjjnANqOg57lCS8ADS5l8eKcn0AlVAENOp6W5mBZK47JADSIT6O2ApINKm8nUuNtmdxJwIJwpTZBJx8pnBEBe0f6-5yn6TBh6DA%3D%3D&fmt=json3&xorb=2&xobt=3&xovt=3&tlang=en&cbr=Chrome&cbrver=152.0.0.0&c=WEB&cver=2.20260904.01.00&cplayer=UNIPLAYER&cos=Windows&cosver=10.0&cplatform=DESKTOP';
+  'https://www.youtube.com/api/timedtext?v=FcRzAdI8R9U&ei=IgqnasHxK-PlxN8PtNy9mAk&caps=asr&opi=112496729&exp=xpe&xoaf=5&xowf=1&xospf=1&hl=en-GB&ip=0.0.0.0&ipbits=0&expire=1789357202&sparams=ip%2Cipbits%2Cexpire%2Cv%2Cei%2Ccaps%2Copi%2Cexp%2Cxoaf&signature=6F0A50A646D36C936CF08C81E3702F28F7097F32.2BA8D9DB6AC9EA7432E53BA37171C0D7C9B3E5D6&key=yt8&kind=asr&lang=ru&potc=1&pot=MljuxV9kEE2ck-6E1TfArA74newqYy3DyWzY0uJcGahUzcJZ5P420d2bDCdzceWegqPMG6vAM4W9-dWo1CHmF-vE7csjIK76JiUqXREGzeh2xbTX0UV9ybSs&fmt=srt&xorb=2&xobt=3&xovt=3&cbr=Chrome&cbrver=153.0.0.0&c=WEB&cver=2.20260911.01.00&cplayer=UNIPLAYER&cos=Windows&cosver=10.0&cplatform=DESKTOP';
+
+export const SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS: Record<string, string> = {
+  'accept': '*/*',
+  'accept-language': 'he-IL,he;q=0.6',
+  'referer': 'https://www.youtube.com/watch?v=FcRzAdI8R9U',
+  'sec-ch-ua': '"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"',
+  'sec-ch-ua-arch': '"x86"',
+  'sec-ch-ua-bitness': '"64"',
+  'sec-ch-ua-full-version-list': '"Google Chrome";v="153.0.0.0", "Not_A Brand";v="8.0.0.0", "Chromium";v="153.0.0.0"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-model': '""',
+  'sec-ch-ua-platform': '"Windows"',
+  'sec-ch-ua-platform-version': '"19.0.0"',
+  'sec-ch-ua-wow64': '?0',
+  'sec-fetch-dest': 'empty',
+  'sec-fetch-mode': 'cors',
+  'sec-fetch-site': 'same-origin',
+  'sec-gpc': '1',
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36',
+  'x-goog-authuser': '0',
+  'x-youtube-client-name': '1',
+  'x-youtube-client-version': '2.20260911.01.00',
+  'x-youtube-device': 'cbr=Chrome&cbrver=153.0.0.0&ceng=WebKit&cengver=537.36&cos=Windows&cosver=10.0&cplatform=DESKTOP',
+  'x-youtube-identity-token': 'QUM4Zm9rUmdOVm9JZU8wNTV2ak1NMXZTajI4Q3w=',
+  'x-youtube-page-cl': '979575444',
+  'x-youtube-page-label': 'youtube.desktop.web_20260911_01_RC00',
+  'x-youtube-time-zone': 'Asia/Jerusalem',
+  'x-youtube-utc-offset': '180',
+};
 
 export const SAMPLE_AUTHENTIC_RUSSIAN_CUES: CaptionCue[] = [
   { id: 'cue-1', start: 0.0, duration: 4.2, text: 'Здравствуйте, дорогие зрители, в эфире эксклюзив на Sheinkin40.' },
