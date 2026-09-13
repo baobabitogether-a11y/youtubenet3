@@ -474,6 +474,45 @@ split the e2e for web.yml and emulation. use timeout of 3 minutes for actual tes
   - **Status**: Completed & Verified
   - **Review**: Users can check for APK updates without rate-limiting issues and install the latest APK with 1-click in-app download and installation prompts.
 
+---
+
+## Current User Prompt (Split Specs for Emulation and Web & CI Workflow Fix)
+
+```text
+1. split specs for emulation and for web
+2. fix: CI workflow run logs and execution
+```
+
+### Task Breakdown & Progress
+
+- [x] **Task 23 (Split E2E Test Specs for Web and Android Emulation)**:
+  - **Requirement**: Separate monolithic test specifications into dedicated, decoupled test suites for Web browser execution and Android Emulator native execution.
+  - **Implementation**:
+    - **Playwright Split Specs**:
+      - `e2e/web.spec.ts`: Contains Web Critical Test 1 (Auto-detect subtitles when caption icon is set to ON) and Web Critical Test 2 (Fetch subtitles on URL input `c0pUbsq9FLk`), plus skipped extended test suites.
+      - `e2e/emulation.spec.ts`: Contains Android Emulation Test suite (`FcRzAdI8R9U` authentic caption detection without fixtures, target language translation change, and `tlang` query parameter assertion).
+    - **Cypress Split Specs**:
+      - `cypress/e2e/web.cy.ts`: Dedicated Cypress test runner spec for Web tests 1 & 2.
+      - `cypress/e2e/emulation.cy.ts`: Dedicated Cypress test runner spec for Android emulation unmocked subtitles & `tlang` verification.
+    - **Playwright Configuration**: Updated `playwright.config.ts` with explicit `web` and `emulation` projects (`testMatch: /.*web\.spec\.ts/` and `testMatch: /.*emulation\.spec\.ts/`).
+    - **Package Scripts**: Added `test:e2e:web`, `test:e2e:emulation`, `test:cy:web`, `test:cy:emulation`, `test:cy:report:web`, and `test:cy:report:emulation` to `package.json`.
+  - **Status**: Completed & Verified
+  - **Review**: Test suites are cleanly partitioned, enabling targeted test runs per environment without cross-contamination.
+
+- [x] **Task 24 (Fix CI Workflow Configuration & Job Timeouts)**:
+  - **Requirement**: Fix CI workflow execution issues and ensure GitHub Actions runners have adequate time and correct target specs.
+  - **Implementation**:
+    - **`.github/workflows/web.yml`**:
+      - Increased job `timeout-minutes` to 10 (preventing job cancellation while running both Playwright and Cypress test suites).
+      - Updated test execution commands to explicitly target web specs (`npx playwright test e2e/web.spec.ts` and `npm run test:cy:report:web`).
+    - **`.github/workflows/emulation.yml`**:
+      - Increased job `timeout-minutes` to 15 to accommodate macOS runner provisioning, AVD creation, and boot times.
+      - Increased emulator step timeout to 8 minutes (`timeout-minutes: 8`) and `emulator-boot-timeout: 300` seconds.
+    - **`cypress/runner-template.html`**: Updated spec breadcrumb to `web.cy.ts`.
+  - **Status**: Completed & Verified
+  - **Review**: Workflows are fully decoupled, targeting their respective test specs with generous runner timeouts to avoid timeouts during emulator initialization or test reporting.
+
+
 
 
 

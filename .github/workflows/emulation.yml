@@ -25,7 +25,7 @@ jobs:
   android-emulator-e2e:
     name: Android Emulator E2E Tests (Option C)
     runs-on: macos-14
-    timeout-minutes: 6
+    timeout-minutes: 15
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     continue-on-error: true
 
@@ -114,7 +114,7 @@ jobs:
           ./gradlew assembleDebug --stacktrace
 
       - name: Run E2E Test on Android Emulator (Option C)
-        timeout-minutes: 3
+        timeout-minutes: 8
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -122,13 +122,13 @@ jobs:
           arch: arm64-v8a
           force-avd-creation: true
           ram-size: 2048M
-          emulator-boot-timeout: 120
+          emulator-boot-timeout: 300
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
             adb devices
             adb install -r android-shell/app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.ytviewer.app/.MainActivity -d "https://www.youtube.com/watch?v=HGEyIt2bMiE"
+            adb shell am start -n com.ytviewer.app/.MainActivity -d "https://www.youtube.com/watch?v=FcRzAdI8R9U"
             sleep 8
             adb shell dumpsys activity com.ytviewer.app
             adb shell screencap -p /sdcard/screen.png

@@ -25,7 +25,7 @@ jobs:
   web-e2e-tests:
     name: Run Web E2E Tests & Deploy GitHub Pages
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     environment:
       name: github-pages
@@ -68,11 +68,11 @@ jobs:
             npm run build
           fi
 
-      - name: Execute Playwright E2E Tests
+      - name: Execute Playwright E2E Tests (Web Specs)
         timeout-minutes: 3
-        run: npx playwright test --timeout=180000
+        run: npx playwright test e2e/web.spec.ts --timeout=60000
 
-      - name: Run Cypress Tests with Report Generation
+      - name: Run Cypress Tests with Report Generation (Web Specs)
         timeout-minutes: 3
         uses: cypress-io/github-action@v6
         with:
@@ -80,7 +80,7 @@ jobs:
           start: npm start
           wait-on: 'http://localhost:3000'
           wait-on-timeout: 30
-          command: npm run test:cy:report
+          command: npm run test:cy:report:web
         continue-on-error: true
 
       - name: Prepare Video & Step Screenshot Assets for GitHub Pages

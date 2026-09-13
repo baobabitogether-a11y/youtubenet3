@@ -24,7 +24,26 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'web',
+      testMatch: /.*web\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+        video: 'off',
+      },
+    },
+    {
+      name: 'emulation',
+      testMatch: /.*emulation\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 1280, height: 720 },
+        video: 'off',
+      },
+    },
+    {
       name: 'chromium',
+      testMatch: /.*\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 720 },
