@@ -40,11 +40,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Web Dependencies
-        run: |
-          npm ci --prefer-offline || npm install --prefer-offline
+        run: npm install
 
       - name: Build Web Application
         run: |

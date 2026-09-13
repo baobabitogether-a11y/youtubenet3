@@ -427,6 +427,32 @@ export default function App() {
     };
   }, [handleProcessSharedLink]);
 
+  // Attempt single fetch of target translation using tlang parameter change per Requirement 6
+  const attemptFetchTargetTranslationsWithTlang = async (idToFetch: string) => {
+    if (!settings.autoFetchTargetTranslationsWithTlang) return;
+    const targetLang = selectedTargetLang || (settings.learningLanguages && settings.learningLanguages[0]);
+    if (!targetLang) return;
+
+    try {
+      logSubtitles(`[Target Lang] Trying tlang subtitle fetch with tlang=${targetLang} for ${idToFetch}`);
+      const res = await fetch('/api/fetch-subtitles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: idToFetch, tlang: targetLang }),
+      });
+      const data = await res.json();
+      if (res.ok && data.cues && data.cues.length > 0) {
+        setRestoredToast(`Target subtitles (${targetLang.toUpperCase()}) fetched successfully`);
+      } else {
+        setRestoredToast(`Target subtitles (${targetLang.toUpperCase()}) fetch failed`);
+      }
+    } catch {
+      setRestoredToast(`Target subtitles (${targetLang.toUpperCase()}) fetch failed`);
+    } finally {
+      setTimeout(() => setRestoredToast(null), 3500);
+    }
+  };
+
   // Fetch Subtitles from backend or restore from cache
   const handleFetchSubtitles = async (targetId?: string, forceRefresh = false) => {
     const idToFetch = targetId || videoId;
@@ -545,6 +571,9 @@ export default function App() {
         setRestoredToast(`Saved ${sanitizedCues.length} subtitles to cache`);
         setTimeout(() => setRestoredToast(null), 3000);
         success = true;
+
+        // Requirement 6: try once to fetch target translation using tlang
+        attemptFetchTargetTranslationsWithTlang(idToFetch);
       } catch (err: any) {
         logWarn('Subtitles', `Attempt ${attempts}/${maxRetries} failed: ${err.message}`);
         if (attempts >= maxRetries) {
@@ -567,6 +596,9 @@ export default function App() {
               payload: { videoId: idToFetch, cueCount: fallbackCues.length },
             })
           );
+
+          // Requirement 6: try once to fetch target translation using tlang
+          attemptFetchTargetTranslationsWithTlang(idToFetch);
         }
       } finally {
         setIsFetchingSubtitles(false);
@@ -998,7 +1030,12 @@ export default function App() {
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
+            subtitlePosition={settings.subtitlePosition}
+            showTranslatedOnTop={settings.showTranslatedOnTop}
+            alwaysShowKeyControls={settings.alwaysShowKeyControls}
+            onChangeSubtitlePosition={(pos) => handleUpdateSettings({ ...settings, subtitlePosition: pos })}
             onOpenTargetLanguageModal={() => setIsTargetLangModalOpen(true)}
+            onOpenLogs={() => setIsLogsModalOpen(true)}
             onOpenSettings={() => {
               try {
                 playerRef.current?.pauseVideo?.();
@@ -1244,7 +1281,12 @@ export default function App() {
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
+            subtitlePosition={settings.subtitlePosition}
+            showTranslatedOnTop={settings.showTranslatedOnTop}
+            alwaysShowKeyControls={settings.alwaysShowKeyControls}
+            onChangeSubtitlePosition={(pos) => handleUpdateSettings({ ...settings, subtitlePosition: pos })}
             onOpenTargetLanguageModal={() => setIsTargetLangModalOpen(true)}
+            onOpenLogs={() => setIsLogsModalOpen(true)}
             onOpenSettings={() => {
               try {
                 playerRef.current?.pauseVideo?.();

@@ -19,6 +19,7 @@ import {
   Settings,
   Globe,
   Layers,
+  Terminal,
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, formatTypeName } from '../utils/youtube';
 import { YouTubeFormatType, YouTubePlayerHandle, CaptionCue } from '../types';
@@ -47,6 +48,7 @@ interface VideoPlayerProps {
   translatedCueText?: string | null;
   targetLanguage?: string | null;
   onOpenTargetLanguageModal?: () => void;
+  onOpenLogs?: () => void;
   onOpenSettings?: () => void;
   onBackOrClose?: () => void;
   onTimeUpdate?: (currentTime: number) => void;
@@ -75,6 +77,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       translatedCueText = null,
       targetLanguage = null,
       onOpenTargetLanguageModal,
+      onOpenLogs,
       onOpenSettings,
       onBackOrClose,
       onTimeUpdate,
@@ -140,7 +143,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const cycleSubtitlePosition = (e?: React.MouseEvent) => {
       e?.stopPropagation();
       const positions: SubtitlePosition[] = ['top', 'above', 'under', 'bottom'];
-      const curIdx = positions.indexOf(subtitlePosition);
+      const curIdx = positions.indexOf(subtitlePosition as SubtitlePosition);
       const nextPos = positions[(curIdx + 1) % positions.length];
       onChangeSubtitlePosition?.(nextPos);
     };
@@ -535,12 +538,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             />
           </div>
 
-          {/* Subtitles Overlay (Always positioned over video lower area) */}
+          {/* Subtitles Overlay (Configurable position: top, above, under, bottom) */}
           {isCaptionsActive && (
             <div
               id="video-subtitles-overlay"
               className={`absolute left-3 right-3 z-20 flex flex-col items-center pointer-events-none transition-all duration-300 ${
-                showControls ? 'bottom-20 sm:bottom-24' : 'bottom-4 sm:bottom-6'
+                subtitlePosition === 'top'
+                  ? showControls ? 'top-16 sm:top-20' : 'top-4 sm:top-6'
+                  : subtitlePosition === 'above'
+                  ? 'top-2 sm:top-4'
+                  : subtitlePosition === 'under'
+                  ? showControls ? 'bottom-24 sm:bottom-28' : 'bottom-2 sm:bottom-4'
+                  : showControls ? 'bottom-20 sm:bottom-24' : 'bottom-4 sm:bottom-6'
               }`}
             >
               <div className="max-w-xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1 animate-fadeIn">
@@ -551,20 +560,42 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   </div>
                 ) : activeCue ? (
                   <>
-                    <p
-                      id="active-subtitle-cue-text"
-                      data-testid="active-subtitle-cue-text"
-                      className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
-                    >
-                      {activeCue.text}
-                    </p>
-                    {translatedCueText && (
-                      <p
-                        id="active-translated-cue-text"
-                        className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug pt-0.5 border-t border-neutral-800/60"
-                      >
-                        {translatedCueText}
-                      </p>
+                    {showTranslatedOnTop ? (
+                      <>
+                        {translatedCueText && (
+                          <p
+                            id="active-translated-cue-text"
+                            className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug pb-0.5 border-b border-neutral-800/60"
+                          >
+                            {translatedCueText}
+                          </p>
+                        )}
+                        <p
+                          id="active-subtitle-cue-text"
+                          data-testid="active-subtitle-cue-text"
+                          className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                        >
+                          {activeCue.text}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p
+                          id="active-subtitle-cue-text"
+                          data-testid="active-subtitle-cue-text"
+                          className="text-white text-sm sm:text-base font-medium tracking-wide drop-shadow-sm leading-snug"
+                        >
+                          {activeCue.text}
+                        </p>
+                        {translatedCueText && (
+                          <p
+                            id="active-translated-cue-text"
+                            className="text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug pt-0.5 border-t border-neutral-800/60"
+                          >
+                            {translatedCueText}
+                          </p>
+                        )}
+                      </>
                     )}
                   </>
                 ) : hasSubtitles ? (
@@ -629,17 +660,49 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Target Language Selection Button (Requirement 2) */}
+                {/* 1. Quick Bringup: Log View (Including Network Requests) */}
+                {onOpenLogs && (
+                  <button
+                    id="open-logs-view-btn"
+                    data-testid="open-logs-view-btn"
+                    type="button"
+                    onClick={onOpenLogs}
+                    aria-label="Activity Logs & Network Requests"
+                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    title="Quick Bringup: Activity Logs & Network Requests"
+                  >
+                    <Terminal className="w-4 h-4 text-cyan-400" />
+                    <span className="hidden xs:inline">Logs</span>
+                  </button>
+                )}
+
+                {/* 2. Quick Bringup: Edit Target Languages for Translation */}
                 {onOpenTargetLanguageModal && (
                   <button
                     id="open-target-language-btn"
+                    data-testid="open-target-language-btn"
                     type="button"
                     onClick={onOpenTargetLanguageModal}
+                    aria-label="Edit Target Languages for Translation"
                     className="min-h-[44px] px-3 rounded-xl bg-indigo-950/80 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
-                    title="Change Target Language"
+                    title="Quick Bringup: Edit Target Languages for Translation"
                   >
                     <Globe className="w-4 h-4 text-indigo-400" />
                     <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+                  </button>
+                )}
+
+                {/* Subtitle Position Quick Toggle Button */}
+                {onChangeSubtitlePosition && (
+                  <button
+                    id="cycle-subtitle-position-btn"
+                    type="button"
+                    onClick={cycleSubtitlePosition}
+                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    title={`Subtitle Position: ${subtitlePosition} (click to cycle: top, above, under, bottom)`}
+                  >
+                    <Layers className="w-4 h-4 text-emerald-400" />
+                    <span className="capitalize">{subtitlePosition}</span>
                   </button>
                 )}
 
@@ -927,6 +990,34 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               <Repeat className="w-3.5 h-3.5" />
               <span>Loop: {loop ? 'ON' : 'OFF'}</span>
             </button>
+
+            {/* Quick Bringup 1: Log View (Including Network Requests) */}
+            {onOpenLogs && (
+              <button
+                id="open-logs-view-btn-expanded"
+                type="button"
+                onClick={onOpenLogs}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-cyan-300 border border-neutral-700 transition active:scale-95"
+                title="Quick Bringup: Activity Logs & Network Requests"
+              >
+                <Terminal className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Logs</span>
+              </button>
+            )}
+
+            {/* Quick Bringup 2: Edit Target Languages for Translation */}
+            {onOpenTargetLanguageModal && (
+              <button
+                id="open-target-language-btn-expanded"
+                type="button"
+                onClick={onOpenTargetLanguageModal}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition active:scale-95"
+                title="Quick Bringup: Edit Target Languages for Translation"
+              >
+                <Globe className="w-3.5 h-3.5 text-indigo-400" />
+                <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+              </button>
+            )}
 
             {/* Theater mode toggle */}
             <button

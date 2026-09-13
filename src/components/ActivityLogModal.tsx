@@ -111,15 +111,18 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-semibold text-neutral-100">
-                  Application Activity Logs
+                <h2
+                  id="activity-log-modal-title"
+                  className="text-base sm:text-lg font-semibold text-neutral-100"
+                >
+                  Application Activity &amp; Network Logs
                 </h2>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 font-mono">
                   {entries.length} records (Ring Buffer)
                 </span>
               </div>
               <p className="text-xs text-neutral-400 mt-0.5">
-                Safe fixed-size log buffer with preserved chronological order and body truncation.
+                Safe fixed-size log buffer tracking real-time network requests, HTTP traffic, and app events.
               </p>
             </div>
           </div>
@@ -175,6 +178,8 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
             {['ALL', 'SUBTITLES', 'SYNC', 'TTS', 'NETWORK', 'WARN', 'ERROR'].map((lvl) => (
               <button
                 key={lvl}
+                id={`filter-btn-${lvl}`}
+                data-testid={`filter-btn-${lvl}`}
                 onClick={() => setFilterLevel(lvl)}
                 className={`px-2.5 py-1 rounded-md transition-all font-mono text-[11px] ${
                   filterLevel === lvl

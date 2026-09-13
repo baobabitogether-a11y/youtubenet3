@@ -183,4 +183,81 @@ android_ui:
     - unnecessary_animations
 ```
 
+---
+
+## 8. Application Flow, Screen Architecture & Design Decisions
+
+### 8.1 Target Language Availability During Playback
+- **Always Available**: Changing the target translation language remains 100% accessible while the video is playing.
+- **Dedicated Top-Bar Control**: The `#open-target-language-btn` in the video player top bar is always visible (under default `alwaysShowKeyControls: true`).
+- **Real-Time Dynamic Update**: Selecting a new language opens `SelectTargetLanguageModal`, immediately updates `selectedTargetLang`, saves to per-video storage, and recomputes `translatedCueText` on the fly without stopping, pausing, or reloading the video.
+
+### 8.2 App Screens & Available Controls
+1. **Full-Screen Video Player Screen (`compactView: true` — Default)**:
+   - *Top Bar*: Back/Close (`#back-close-button`), Video ID badge, **Log View (including Network Requests)** quick button (`#open-logs-view-btn`), **Edit Target Languages for Translation** quick button (`#open-target-language-btn`), Subtitle Position quick-cycle button (`#cycle-subtitle-position-btn`), Settings button (`#open-settings-button`).
+   - *Center*: Tap-to-play/pause toggle (`#center-play-pause-toggle`) and buffering loader.
+   - *Subtitle Overlay*: Positioned (`top`, `above`, `under`, `bottom`) with `#active-subtitle-cue-text` and `#active-translated-cue-text` (translated text on top by default).
+   - *Bottom Bar*: Play/Pause (`#play-pause-toggle-button`), Caption CC (`#toggle-captions-button`), Volume/Mute (`#volume-mute-toggle`), Seek Scrubber (`#video-progress-scrubber`), timestamp/duration, Fullscreen (`#fullscreen-toggle-button`).
+2. **Subtitles Teacher & Workspace Screen (`compactView: false` — Expanded Mode)**:
+   - Embedded player card with quick bringup buttons (`#open-logs-view-btn-expanded`, `#open-target-language-btn-expanded`), subtitle search input, format indicator badge, sequential sync toggle (alternating TTS and video playback), and subtitle cue table with interactive timestamps, audio TTS buttons, slow speech (0.75x) toggle, cue loop buttons, and multi-column translations.
+3. **Video Library & URL Entry Drawer (`LibraryModal.tsx`)**:
+   - YouTube URL / Video ID input with "Load Video" submit button, preset video carousel (e.g. Russian interview `FcRzAdI8R9U`), saved video history cards with thumbnails, title, cue count, and delete button.
+4. **Target Language Selection Modal (`SelectTargetLanguageModal.tsx`)**:
+   - Grid of target languages (Spanish, Italian, French, German, Arabic, English, Russian, etc.), per-language TTS speech rate sliders (0.5x to 2.0x), and active language checkmark.
+5. **Settings Modal (`SettingsModal.tsx`)**:
+   - Compact Mode toggle, Subtitle Position dropdown (`top`, `above`, `under`, `bottom`), Translated Subtitles on Top toggle, Always Show Key Controls toggle, Auto-fetch Target Translations (`tlang`) toggle, Max Retries selector, Preferred Learning Languages selector, Native Android TTS engine toggle, and Check/Download APK buttons.
+6. **Network Inspector & Error Logs Modals**:
+   - Live auditing of intercepted timedtext requests, response payloads, status codes, and Redux state machine transitions.
+
+### 8.3 Screen Trigger Matrix
+```
+                       ┌─────────────────────────────────────┐
+                       │  Video Player Screen (Compact Mode) │
+                       └───────┬──────────┬───────────┬──────┘
+                               │          │           │
+         ┌─────────────────────┘          │           └────────────────────┐
+         ▼                                ▼                                ▼
+┌──────────────────┐            ┌───────────────────┐            ┌──────────────────┐
+│  Library Drawer  │            │ Target Lang Modal │            │  Settings Modal  │
+│ (Back / Change)  │            │ (Top Bar Lang Btn)│            │ (Top Bar Gear)   │
+└────────┬─────────┘            └─────────┬─────────┘            └─────────┬────────┘
+         │                                │                                │
+         └────────────────────────────────┼────────────────────────────────┘
+                                          ▼
+                       ┌─────────────────────────────────────┐
+                       │  Returns to Video Player Screen     │
+                       └─────────────────────────────────────┘
+```
+
+### 8.4 Options to Trigger Video Playback
+1. **Screen Tap**: Tap anywhere on the video container.
+2. **Center Play/Pause Toggle**: Tap the high-contrast center button (`#center-play-pause-toggle`).
+3. **Bottom Toolbar Play/Pause Button**: Click `#play-pause-toggle-button`.
+4. **Selecting a Video from Library**: Tap any saved video item or curated quick-pick preset.
+5. **Submitting YouTube URL / ID**: Paste URL in drawer and click "Load Video".
+6. **Android Native Intent / Shared Link**: Share a link from YouTube Android app into `MainActivity.kt` via `window.onNativeSharedLinkReceived(url)`.
+7. **Keyboard Shortcut**: Press Spacebar.
+8. **Clicking a Subtitle Cue**: Click any subtitle row or timestamp in the Subtitles Panel to seek and play.
+
+### 8.5 Cached Data per Video
+- **`yt_subtitles_${videoId}`**: Subtitle cues array (`id`, `start`, `duration`, `text` with Mojibake repair), video title, original URL, and timestamp.
+- **`yt_observed_url_${videoId}`**: Discovered/intercepted native `/api/timedtext` URL with session tokens and signature.
+- **`yt_video_library_v2`**: Persistent library of opened videos with metadata, cues, timestamp, and preferences.
+- **`memoryCache`**: High-speed in-memory RAM cache for instantaneous cue lookups during playback.
+
+### 8.6 Stored Per-Video Settings (`yt_video_settings_${videoId}`)
+- **`activeTargetLang`**: Last chosen target translation language for that video.
+- **`targetLanguages`**: Enabled target languages configured for that video.
+- **`ttsRates`**: Per-language speech rate multipliers (e.g. `{"es": 1.0, "fr": 0.85}`).
+- **`playOrder`**: Sequential sync preference (`'tts_first'` vs `'video_first'`).
+- **`sourceLang`**: Primary spoken language of the video.
+- **`lastUpdated`**: Epoch timestamp of latest settings update.
+
+### 8.7 Video Playback Screen Quick Bringup Buttons
+- **Mandatory Quick Bringup Buttons on Video Playback Screen**:
+  1. **Log View (including network requests)** (`#open-logs-view-btn`): Directly brings up the Activity & Network Logs view (`ActivityLogModal`), providing instant access to the chronological activity ring buffer, real-time HTTP network traffic (`#filter-btn-NETWORK`), request status codes, durations, response payloads, search filtering, and log clipboard export.
+  2. **Edit Target Languages for Translation** (`#open-target-language-btn`): Directly brings up `SelectTargetLanguageModal` to switch active translation target language on the fly, adjust per-language TTS speech rates, and customize/edit the user's defined learning languages list.
+
+
+
 
