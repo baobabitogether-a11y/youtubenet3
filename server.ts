@@ -461,6 +461,45 @@ async function startServer() {
     }
   });
 
+  // Google Translate TTS audio proxy (high-fidelity neural audio for 80+ languages)
+  app.get('/api/tts', async (req, res) => {
+    try {
+      const text = (req.query.text as string || '').trim();
+      const lang = (req.query.lang as string || 'en').replace(/_auto$/, '').trim();
+      if (!text) {
+        return res.status(400).json({ error: 'Parameter text is required' });
+      }
+
+      const encodedText = encodeURIComponent(text.substring(0, 500));
+      const encodedLang = encodeURIComponent(lang || 'en');
+      const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=${encodedLang}&client=tw-ob`;
+
+      const response = await fetch(googleTtsUrl, {
+        headers: {
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+          Referer: 'https://translate.google.com/',
+        },
+      });
+
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: `Google TTS upstream responded with status ${response.status}`,
+        });
+      }
+
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+
+      const arrayBuffer = await response.arrayBuffer();
+      res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error('[Server] TTS proxy error:', err);
+      res.status(500).json({ error: err.message || 'Failed to fetch TTS audio' });
+    }
+  });
+
   // Serve the single automated ADB installation script
   app.get('/update.apk.sh', (req, res) => {
     res.setHeader('Content-Type', 'text/x-shellscript');

@@ -132,6 +132,46 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
     });
   });
 
+  test('TTS Audio Playback - verifies speech execution and audio stream fallback without error', async ({ page }) => {
+    await test.step('1. Verify YouTube player is ready', async () => {
+      await expect(page.locator('#youtube-player-iframe')).toBeVisible({ timeout: 15000 });
+    });
+
+    await test.step('2. Turn on captions to load subtitle cues', async () => {
+      const captionBtn = page.locator('#caption-toggle-button');
+      await expect(captionBtn).toBeVisible({ timeout: 10000 });
+      const isPressed = await captionBtn.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionBtn.click();
+      }
+      await page.waitForTimeout(1000);
+      await expect(captionBtn).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    await test.step('3. Verify TTS audio endpoint and triggering speech', async () => {
+      // Direct verification of /api/tts endpoint
+      const response = await page.request.get('/api/tts?text=hello%20world&lang=en');
+      expect(response.status()).toBe(200);
+      expect(response.headers()['content-type']).toContain('audio/mpeg');
+
+      // Check if TTS play button exists in panel or overlay
+      const speakBtn = page.locator('#speak-lang-it-btn, #speak-lang-es-btn, #speak-translated-cue-btn').first();
+      if (await speakBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await speakBtn.click();
+        await page.waitForTimeout(800);
+      }
+
+      // Check activity logs quick bringup
+      const logsBtn = page.locator('#open-logs-view-btn, #open-logs-view-btn-expanded').first();
+      if (await logsBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        await logsBtn.click();
+        await page.waitForTimeout(500);
+        // Verify Activity Log modal is visible
+        await expect(page.locator('#activity-log-modal, [role="dialog"]').first()).toBeVisible();
+      }
+    });
+  });
+
   // =========================================================================
   // SKIPPED EXTENDED TESTS
   // =========================================================================

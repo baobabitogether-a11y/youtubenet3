@@ -395,6 +395,15 @@ export function useSyncEngine({
    */
   const testSpeakLang = useCallback(
     async (cue: CaptionCue, lang: TargetLanguage) => {
+      if (isSpeaking && currentTTSLang === lang.code) {
+        stopTTS();
+        setIsSpeaking(false);
+        setActiveCharIndex(null);
+        setCurrentTTSLang(null);
+        setCurrentTTSText(null);
+        return;
+      }
+
       stopTTS();
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
@@ -412,14 +421,13 @@ export function useSyncEngine({
           setActiveCharIndex(charIdx);
         });
       } finally {
-        stopTTS();
         setIsSpeaking(false);
         setActiveCharIndex(null);
         setCurrentTTSLang(null);
         setCurrentTTSText(null);
       }
     },
-    [getCueTranslation, playerRef]
+    [getCueTranslation, playerRef, isSpeaking, currentTTSLang]
   );
 
   /**
@@ -428,6 +436,16 @@ export function useSyncEngine({
   const speakDirectText = useCallback(
     async (text: string, langCode: string = 'en', rate: number = 1.0, voice?: string) => {
       if (!text) return;
+
+      if (isSpeaking && currentTTSText === text) {
+        stopTTS();
+        setIsSpeaking(false);
+        setActiveCharIndex(null);
+        setCurrentTTSLang(null);
+        setCurrentTTSText(null);
+        return;
+      }
+
       stopTTS();
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 100));
@@ -441,14 +459,13 @@ export function useSyncEngine({
           setActiveCharIndex(charIdx);
         });
       } finally {
-        stopTTS();
         setIsSpeaking(false);
         setActiveCharIndex(null);
         setCurrentTTSLang(null);
         setCurrentTTSText(null);
       }
     },
-    [playerRef]
+    [playerRef, isSpeaking, currentTTSText]
   );
 
   // Active mutual exclusion watchdog: whenever speaking is active, keep video paused

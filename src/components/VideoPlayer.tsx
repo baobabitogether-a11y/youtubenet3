@@ -128,9 +128,19 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const handleSpeakCue = async (target: 'translated' | 'original', e?: React.MouseEvent) => {
       e?.stopPropagation();
+
+      // If already speaking this target, clicking again acts as stop
+      if (isTTSSpeakingState && activeTTSTarget === target) {
+        stopTTS();
+        setIsTTSSpeakingState(false);
+        setActiveTTSTarget(null);
+        setActiveTTSCharIndex(null);
+        return;
+      }
+
       const text = target === 'translated' ? translatedCueText : activeCue?.text;
       if (!text) return;
-      const lang = target === 'translated' ? (targetLanguage || 'es') : 'en';
+      const lang = target === 'translated' ? (targetLanguage || 'es') : 'auto';
 
       // Strict Mutual Exclusion: Pause YouTube video during TTS speech
       setIsPlaying(false);
@@ -151,7 +161,6 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       } catch (err) {
         console.warn('TTS playback error in VideoPlayer:', err);
       } finally {
-        stopTTS();
         setIsTTSSpeakingState(false);
         setActiveTTSTarget(null);
         setActiveTTSCharIndex(null);
@@ -1016,6 +1025,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             </p>
                             <button
                               type="button"
+                              id="speak-translated-cue-btn"
+                              data-testid="speak-translated-cue-btn"
                               onClick={(e) => handleSpeakCue('translated', e)}
                               className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
                               title="Speak translated text (TTS with word highlight)"
@@ -1041,6 +1052,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           </p>
                           <button
                             type="button"
+                            id="speak-orig-cue-btn"
+                            data-testid="speak-orig-cue-btn"
                             onClick={(e) => handleSpeakCue('original', e)}
                             className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
                             title="Speak original subtitle (TTS with word highlight)"
