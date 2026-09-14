@@ -8,6 +8,22 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Fixes & Enhancements: Default Compact View Translations, TTS & Navbar Inspectors
+
+- **Compact View Translation & Auto-TTS Defaults**:
+  - Configured `captionsEnabled` to default to `true` on video load.
+  - Initialized target language to the stored user preference or `'it'` (Italian) so translations activate immediately.
+  - Implemented `displayTranslatedText` state fallback to guarantee translated overlays and TTS audio triggers seamlessly upon playback.
+  - Enabled Auto-TTS narration loop with word highlighting in compact and expanded views by default.
+  - **Status**: Completed & Verified
+- **Navbar Inspector Triggers & Modals**:
+  - Removed conditional gates on `#navbar-error-inspector-button` and `#navbar-network-inspector-button` so error diagnostics and network monitors are consistently mounted and interactive.
+  - **Status**: Completed & Verified
+- **Duplicate Voice Keys & Payload Limits**:
+  - Deduplicated system synthesis voice lists to eliminate React duplicate key console warnings.
+  - Expanded Express body parser limits to 50MB to support large timedtext base64 uploads without `PayloadTooLargeError`.
+  - **Status**: Completed & Verified
+
 ### Step 4.3: Target Language Switch with 'tlang' Replacement & Full Request Context
 
 - **Task 1 (Original Working Request Capture & Cloning with Settings)**:
