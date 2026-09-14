@@ -66,22 +66,24 @@ export const HighlightableText: React.FC<HighlightableTextProps> = ({
       return -1;
     }
 
-    // 1. Exact range match
+    // 1. Exact range match inside a word token
     const exact = tokens.findIndex(
       (t) => t.isWord && activeCharIndex >= t.start && activeCharIndex < t.end
     );
     if (exact !== -1) return exact;
 
-    // 2. Next closest word after activeCharIndex
-    const nextWord = tokens.findIndex((t) => t.isWord && t.start >= activeCharIndex);
-    if (nextWord !== -1) return nextWord;
-
-    // 3. Fallback to last word
-    for (let i = tokens.length - 1; i >= 0; i--) {
-      if (tokens[i].isWord) return i;
+    // 2. If charIndex is at whitespace/punctuation after a word, highlight the latest word that has started
+    let latestWordIdx = -1;
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].isWord && tokens[i].start <= activeCharIndex) {
+        latestWordIdx = i;
+      }
     }
+    if (latestWordIdx !== -1) return latestWordIdx;
 
-    return -1;
+    // 3. If charIndex is before the first word, return the first word
+    const firstWord = tokens.findIndex((t) => t.isWord);
+    return firstWord !== -1 ? firstWord : -1;
   }, [tokens, isSpeaking, activeCharIndex]);
 
   if (!text) return null;

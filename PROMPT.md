@@ -3,15 +3,13 @@
 ## Latest User Prompt
 
 ```text
-- Compact view shows translated text and plays Auto-TTS by default
-- Navbar inspector triggers are always actionable
-- Resolved body size limits and duplicate React voice keys
+compact view - the presented text is not matching the tts-play text
 ```
 
 ## Active TODOs & Verification
 
-- [x] **Task 1 (Body Parser Limit)**: Increase express payload limit to 50MB to handle large base64 caption files without `PayloadTooLargeError`.
-- [x] **Task 2 (Unique React Keys for Voices)**: Deduplicate voice lists across components and modals to eliminate key collision warnings.
-- [x] **Task 3 (Navbar Inspector Buttons)**: Ensure Error and Network inspector triggers and dialogs are always mounted and responsive.
-- [x] **Task 4 (Compact View Defaults)**: Enable captions, translation overlay (`displayTranslatedText`), and Auto-TTS narration by default upon video loading.
-- [x] **Task 5 (Verification)**: Verify with `lint_applet` and `compile_applet`.
+- [x] **Task 1 (Presented Text vs TTS Spoken Text Sync)**: Synchronized `textToSpeak` with `localTranslatedText` in `VideoPlayer.tsx` so presented subtitle text on screen immediately updates to match spoken TTS text 1:1.
+- [x] **Task 2 (Fallback Language Code Alignment)**: Fixed TTS language code selection to use source language (`detectedFormat?.language || 'auto'`) whenever TTS falls back to original subtitle text, preventing garbled cross-language voice output.
+- [x] **Task 3 (Hebrew ISO Normalization in Player Hook)**: Normalized Hebrew language codes (`iw` / `il` -> `he`) in `VideoPlayer.tsx` target subtitle cache lookups.
+- [x] **Task 4 (Verification)**: Ran `lint_applet` and `compile_applet` with zero TypeScript or build errors.
+

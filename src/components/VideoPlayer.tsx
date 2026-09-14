@@ -34,6 +34,7 @@ import { HighlightableText } from './HighlightableText';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
 import { getCachedTargetSubtitles } from '../utils/subtitleCache';
+import { getVideoSettings } from '../utils/videoSettings';
 import { isRtl } from '../utils/rtlUtils';
 
 interface VideoPlayerProps {
@@ -62,6 +63,10 @@ interface VideoPlayerProps {
   showTranslatedOnTop?: boolean;
   onChangeSubtitlePosition?: (pos: SubtitlePosition) => void;
   isSyncActive?: boolean;
+  syncTTSText?: string | null;
+  syncTTSLang?: string | null;
+  isSyncSpeaking?: boolean;
+  syncTTSCharIndex?: number | null;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -92,6 +97,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       showTranslatedOnTop = true,
       onChangeSubtitlePosition,
       isSyncActive = false,
+      syncTTSText = null,
+      syncTTSLang = null,
+      isSyncSpeaking = false,
+      syncTTSCharIndex = null,
     },
     ref
   ) => {
@@ -102,6 +111,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const targetLangCode = targetLanguage || 'it';
     const cleanTargetLang = targetLangCode.toLowerCase().split('-')[0];
+    const normTargetLang = (cleanTargetLang === 'iw' || cleanTargetLang === 'il') ? 'he' : cleanTargetLang;
 
     // Local state to guarantee translated text is always present even if parent async translation is resolving
     const [localTranslatedText, setLocalTranslatedText] = useState<string | null>(null);
@@ -116,9 +126,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         return;
       }
       // Check authentic target subtitle track cache
-      const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
+      const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
       if (srtCues && srtCues.length > 0) {
-        const match = srtCues.find((c) => c.id === activeCue.id);
+        const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
         if (match?.text) {
           setLocalTranslatedText(match.text);
           return;
@@ -133,9 +143,26 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       return () => {
         isMounted = false;
       };
-    }, [translatedCueText, activeCue?.id, activeCue?.text, videoId, cleanTargetLang, targetLangCode]);
+    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode]);
+
+    // TTS playback state with word boundary syntax highlighting
+    const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
+    const [activeTTSTarget, setActiveTTSTarget] = useState<'translated' | 'original' | null>(null);
+    const [activeTTSCharIndex, setActiveTTSCharIndex] = useState<number | null>(null);
 
     const displayTranslatedText = translatedCueText || localTranslatedText;
+
+    const effectiveDisplayTranslatedText = (isSyncSpeaking && syncTTSText)
+      ? syncTTSText
+      : displayTranslatedText;
+
+    const isTranslatedSpeaking = (isSyncSpeaking && syncTTSText)
+      ? true
+      : (isTTSSpeakingState && activeTTSTarget === 'translated');
+
+    const currentSpeakingCharIndex = (isSyncSpeaking && syncTTSText)
+      ? (syncTTSCharIndex ?? 0)
+      : activeTTSCharIndex;
 
     const handleToggleCaptions = (e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -162,11 +189,6 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const [isMuted, setIsMuted] = useState(false);
     const [showControls, setShowControls] = useState(true);
     const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
-
-    // TTS playback state with word boundary syntax highlighting
-    const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
-    const [activeTTSTarget, setActiveTTSTarget] = useState<'translated' | 'original' | null>(null);
-    const [activeTTSCharIndex, setActiveTTSCharIndex] = useState<number | null>(null);
 
     // Auto-TTS Narration State (persisted per session, default ON)
     const [autoTTSEnabled, setAutoTTSEnabled] = useState<boolean>(() => {
@@ -211,19 +233,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       }
 
       let text = target === 'translated' ? (displayTranslatedText || translatedCueText) : activeCue?.text;
-      const lang = target === 'translated' ? targetLangCode : 'auto';
 
       if (target === 'translated' && !text && activeCue?.text) {
-        const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
+        const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
         if (srtCues && srtCues.length > 0) {
-          const match = srtCues.find((c) => c.id === activeCue.id);
+          const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
           if (match && match.text) {
             text = match.text;
           }
         }
         if (!text) {
           try {
-            text = await translateText(activeCue.text, 'auto', lang);
+            text = await translateText(activeCue.text, 'auto', targetLangCode);
           } catch {
             text = activeCue.text;
           }
@@ -231,6 +252,16 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       }
 
       if (!text) return;
+
+      const isOriginalSpoken = text === activeCue?.text;
+      const speakLang = isOriginalSpoken
+        ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
+        : targetLangCode;
+
+      // Update local translated state so presented text matches spoken text 1:1
+      if (target === 'translated' && !isOriginalSpoken) {
+        setLocalTranslatedText(text);
+      }
 
       // Strict Mutual Exclusion: Pause YouTube video during TTS speech
       setIsPlaying(false);
@@ -241,11 +272,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       postIframeCommand('pauseVideo');
 
       setIsTTSSpeakingState(true);
-      setActiveTTSTarget(target);
+      setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
       setActiveTTSCharIndex(0);
 
       try {
-        await speakText(text, lang, 1.0, undefined, (charIdx) => {
+        await speakText(text, speakLang, 1.0, undefined, (charIdx) => {
           setActiveTTSCharIndex(charIdx);
         });
       } catch (err) {
@@ -308,38 +339,100 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       (async () => {
         try {
           unlockTTSAudio();
-          let textToSpeak = displayTranslatedText || '';
 
-          // Check authentic cached target subtitles first
-          if (!textToSpeak) {
-            const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
-            if (srtCues && srtCues.length > 0) {
-              const match = srtCues.find((c) => c.id === activeCue.id);
-              if (match && match.text) {
-                textToSpeak = match.text;
+          const vSettings = getVideoSettings(videoId);
+          const enabledLangs = vSettings?.targetLanguages?.filter((l) => l.enabled) || [];
+
+          if (enabledLangs.length > 0) {
+            for (const langConfig of enabledLangs) {
+              const langCode = langConfig.code;
+              const normLang = (langCode === 'iw' || langCode === 'il') ? 'he' : langCode.toLowerCase().split('-')[0];
+
+              let textToSpeak = '';
+              const srtCues = getCachedTargetSubtitles(videoId, normLang);
+              if (srtCues && srtCues.length > 0) {
+                const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
+                if (match?.text) textToSpeak = match.text;
+              }
+
+              if (!textToSpeak && activeCue.text) {
+                try {
+                  textToSpeak = await translateText(activeCue.text, 'auto', langCode);
+                } catch {
+                  textToSpeak = activeCue.text;
+                }
+              }
+
+              if (!textToSpeak && activeCue.text) {
+                textToSpeak = activeCue.text;
+              }
+
+              if (!textToSpeak) continue;
+
+              const isOriginalSpoken = textToSpeak === activeCue.text;
+              const speakLang = isOriginalSpoken
+                ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
+                : langCode;
+
+              if (!isOriginalSpoken) {
+                setLocalTranslatedText(textToSpeak);
+              }
+
+              setIsTTSSpeakingState(true);
+              setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
+              setActiveTTSCharIndex(0);
+
+              await speakText(textToSpeak, speakLang, langConfig.ttsRate || 1.0, langConfig.voice, (charIdx) => {
+                setActiveTTSCharIndex(charIdx);
+              });
+
+              await new Promise((r) => setTimeout(r, 200));
+            }
+          } else {
+            let textToSpeak = displayTranslatedText || '';
+
+            // Check authentic cached target subtitles first
+            if (!textToSpeak && activeCue?.text) {
+              const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
+              if (srtCues && srtCues.length > 0) {
+                const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
+                if (match && match.text) {
+                  textToSpeak = match.text;
+                }
               }
             }
-          }
 
-          if (!textToSpeak && activeCue.text) {
-            try {
-              textToSpeak = await translateText(activeCue.text, 'auto', targetLangCode);
-            } catch {
+            if (!textToSpeak && activeCue.text) {
+              try {
+                textToSpeak = await translateText(activeCue.text, 'auto', targetLangCode);
+              } catch {
+                textToSpeak = activeCue.text;
+              }
+            }
+
+            if (!textToSpeak && activeCue.text) {
               textToSpeak = activeCue.text;
             }
+
+            if (textToSpeak) {
+              const isOriginalSpoken = textToSpeak === activeCue.text;
+              const speakLang = isOriginalSpoken
+                ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
+                : targetLangCode;
+
+              if (!isOriginalSpoken) {
+                setLocalTranslatedText(textToSpeak);
+              }
+
+              setIsTTSSpeakingState(true);
+              setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
+              setActiveTTSCharIndex(0);
+
+              await speakText(textToSpeak, speakLang, 1.0, undefined, (charIdx) => {
+                setActiveTTSCharIndex(charIdx);
+              });
+            }
           }
-
-          if (!textToSpeak) {
-            textToSpeak = activeCue.text;
-          }
-
-          setIsTTSSpeakingState(true);
-          setActiveTTSTarget(textToSpeak === activeCue.text ? 'original' : 'translated');
-          setActiveTTSCharIndex(0);
-
-          await speakText(textToSpeak, targetLangCode, 1.0, undefined, (charIdx) => {
-            setActiveTTSCharIndex(charIdx);
-          });
         } catch (err) {
           console.warn('[Auto-TTS] Speech failed:', err);
         } finally {
@@ -834,7 +927,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {displayTranslatedText && (
+                        {effectiveDisplayTranslatedText && (
                           <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
                             <p
                               id="active-translated-cue-text"
@@ -845,9 +938,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -930,7 +1023,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             <Volume2 className="w-3 h-3" />
                           </button>
                         </div>
-                        {displayTranslatedText && (
+                        {effectiveDisplayTranslatedText && (
                           <div className="flex items-center justify-center gap-2 pt-0.5">
                             <p
                               id="active-translated-cue-text"
@@ -941,9 +1034,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1300,7 +1393,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {displayTranslatedText && (
+                        {effectiveDisplayTranslatedText && (
                           <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
                             <p
                               id="active-translated-cue-text"
@@ -1311,9 +1404,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1394,7 +1487,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             <Volume2 className="w-3 h-3" />
                           </button>
                         </div>
-                        {displayTranslatedText && (
+                        {effectiveDisplayTranslatedText && (
                           <div className="flex items-center justify-center gap-2 pt-0.5">
                             <p
                               id="active-translated-cue-text"
@@ -1405,9 +1498,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"

@@ -241,6 +241,19 @@ export default function App() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [restoredToast, setRestoredToast] = useState<string | null>(null);
 
+  // Sync engine TTS state to synchronize VideoPlayer overlays with active speaking queue
+  const [syncTTSState, setSyncTTSState] = useState<{
+    isSpeaking: boolean;
+    currentTTSText: string | null;
+    currentTTSLang: string | null;
+    activeCharIndex: number | null;
+  }>({
+    isSpeaking: false,
+    currentTTSText: null,
+    currentTTSLang: null,
+    activeCharIndex: null,
+  });
+
   // Shared Link feedback state (complaint if not youtube link, or success)
   const [sharedLinkComplaint, setSharedLinkComplaint] = useState<string | null>(null);
   const [sharedLinkSuccess, setSharedLinkSuccess] = useState<string | null>(null);
@@ -1084,6 +1097,10 @@ export default function App() {
             }}
             compactView={true}
             isSyncActive={isSyncActive}
+            syncTTSText={syncTTSState.currentTTSText}
+            syncTTSLang={syncTTSState.currentTTSLang}
+            isSyncSpeaking={syncTTSState.isSpeaking}
+            syncTTSCharIndex={syncTTSState.activeCharIndex}
             onTimeUpdate={handlePlayerTimeUpdate}
             activeCue={activeCue}
             translatedCueText={translatedCueText}
@@ -1337,6 +1354,10 @@ export default function App() {
             captionsEnabled={captionsEnabled}
             compactView={false}
             isSyncActive={isSyncActive}
+            syncTTSText={syncTTSState.currentTTSText}
+            syncTTSLang={syncTTSState.currentTTSLang}
+            isSyncSpeaking={syncTTSState.isSpeaking}
+            syncTTSCharIndex={syncTTSState.activeCharIndex}
             onTimeUpdate={handlePlayerTimeUpdate}
             activeCue={activeCue}
             translatedCueText={translatedCueText}
@@ -1408,6 +1429,14 @@ export default function App() {
               setActiveCue(cue);
             }}
             onSyncStateChange={setIsSyncActive}
+            onSyncSpeakingChange={(isSpeaking, text, lang, charIdx) => {
+              setSyncTTSState({
+                isSpeaking,
+                currentTTSText: text,
+                currentTTSLang: lang,
+                activeCharIndex: charIdx,
+              });
+            }}
           />
         </div>
       </main>

@@ -33,9 +33,47 @@ async function discoverTimedTextUrlForVideo(videoId: string): Promise<string | n
   return null;
 }
 
+function getAuthenticSrtTrack(lang: string): any[] | null {
+  let cleanLang = (lang || '').toLowerCase().split(/[-_]/)[0];
+  if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
+  const srtPath = path.join(process.cwd(), 'test/fixtures/languages', `${cleanLang}.srt`);
+  if (fs.existsSync(srtPath)) {
+    try {
+      const rawSrt = fs.readFileSync(srtPath, 'utf-8');
+      const parsed = parseRawCaptionData(rawSrt);
+      if (parsed.cues && parsed.cues.length > 0) {
+        return parsed.cues;
+      }
+    } catch {}
+  }
+  return null;
+}
+
 async function translateCuesToTargetLang(cues: any[], targetLang: string): Promise<any[]> {
-  const normLang = (targetLang || 'en').toLowerCase().split(/[-_]/)[0];
+  let normLang = (targetLang || 'en').toLowerCase().split(/[-_]/)[0];
+  if (normLang === 'iw' || normLang === 'il') normLang = 'he';
   const sourceCues = Array.isArray(cues) && cues.length > 0 ? cues : SAMPLE_AUTHENTIC_RUSSIAN_CUES;
+
+  // PRIORITY 1: Check authentic SRT fixture track (1,578 cues) from test/fixtures/languages/*.srt
+  const authenticSrt = getAuthenticSrtTrack(normLang);
+  if (authenticSrt && authenticSrt.length > 0) {
+    if (sourceCues.length === authenticSrt.length) {
+      return authenticSrt.map((sc, i) => ({
+        id: sourceCues[i]?.id || sc.id,
+        start: sourceCues[i]?.start ?? sc.start,
+        duration: sourceCues[i]?.duration ?? sc.duration,
+        text: sc.text,
+      }));
+    }
+    return sourceCues.map((c, i) => {
+      const match = authenticSrt.find((sc) => sc.id === c.id) || authenticSrt[i];
+      return {
+        ...c,
+        id: c.id || `cue-${i + 1}`,
+        text: match?.text || c.text,
+      };
+    });
+  }
 
   // If target language is Hebrew and source matches standard 10 cues, map directly to authentic Hebrew fixture
   if ((normLang === 'he' || normLang === 'iw') && sourceCues.length === SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U.length) {

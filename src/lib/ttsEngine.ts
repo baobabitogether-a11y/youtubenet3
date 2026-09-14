@@ -230,48 +230,98 @@ export async function speakText(
   return fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, onBoundary);
 }
 
+interface WordTimingInfo {
+  start: number;
+  end: number;
+  text: string;
+  weight: number;
+}
+
+function extractWordTimings(text: string): WordTimingInfo[] {
+  const result: WordTimingInfo[] = [];
+  const regex = /(\s+|[^\s\p{L}\p{N}]+|[\p{L}\p{N}]+)/gu;
+  let match: RegExpExecArray | null;
+  const rawTokens: { text: string; start: number; end: number; isWord: boolean }[] = [];
+
+  while ((match = regex.exec(text)) !== null) {
+    const matchText = match[0];
+    const start = match.index;
+    const end = start + matchText.length;
+    const isWord = /\S/.test(matchText) && !/^[.,!?;:"'()[\]{}<>«»„“—–]+$/.test(matchText);
+    rawTokens.push({ text: matchText, start, end, isWord });
+  }
+
+  for (let i = 0; i < rawTokens.length; i++) {
+    const token = rawTokens[i];
+    if (token.isWord) {
+      // Base weight: 100ms base + 35ms per character
+      let weight = 100 + token.text.length * 35;
+      // Check trailing punctuation for natural pause
+      const nextToken = rawTokens[i + 1];
+      if (nextToken && !nextToken.isWord) {
+        if (/[,;—–-]/.test(nextToken.text)) {
+          weight += 160;
+        } else if (/[.!?:\n]/.test(nextToken.text)) {
+          weight += 280;
+        }
+      }
+      result.push({
+        start: token.start,
+        end: token.end,
+        text: token.text,
+        weight,
+      });
+    }
+  }
+
+  return result;
+}
+
 function startSimulatedBoundaryProgression(
   text: string,
   rate: number,
-  onBoundary: (charIndex: number) => void
+  onBoundary: (charIndex: number) => void,
+  totalDurationMs?: number
 ): () => void {
   if (simulatedBoundaryTimer) {
     clearTimeout(simulatedBoundaryTimer);
     simulatedBoundaryTimer = null;
   }
 
-  // Find all word starting offsets
-  const wordOffsets: number[] = [];
-  const regex = /(\s+|[^\s\w]+|\w+)/g;
-  let match: RegExpExecArray | null;
-
-  while ((match = regex.exec(text)) !== null) {
-    const isWord = /\S/.test(match[0]) && !/^[.,!?;:"'()[\]{}<>]+$/.test(match[0]);
-    if (isWord) {
-      wordOffsets.push(match.index);
-    }
-  }
-
-  if (wordOffsets.length === 0) return () => {};
+  const words = extractWordTimings(text);
+  if (words.length === 0) return () => {};
 
   // Notify first word immediately
-  onBoundary(wordOffsets[0]);
+  onBoundary(words[0].start);
+
+  const cleanRate = Math.max(0.4, rate || 1.0);
+  let intervals: number[] = [];
+
+  if (totalDurationMs && totalDurationMs > 0) {
+    const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
+    intervals = words.map((w) => Math.max(80, (w.weight / totalWeight) * totalDurationMs));
+  } else {
+    intervals = words.map((w) => Math.max(80, Math.min(1200, w.weight / cleanRate)));
+  }
 
   let currentWordIdx = 0;
-  // Estimate ~220 words per minute at 1.0x rate (approx 270ms per word)
-  const baseMsPerWord = Math.max(150, Math.min(800, 270 / Math.max(0.4, rate)));
+  let isCancelled = false;
 
   const scheduleNext = () => {
+    if (isCancelled) return;
     currentWordIdx++;
-    if (currentWordIdx < wordOffsets.length) {
-      onBoundary(wordOffsets[currentWordIdx]);
-      simulatedBoundaryTimer = setTimeout(scheduleNext, baseMsPerWord);
+    if (currentWordIdx < words.length) {
+      onBoundary(words[currentWordIdx].start);
+      const nextDelay = intervals[currentWordIdx] || 250;
+      simulatedBoundaryTimer = setTimeout(scheduleNext, nextDelay);
     }
   };
 
-  simulatedBoundaryTimer = setTimeout(scheduleNext, baseMsPerWord);
+  const initialDelay = intervals[0] || 250;
+  simulatedBoundaryTimer = setTimeout(scheduleNext, initialDelay);
 
   return () => {
+    isCancelled = true;
     if (simulatedBoundaryTimer) {
       clearTimeout(simulatedBoundaryTimer);
       simulatedBoundaryTimer = null;
@@ -360,9 +410,11 @@ function attemptWebSpeechSynthesis(
         });
 
         utterance.onboundary = (event) => {
-          hasRealBoundary = true;
-          if (clearSimulated) clearSimulated();
-          if (event.name === 'word' || !event.name) {
+          if ((event.name === 'word' || !event.name) && typeof event.charIndex === 'number') {
+            if (event.charIndex > 0) {
+              hasRealBoundary = true;
+              if (clearSimulated) clearSimulated();
+            }
             onBoundary(event.charIndex);
           }
         };
@@ -534,12 +586,44 @@ function speakViaAudioStream(
         }
       };
 
+      audio.onloadedmetadata = () => {
+        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0 && onBoundary) {
+          if (clearBoundary) clearBoundary();
+          const totalDurationMs = (audio.duration * 1000) / audio.playbackRate;
+          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary, totalDurationMs);
+        }
+      };
+
       audio.onplay = () => {
         logTTS(`[Audio Stream] Playing neural audio stream for "${text.substring(0, 40)}..." [lang: ${cleanLang}]`);
         if (onBoundary) {
-          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary);
+          const totalDurationMs = audio.duration && !isNaN(audio.duration) && audio.duration > 0
+            ? (audio.duration * 1000) / audio.playbackRate
+            : undefined;
+          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary, totalDurationMs);
         }
       };
+
+      // Continuous timeupdate sync: matches current audio playback time to exact word offsets
+      const words = extractWordTimings(text);
+      if (words.length > 0 && onBoundary) {
+        audio.ontimeupdate = () => {
+          if (!audio.duration || isNaN(audio.duration) || audio.duration <= 0) return;
+          const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
+          const currentTimeMs = (audio.currentTime * 1000) / audio.playbackRate;
+          const totalDurationMs = (audio.duration * 1000) / audio.playbackRate;
+
+          let accumulatedMs = 0;
+          for (let i = 0; i < words.length; i++) {
+            const wordMs = Math.max(80, (words[i].weight / totalWeight) * totalDurationMs);
+            if (currentTimeMs >= accumulatedMs && currentTimeMs < accumulatedMs + wordMs) {
+              onBoundary(words[i].start);
+              break;
+            }
+            accumulatedMs += wordMs;
+          }
+        };
+      }
 
       audio.onended = () => {
         finish(true);

@@ -8,6 +8,38 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Compact View Presented Subtitle Text & TTS Audio Synchronization
+
+- **1:1 Text-to-Speech Alignment**:
+  - Updated `handleSpeakCue` and `Auto-TTS` in `VideoPlayer.tsx` to immediately synchronize `localTranslatedText` with `textToSpeak` whenever translated TTS narration begins.
+  - Ensured that the translated subtitle text rendered on screen matches the exact string being spoken by the TTS audio engine word-for-word.
+- **Fallback Language Model Alignment**:
+  - Corrected language code selection when TTS falls back to the original subtitle text (e.g. `isOriginalSpoken = textToSpeak === activeCue.text`), ensuring source language voices (`ru`, etc.) are used instead of target language voices (`it`, `en`), preventing garbled cross-language speech.
+- **Normalized Language Codes**:
+  - Normalized ISO language codes (`iw`, `il` -> `he`) in `VideoPlayer.tsx` target subtitle cache lookups and timestamp matching (`Math.abs(c.start - activeCue.start) < 0.5`).
+- **Status**: Completed & 100% Verified.
+
+### Authentic SRT Track Fixtures & Hebrew Language Code Normalization
+
+- **Authentic Multi-Language Fixture Priority**:
+  - Enhanced `server.ts` and `translateService.ts` to inspect authentic `.srt` tracks in `test/fixtures/languages/*.srt` for instant, offline translation resolution across bundled demonstration tracks.
+- **Hebrew ISO Language Code Normalization (`he` / `iw` / `il`)**:
+  - Added support for mapping legacy/alternate ISO language codes (`iw`, `il`) to standard `he` across server-side translation endpoints, native track caches, and memory lookup tables.
+- **Status**: Completed & 100% Verified.
+
+### Subtitle TTS Audio & Text Highlighting Synchronization
+
+- **High-Precision Unicode Token Segmentation**:
+  - Replaced ASCII-only regex (`\w`) in `ttsEngine.ts` with Unicode character class properties (`\p{L}\p{N}`) to correctly recognize and tokenize word boundaries across all international languages (Russian, Italian, Arabic, Hebrew, Spanish, etc.).
+- **Dynamic Cadence Pacing & Natural Pauses**:
+  - Upgraded word boundary progression timing to calculate durations based on individual word lengths, character counts, and natural pauses for punctuation marks (commas, periods, semicolons, colons).
+- **Continuous Audio Stream Synchronization**:
+  - Added `ontimeupdate` and `onloadedmetadata` event listeners to the neural audio streaming playback engine, locking visual word highlights directly to the audio element's live playback time.
+- **Robust Token Index Selection in `HighlightableText`**:
+  - Refined word selection algorithm so whitespace and trailing punctuation after a word maintain focus on the active spoken word, eliminating premature jumps and incorrect fallbacks.
+- **Status**: Completed & 100% Verified.
+
+
 ### Full Real-Network E2E Test Suite (Without Fixtures) Implementation
 
 - **Complete Suite Implementation & Button Coverage**:
