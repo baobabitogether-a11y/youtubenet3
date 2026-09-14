@@ -288,8 +288,15 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
 
     const loadVoices = () => {
       try {
-        const v = window.speechSynthesis.getVoices() || [];
-        setAvailableVoices(v);
+        const rawVoices = window.speechSynthesis.getVoices() || [];
+        const seen = new Set<string>();
+        const uniqueVoices = rawVoices.filter((voice) => {
+          const key = `${voice.voiceURI || voice.name}::${voice.lang}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        setAvailableVoices(uniqueVoices);
       } catch {}
     };
 
