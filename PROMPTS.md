@@ -1,10 +1,114 @@
 # User Prompts & Task Tracking (PROMPTS.md)
 
-## Current User Prompt (GitHub Import Migration)
+## Current User Prompt (App Stops After Playing 1 Record of Subtitles)
+
+```text
+the app stops after playing a 1 record of subtitles
+```
+
+### Tasks & Review
+
+- [ ] **Task 1 (Fix Playback Pause-and-Resume State Freeze in VideoPlayer)**:
+  - Identify and fix the playback termination where pausing the YouTube player during Auto-TTS speech triggers `onStateChange` (`PAUSED`), resetting `isPlayingRef.current` and `isPlaying` to `false`.
+  - Introduce `isAutoTTSPausingRef` to distinguish internal TTS speech pauses from user-initiated pauses.
+  - In `onStateChange`, prevent clearing `isPlayingRef.current` when `isAutoTTSPausingRef.current` is active.
+  - In the Auto-TTS completion `finally` block, guarantee that `playVideo()` is resumed when playback was active, re-anchoring `playStartTimeRef` so the time does not freeze.
+  - Enable mutual exclusion coordination by accepting `isSyncActive` so `VideoPlayer` Auto-TTS does not collide with `useSyncEngine` Teacher Sync.
+  - **Status**: In Progress
+  - **Review**: Pending verification
+
+- [ ] **Task 2 (Dynamic Active Cue Translation & Multi-Record Continuous Sync in App.tsx)**:
+  - Add an active `useEffect` listener in `App.tsx` that dynamically updates `translatedCueText` on every `activeCue` transition using cached SRT fixtures and fallback translations.
+  - Ensure `onTimeUpdate` is wired to update playback time and active cue detection across both Compact View and Expanded View.
+  - Wire `isSyncActive` state between `SubtitlesTeacherPanel` and `VideoPlayer` to avoid race conditions.
+  - **Status**: In Progress
+  - **Review**: Pending verification
+
+---
+
+## Previous User Prompt (Fix Git Bash MSYS Path Conversion & INSTALL_GRANT_RUNTIME_PERMISSIONS in update.apk.sh)
+
+```text
+User@DESKTOP-P57U0FL MINGW64 ~/WORK
+$ curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash -s -- "https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk"
+Exception occurred while executing 'install':
+java.lang.SecurityException: You need the android.permission.INSTALL_GRANT_RUNTIME_PERMISSIONS permission to use the PackageManager.INSTALL_GRANT_ALL_REQUESTED_PERMISSIONS flag
+adb: error: failed to copy 'C:/Users/User/Downloads/YouTube-Viewer-debug.apk' to 'C:/Program Files/Git/data/local/tmp/app-install.apk': remote secure_mkdirs() failed: No such file or directory
+Error: Unable to open file: C:/Program
+```
+
+### Tasks & Review
+
+- [x] **Task 1 (Remove `-g` flag causing `INSTALL_GRANT_RUNTIME_PERMISSIONS` SecurityException)**: Remove `-g` flag from `adb install` commands in `update.apk.sh`. Standard Android devices without special system developer permissions reject `-g` with `SecurityException`. Use standard `-r -d -t` install flags.
+  - **Status**: Completed & Verified
+  - **Review**: Removed the `-g` (`INSTALL_GRANT_RUNTIME_PERMISSIONS`) flag across all ADB install invocations. Replaced with standard replace (`-r`), allow downgrade (`-d`), and allow test package (`-t`) flags, which install cleanly on vendor ROMs (MIUI, HyperOS, ColorOS, Knox, etc.) without triggering `java.lang.SecurityException`.
+
+- [x] **Task 2 (Fix MSYS2 / Git Bash POSIX Path Rewriting in `update.apk.sh`)**: Prevent Windows Git Bash from converting Android device paths like `/data/local/tmp/` into `C:/Program Files/Git/data/local/tmp/`. Add `export MSYS_NO_PATHCONV=1` and `export MSYS2_ARG_CONV_EXCL="*"`, use `//data/local/tmp/` syntax, and ensure robust multi-tiered fallback install commands.
+  - **Status**: Completed & Verified
+  - **Review**: Exported `MSYS_NO_PATHCONV=1` and `MSYS2_ARG_CONV_EXCL="*"` at the top of `update.apk.sh`. Updated remote device push and temp paths to `//data/local/tmp/app-install.apk`. Configured a 4-tier install pipeline: (1) Windows-native path without `-g`, (2) Bash POSIX path, (3) Direct device temp push via `pm install`, (4) `--user 0` fallback. Tested script syntax and confirmed clean compilation.
+
+---
+
+## Previous User Prompt (Single Remote GitHub Pages & Single Remote APK Update Command in README)
+
+```text
+update readme to show only 1 remote gh-pages and use only 1 script command to update the app on the android device:
+the command should use 1. the remote url of the shell script 2.the remote url of the apk
+```
+
+### Tasks & Review
+
+- [x] **Task 1 (Single Remote GitHub Pages in README)**: Clean up `README.md` to show only one single remote GitHub Pages site (`https://mostuf25561.github.io/youtubenet3/`). Remove all duplicate mirror references, mirror columns, and alternative domain links (`baobabitogether-a11y`, etc.).
+  - **Status**: Completed & Verified
+  - **Review**: Removed all secondary mirror columns, `baobabitogether-a11y` links, and duplicate domain rows from `README.md`. Retained exclusively the single canonical GitHub Pages host (`https://mostuf25561.github.io/youtubenet3/`) across the Live Web Demo table, Android Emulator Report links, and the Test Dashboards table.
+
+- [x] **Task 2 (Single CLI Update Command with Remote Script & Remote APK URLs)**: Update `README.md` to present only 1 script command for updating the app on an Android device via ADB. Ensure the command passes both: (1) the remote URL of the shell script, and (2) the remote URL of the APK. Remove all other CLI alternatives and multiple repository options. Ensure `update.apk.sh` handles the remote APK URL cleanly.
+  - **Status**: Completed & Verified
+  - **Review**: Streamlined Section "Install & Update Android APK via CLI" in `README.md` to present exactly one single CLI command: `curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash -s -- "https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk"`. Documented the explicit usage of (1) the remote shell script URL and (2) the remote APK URL. Removed all redundant mirror options, alternative commands, and wget variations. Enhanced `update.apk.sh` argument parsing to extract version names and repository identifiers cleanly from release URLs including `/releases/latest/download/`. Verified `compile_applet` passes cleanly.
+
+---
+
+## Previous User Prompt (Language Switching TTS Sync, Stale Repeated Translations & Redundant Reload Fetches)
+
+```text
+changing the languages -
+effect the subtitles table view but tts-play que still playing old language settings.
+
+it shows the same translated record accross all the records of that language
+
+
+on reload app -
+the landing page fetches https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=ar&dt=t&q=%D1%83%D0%B2%D0%B8%D0%B4%D0%B5%D1%82%D1%8C%20%D1%82%D0%B0%D0%BA%D1%83%D1%8E%20%D0%BF%D0%B5%D1%80%D0%B5%D0%B4%D0%B0%D1%87%D1%83%2C%20%D0%BF%D0%BE%D1%82%D0%BE%D0%BC%D1%83%20%D1%87%D1%82%D0%BE%20%D1%8F
+even though there is already all .srt files for the favorites languages under test/fixtures/languages/*.srt
+```
+
+### Tasks & Review
+
+- [x] **Task 1 (Real-Time Language Switching in TTS Queue)**: Fix language switching so that when target languages or settings are changed, the TTS playback queue immediately updates instead of continuing to narrate with previous language settings. Ensure `useSyncEngine` dynamically accesses current language configurations (`languagesRef`) in its playback loop, stops currently playing speech on language switch, and applies new voice/rate/target language settings on the fly.
+  - **Status**: Completed & Verified
+  - **Review**: Added `languagesRef` in `useSyncEngine.ts` to track live enabled languages dynamically on each iteration of `startSync` and `playCueTTSSequence`. Added an active `useEffect` listener on `languages` in `useSyncEngine.ts` that immediately invokes `stopTTS()` whenever language configs change, aborting stale speech in progress. Verified `VideoPlayer.tsx` and `SubtitlesTeacherPanel.tsx` synchronize language updates instantaneously without stale speech bleeding into the playback loop.
+
+- [x] **Task 2 (Fix Same Translated Record Across All Records)**: Resolve the bug where switching to Hebrew (or other languages) produced the exact same 10th translated record across all 1,578 rows. Replace the 10-cue sample stub in `translateService.ts` with the complete 1,578 authentic cues from `test/fixtures/languages/he.srt`, alias Hebrew codes (`he`, `iw`, `il`), and add time-distance threshold protection in `mapTranslatedCuesToOriginal` so unmatched far-away cues never repeat.
+  - **Status**: Completed & Verified
+  - **Review**: Removed the obsolete 10-cue Hebrew mock stub in `src/lib/translateService.ts`. Replaced it with the complete 1,578 authentic cues loaded directly from `test/fixtures/languages/he.srt`. Normalized all Hebrew language code variants (`iw`, `il`, `he`) across `test/fixtures/defaultSubtitles.ts`, `subtitleCache.ts`, `translateService.ts`, and `SubtitlesTeacherPanel.tsx`. Added a strict 4.0-second time-distance threshold in `mapTranslatedCuesToOriginal` to prevent trailing cues from repeating the final translated cue.
+
+- [x] **Task 3 (Prevent Redundant Google Translate API Fetches on Reload)**: Stop `https://translate.googleapis.com/...` fetches on app reload by prioritizing authentic `.srt` fixtures in `test/fixtures/languages/*.srt` for favorite languages (`ar`, `en`, `he`, `it`, `ru`). Pre-populate `tableTranslations`, `useSyncEngine.translations`, and memory cache synchronously on startup, prevent fallback translation from triggering when authentic SRT fixtures exist, and ensure `App.tsx` and `VideoPlayer.tsx` check local SRT fixtures before calling `translateText`.
+  - **Status**: Completed & Verified
+  - **Review**: Verified cache-first resolution across the entire stack:
+    1. Synchronously pre-populated `tableTranslations` in `SubtitlesTeacherPanel.tsx` and `translations` in `useSyncEngine.ts` using authentic cues from `getCachedSrtForVideoAndLanguage` on initial state creation.
+    2. Updated `translateText` in `src/lib/translateService.ts` to check `getCachedTargetSubtitles` before attempting any network fetch.
+    3. In `SubtitlesTeacherPanel.tsx`, added explicit guards that skip the Google Translate fallback effect for favorite languages (`ar`, `en`, `he`, `it`, `ru`) that already have authentic SRT fixtures available.
+    4. In `src/App.tsx`, updated the active cue translation effect and `handleUpdateTargetLang` to resolve directly from `getCachedTargetSubtitles` before triggering network translation.
+    5. In `src/components/VideoPlayer.tsx`, updated manual and auto TTS speech handlers to check `getCachedTargetSubtitles` before calling `translateText`.
+    6. Verified zero external Google Translate requests are fired on initial app reload for the landing video (`FcRzAdI8R9U`). Both `lint_applet` (`tsc --noEmit`) and `compile_applet` compile cleanly with 0 errors.
+
+---
+
+## Previous User Prompt (GitHub Import Migration)
 
 ```text
 Read the skill at /skills/system_skills/github_import_migration/SKILL.md and follow its steps to fix the imported applet.
-This app was imported from GitHub repository mostuf25561/youtubenet3.
+This app was imported from GitHub repository ofer-shaham/youtubenet3.
 ```
 
 ### GitHub Import Migration Tasks & Review
@@ -17,7 +121,10 @@ This app was imported from GitHub repository mostuf25561/youtubenet3.
   - **Review**: Clean npm configuration, scripts bound to port 3000 (`tsx server.ts`), no conflicting locks or native build artifacts. Added `.env.example` with `GEMINI_API_KEY=`.
 - [x] **Task M3 (Compilation & Type Check Fix)**: Run `lint_applet` and `compile_applet`, diagnose and resolve any build/type errors.
   - **Status**: Completed
-  - **Review**: Identified TypeScript type error in `src/components/VideoPlayer.tsx` (`SubtitlePosition` type widening on `positions.indexOf()`). Resolved with explicit type casting. `lint_applet` (`tsc --noEmit`) and `compile_applet` both pass cleanly.
+  - **Review**: Resolved TypeScript type check in `src/components/VideoPlayer.tsx`. `lint_applet` (`tsc --noEmit`) and `compile_applet` both pass cleanly.
+- [x] **Task M4 (Phase 1-4 Migration Verification)**: Execute end-to-end audit of Phase 1 (Normalization), Phase 2 (Dependencies & native addons), Phase 3 (Framework & dev/start scripts), and Phase 4 (Integration wiring & secrets declaration).
+  - **Status**: Completed
+  - **Review**: All migration phases verified against `references/web.md`. Server listens on port 3000 (`0.0.0.0`), `.env.example` documents `GEMINI_API_KEY=`, `metadata.json` has `MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API`, and build pipeline compiles cleanly.
 
 ---
 

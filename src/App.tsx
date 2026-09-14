@@ -132,29 +132,6 @@ export default function App() {
     setSelectedTargetLang(existing);
   }, [videoId]);
 
-  // Synchronize translated text for active cue in real time
-  useEffect(() => {
-    if (!activeCue?.text) {
-      setTranslatedCueText(null);
-      return;
-    }
-    if (!selectedTargetLang) {
-      // Prompt user to pick a target language before fetching/presenting translation
-      return;
-    }
-    let isSubscribed = true;
-    translateText(activeCue.text, 'auto', selectedTargetLang)
-      .then((t) => {
-        if (isSubscribed) setTranslatedCueText(t);
-      })
-      .catch(() => {
-        if (isSubscribed) setTranslatedCueText(null);
-      });
-    return () => {
-      isSubscribed = false;
-    };
-  }, [activeCue?.text, selectedTargetLang]);
-
   // Background check for newer APK version
   useEffect(() => {
     checkApkUpdate()
@@ -225,6 +202,42 @@ export default function App() {
     return null;
   });
 
+  // Synchronize translated text for active cue in real time
+  useEffect(() => {
+    if (!activeCue?.text) {
+      setTranslatedCueText(null);
+      return;
+    }
+    if (!selectedTargetLang) {
+      // Prompt user to pick a target language before fetching/presenting translation
+      return;
+    }
+
+    // Check authentic local SRT track / target subtitle cache first
+    const cleanLang = selectedTargetLang.toLowerCase().split('-')[0];
+    const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
+    if (srtCues && srtCues.length > 0) {
+      const activeList = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+      const match = srtCues.find((c) => c.id === activeCue.id) || (activeList.length > 0 ? srtCues[activeList.findIndex((c) => c.id === activeCue.id)] : null);
+      if (match && match.text) {
+        setTranslatedCueText(match.text);
+        return;
+      }
+    }
+
+    let isSubscribed = true;
+    translateText(activeCue.text, 'auto', selectedTargetLang)
+      .then((t) => {
+        if (isSubscribed) setTranslatedCueText(t);
+      })
+      .catch(() => {
+        if (isSubscribed) setTranslatedCueText(null);
+      });
+    return () => {
+      isSubscribed = false;
+    };
+  }, [activeCue?.id, activeCue?.text, selectedTargetLang, videoId, customCues, interceptedData]);
+
   const [isFetchingSubtitles, setIsFetchingSubtitles] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [restoredToast, setRestoredToast] = useState<string | null>(null);
@@ -243,6 +256,47 @@ export default function App() {
   }, [videoId]);
 
   const playerRef = useRef<YouTubePlayerHandle | null>(null);
+  const [isSyncActive, setIsSyncActive] = useState<boolean>(false);
+
+  const handlePlayerTimeUpdate = useCallback((t: number) => {
+    const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+    if (!active || active.length === 0) return;
+    const match = active.find((c) => t >= c.start && t <= c.start + c.duration);
+    setActiveCue((prev) => (prev?.id === match?.id ? prev : match || null));
+  }, [customCues, interceptedData]);
+
+  // Dynamic translation of activeCue for subtitle overlay and Auto-TTS
+  useEffect(() => {
+    if (!activeCue?.text) {
+      setTranslatedCueText(null);
+      return;
+    }
+    const targetLang = selectedTargetLang || 'it';
+    const cleanLang = targetLang.toLowerCase().split('-')[0];
+
+    // Check authentic cached target subtitles first
+    const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
+    if (srtCues && srtCues.length > 0) {
+      const match = srtCues.find((c) => c.id === activeCue.id);
+      if (match && match.text) {
+        setTranslatedCueText(match.text);
+        return;
+      }
+    }
+
+    let isCurrent = true;
+    translateText(activeCue.text, 'auto', targetLang)
+      .then((t) => {
+        if (isCurrent && t) setTranslatedCueText(t);
+      })
+      .catch(() => {
+        if (isCurrent) setTranslatedCueText(null);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeCue?.id, activeCue?.text, selectedTargetLang, videoId]);
 
   // Active cue tracker from player playback position
   useEffect(() => {
@@ -852,9 +906,23 @@ export default function App() {
     );
 
     if (activeCue?.text) {
-      translateText(activeCue.text, 'auto', langCode)
-        .then((t) => setTranslatedCueText(t))
-        .catch(() => setTranslatedCueText(null));
+      const cleanLang = langCode.toLowerCase().split('-')[0];
+      const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
+      if (srtCues && srtCues.length > 0) {
+        const activeList = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+        const match = srtCues.find((c) => c.id === activeCue.id) || (activeList.length > 0 ? srtCues[activeList.findIndex((c) => c.id === activeCue.id)] : null);
+        if (match && match.text) {
+          setTranslatedCueText(match.text);
+        } else {
+          translateText(activeCue.text, 'auto', langCode)
+            .then((t) => setTranslatedCueText(t))
+            .catch(() => setTranslatedCueText(null));
+        }
+      } else {
+        translateText(activeCue.text, 'auto', langCode)
+          .then((t) => setTranslatedCueText(t))
+          .catch(() => setTranslatedCueText(null));
+      }
     }
 
     logInfo('Language', `Target language updated to "${langCode}" for video ${videoId}`);
@@ -1043,6 +1111,8 @@ export default function App() {
               }
             }}
             compactView={true}
+            isSyncActive={isSyncActive}
+            onTimeUpdate={handlePlayerTimeUpdate}
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
@@ -1294,6 +1364,8 @@ export default function App() {
             hasSubtitles={activeCues.length > 0}
             captionsEnabled={captionsEnabled}
             compactView={false}
+            isSyncActive={isSyncActive}
+            onTimeUpdate={handlePlayerTimeUpdate}
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
@@ -1363,6 +1435,7 @@ export default function App() {
             onJumpToCue={(cue) => {
               setActiveCue(cue);
             }}
+            onSyncStateChange={setIsSyncActive}
           />
         </div>
       </main>

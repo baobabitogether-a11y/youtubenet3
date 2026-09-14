@@ -9,6 +9,11 @@
 
 set -uo pipefail
 
+# Disable MSYS2 / Git Bash automatic path conversion on Windows
+# Prevents /data/local/tmp from turning into C:/Program Files/Git/data/local/tmp
+export MSYS_NO_PATHCONV=1
+export MSYS2_ARG_CONV_EXCL="*"
+
 REPO_OWNER="mostuf25561"
 REPO_NAME="youtubenet3"
 ALT_REPO_OWNER="baobabitogether-a11y"
@@ -26,7 +31,13 @@ MAIN_ACTIVITY="com.ytviewer.app/.MainActivity"
 if [[ "${ARG_INPUT}" =~ ^https?:// ]]; then
   DOWNLOAD_URL="${ARG_INPUT}"
   # Extract version from URL if available, or extract file name
-  VERSION=$(echo "${ARG_INPUT}" | sed -E 's|.*/releases/download/([^/]+)/.*|\1|')
+  if [[ "${ARG_INPUT}" =~ /releases/download/([^/]+)/ ]]; then
+    VERSION="${BASH_REMATCH[1]}"
+  elif [[ "${ARG_INPUT}" =~ /releases/latest/ ]]; then
+    VERSION="latest"
+  else
+    VERSION="remote-url"
+  fi
   if [[ "${ARG_INPUT}" =~ /([^/]+\.apk)$ ]]; then
     APK_NAME="${BASH_REMATCH[1]}"
   fi
@@ -200,35 +211,53 @@ echo ""
 echo "[*] Installing APK to device (${ADB_TARGET_PATH})..."
 INSTALL_SUCCESS=false
 
-# Method A: Try native Windows path with replace & grant flags
-INSTALL_OUTPUT=$($ADB_CMD install -r -d -t -g "${ADB_TARGET_PATH}" 2>&1 || true)
+# Method 1: Standard adb install with replace (-r), allow downgrade (-d), and test (-t)
+# Note: We intentionally avoid -g (INSTALL_GRANT_RUNTIME_PERMISSIONS) because
+# vendor ROMs (MIUI, HyperOS, ColorOS, Knox) reject it with SecurityException
+INSTALL_OUTPUT=$($ADB_CMD install -r -d -t "${ADB_TARGET_PATH}" 2>&1 || true)
 echo "${INSTALL_OUTPUT}"
 
 if echo "${INSTALL_OUTPUT}" | grep -iq "Success"; then
   INSTALL_SUCCESS=true
 fi
 
-# Method B: If Windows path fails, try bash POSIX path
+# Method 2: If native Windows path fails, try bash POSIX path
 if [ "$INSTALL_SUCCESS" = false ]; then
   echo "[!] Retrying installation with POSIX path (${APK_FILE})..."
-  INSTALL_OUTPUT_B=$($ADB_CMD install -r -d -t -g "${APK_FILE}" 2>&1 || true)
-  echo "${INSTALL_OUTPUT_B}"
-  if echo "${INSTALL_OUTPUT_B}" | grep -iq "Success"; then
+  INSTALL_OUTPUT_2=$($ADB_CMD install -r -d -t "${APK_FILE}" 2>&1 || true)
+  echo "${INSTALL_OUTPUT_2}"
+  if echo "${INSTALL_OUTPUT_2}" | grep -iq "Success"; then
     INSTALL_SUCCESS=true
   fi
 fi
 
-# Method C: Push to device temp directory and run pm install (bulletproof against path quirks)
+# Method 3: Push to device temp directory and run pm install
+# Using //data/local/tmp/ prevents any MSYS path conversion in Git Bash
 if [ "$INSTALL_SUCCESS" = false ]; then
-  echo "[!] Retrying via direct ADB push to /data/local/tmp/..."
-  $ADB_CMD push "${APK_FILE}" /data/local/tmp/app-install.apk 2>&1 || \
-    $ADB_CMD push "${ADB_TARGET_PATH}" /data/local/tmp/app-install.apk 2>&1 || true
+  echo "[!] Retrying via direct ADB push to //data/local/tmp/..."
+  $ADB_CMD shell rm -f //data/local/tmp/app-install.apk 2>/dev/null || true
+  
+  PUSH_OUTPUT=$($ADB_CMD push "${ADB_TARGET_PATH}" //data/local/tmp/app-install.apk 2>&1 || true)
+  echo "${PUSH_OUTPUT}"
+  if ! echo "${PUSH_OUTPUT}" | grep -iq "pushed"; then
+    $ADB_CMD push "${APK_FILE}" //data/local/tmp/app-install.apk 2>&1 || true
+  fi
 
-  INSTALL_OUTPUT_C=$($ADB_CMD shell pm install -r -d -g /data/local/tmp/app-install.apk 2>&1 || true)
-  echo "${INSTALL_OUTPUT_C}"
-  $ADB_CMD shell rm -f /data/local/tmp/app-install.apk 2>/dev/null || true
+  INSTALL_OUTPUT_3=$($ADB_CMD shell pm install -r -d -t //data/local/tmp/app-install.apk 2>&1 || true)
+  echo "${INSTALL_OUTPUT_3}"
+  $ADB_CMD shell rm -f //data/local/tmp/app-install.apk 2>/dev/null || true
 
-  if echo "${INSTALL_OUTPUT_C}" | grep -iq "Success"; then
+  if echo "${INSTALL_OUTPUT_3}" | grep -iq "Success"; then
+    INSTALL_SUCCESS=true
+  fi
+fi
+
+# Method 4: Retry with --user 0 for multi-profile/work profile devices
+if [ "$INSTALL_SUCCESS" = false ]; then
+  echo "[!] Retrying with --user 0 flag..."
+  INSTALL_OUTPUT_4=$($ADB_CMD install --user 0 -r -d -t "${ADB_TARGET_PATH}" 2>&1 || true)
+  echo "${INSTALL_OUTPUT_4}"
+  if echo "${INSTALL_OUTPUT_4}" | grep -iq "Success"; then
     INSTALL_SUCCESS=true
   fi
 fi
