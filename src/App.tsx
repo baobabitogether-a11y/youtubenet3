@@ -1190,8 +1190,8 @@ export default function App() {
         />
 
         <OfflineIndicator />
-        {settings.enableNetworkInspector && <NetworkInspectorModal />}
-        {settings.enableErrorInspector && <ErrorInspectorModal />}
+        <NetworkInspectorModal />
+        <ErrorInspectorModal />
         {settings.enableDiagnosticDock && <FloatingDiagnosticDock />}
       </div>
     );
@@ -1509,11 +1509,11 @@ export default function App() {
         onClose={() => setIsApkUpdateModalOpen(false)}
       />
 
-      {/* Real-time Web Network Traffic Inspector (if enabled in settings) */}
-      {settings.enableNetworkInspector && <NetworkInspectorModal />}
+      {/* Real-time Web Network Traffic Inspector */}
+      <NetworkInspectorModal />
 
-      {/* App Errors & Redux State Machine Actions Inspector (if enabled in settings) */}
-      {settings.enableErrorInspector && <ErrorInspectorModal />}
+      {/* App Errors & Redux State Machine Actions Inspector */}
+      <ErrorInspectorModal />
 
       {/* Persistent Floating Diagnostic Dock (if enabled in settings) */}
       {settings.enableDiagnosticDock && <FloatingDiagnosticDock />}
