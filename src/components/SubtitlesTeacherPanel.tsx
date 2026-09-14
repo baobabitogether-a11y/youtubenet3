@@ -71,6 +71,7 @@ interface SubtitlesTeacherPanelProps {
   onSelectTargetLang?: (langCode: string) => void;
   activeCue?: CaptionCue | null;
   onJumpToCue?: (cue: CaptionCue, index: number) => void;
+  onSyncStateChange?: (isActive: boolean) => void;
 }
 
 const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
@@ -142,6 +143,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   onSelectTargetLang,
   activeCue,
   onJumpToCue,
+  onSyncStateChange,
 }: SubtitlesTeacherPanelProps) => {
   const dispatch = useAppDispatch();
   const [targetLanguages, setTargetLanguages] = useState<TargetLanguage[]>(() => {
@@ -366,6 +368,10 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     videoId,
     externalTranslations: tableTranslations,
   });
+
+  useEffect(() => {
+    onSyncStateChange?.(isSyncActive);
+  }, [isSyncActive, onSyncStateChange]);
 
   // Calculate effective active index from sync engine or passed activeCue
   const effectiveActiveIndex = useMemo(() => {

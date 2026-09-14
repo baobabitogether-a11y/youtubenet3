@@ -61,6 +61,7 @@ interface VideoPlayerProps {
   subtitlePosition?: SubtitlePosition;
   showTranslatedOnTop?: boolean;
   onChangeSubtitlePosition?: (pos: SubtitlePosition) => void;
+  isSyncActive?: boolean;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -90,6 +91,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       subtitlePosition = 'top',
       showTranslatedOnTop = true,
       onChangeSubtitlePosition,
+      isSyncActive = false,
     },
     ref
   ) => {
@@ -229,15 +231,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     // Track spoken cues to prevent repeated speech within the same cue window
     const lastSpokenCueIdRef = useRef<string | number | null>(null);
     const isAutoTTSSpeakingRef = useRef<boolean>(false);
+    const isAutoTTSPausingRef = useRef<boolean>(false);
 
     // Reset spoken cue tracking on video change
     useEffect(() => {
       lastSpokenCueIdRef.current = null;
+      isAutoTTSPausingRef.current = false;
+      isAutoTTSSpeakingRef.current = false;
     }, [videoId]);
 
     // Automatic TTS Narration loop per cue during playback
     useEffect(() => {
-      if (!autoTTSEnabled || !isPlaying || !activeCue || !isCaptionsActive) {
+      if (isSyncActive || !autoTTSEnabled || !isPlaying || !activeCue || !isCaptionsActive) {
         return;
       }
 
@@ -248,6 +253,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
       lastSpokenCueIdRef.current = activeCue.id;
       isAutoTTSSpeakingRef.current = true;
+      isAutoTTSPausingRef.current = true;
 
       // Strict Mutual Exclusion: Pause YouTube video during speech
       try {
@@ -267,23 +273,27 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         try {
           unlockTTSAudio();
           const targetLang = targetLanguage || 'es';
-          let textToSpeak = translatedCueText;
+          let textToSpeak = '';
+
+          // Check authentic cached target subtitles first
+          const clean = targetLang.toLowerCase().split('-')[0];
+          const srtCues = getCachedTargetSubtitles(videoId, clean);
+          if (srtCues && srtCues.length > 0) {
+            const match = srtCues.find((c) => c.id === activeCue.id);
+            if (match && match.text) {
+              textToSpeak = match.text;
+            }
+          }
+
+          if (!textToSpeak && translatedCueText) {
+            textToSpeak = translatedCueText;
+          }
 
           if (!textToSpeak && activeCue.text) {
-            const clean = targetLang.toLowerCase().split('-')[0];
-            const srtCues = getCachedTargetSubtitles(videoId, clean);
-            if (srtCues && srtCues.length > 0) {
-              const match = srtCues.find((c) => c.id === activeCue.id);
-              if (match && match.text) {
-                textToSpeak = match.text;
-              }
-            }
-            if (!textToSpeak) {
-              try {
-                textToSpeak = await translateText(activeCue.text, 'auto', targetLang);
-              } catch {
-                textToSpeak = activeCue.text;
-              }
+            try {
+              textToSpeak = await translateText(activeCue.text, 'auto', targetLang);
+            } catch {
+              textToSpeak = activeCue.text;
             }
           }
 
@@ -306,6 +316,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           setActiveTTSCharIndex(null);
           isAutoTTSSpeakingRef.current = false;
 
+          const wasPausingForTTS = isAutoTTSPausingRef.current;
+          isAutoTTSPausingRef.current = false;
+
           dispatch(
             transition({
               to: 'playing',
@@ -314,8 +327,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             })
           );
 
-          // Resume playback after TTS narration finishes if player was running
-          if (isPlayingRef.current) {
+          // Resume playback after TTS narration finishes if player was running or pausing for TTS
+          if (isPlayingRef.current || wasPausingForTTS) {
+            isPlayingRef.current = true;
+            setIsPlaying(true);
+            playStartTimeRef.current = Date.now() - currentTimeRef.current * 1000;
             try {
               ytPlayerRef.current?.playVideo?.();
             } catch {}
@@ -323,7 +339,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           }
         }
       })();
-    }, [activeCue?.id, autoTTSEnabled, isPlaying, isCaptionsActive, translatedCueText, targetLanguage, dispatch]);
+    }, [activeCue?.id, isSyncActive, autoTTSEnabled, isPlaying, isCaptionsActive, translatedCueText, targetLanguage, videoId, dispatch]);
 
     const resetHideControlsTimer = useCallback(() => {
       if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
@@ -377,8 +393,12 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const togglePlayPause = (e?: React.MouseEvent) => {
       e?.stopPropagation();
-      if (isPlaying) {
+      if (isPlaying || isAutoTTSPausingRef.current || isAutoTTSSpeakingRef.current) {
+        isAutoTTSPausingRef.current = false;
+        isAutoTTSSpeakingRef.current = false;
         isPlayingRef.current = false;
+        stopTTS();
+        setIsTTSSpeakingState(false);
         try {
           ytPlayerRef.current?.pauseVideo?.();
         } catch {}
@@ -386,6 +406,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         setIsPlaying(false);
         setShowControls(true);
       } else {
+        isAutoTTSPausingRef.current = false;
+        isAutoTTSSpeakingRef.current = false;
         isPlayingRef.current = true;
         playStartTimeRef.current = Date.now() - currentTimeRef.current * 1000;
         try {
@@ -446,9 +468,16 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
               setDuration(dur);
             }
+          } else if (isPlayingRef.current && !isAutoTTSPausingRef.current) {
+            const cur = (Date.now() - playStartTimeRef.current) / 1000;
+            if (cur >= 0) {
+              setCurrentTime(cur);
+              currentTimeRef.current = cur;
+              onTimeUpdate?.(cur);
+            }
           }
         } catch {}
-      }, 400);
+      }, 350);
 
       return () => clearInterval(interval);
     }, [onTimeUpdate]);
@@ -458,6 +487,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       ref,
       () => ({
         play: () => {
+          isAutoTTSPausingRef.current = false;
           isPlayingRef.current = true;
           setIsPlaying(true);
           playStartTimeRef.current = Date.now() - currentTimeRef.current * 1000;
@@ -467,9 +497,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           postIframeCommand('playVideo');
         },
         pause: () => {
+          isAutoTTSPausingRef.current = false;
+          isAutoTTSSpeakingRef.current = false;
           isPlayingRef.current = false;
           setIsPlaying(false);
           setShowControls(true);
+          stopTTS();
+          setIsTTSSpeakingState(false);
           try {
             ytPlayerRef.current?.pauseVideo?.();
           } catch {}
@@ -587,6 +621,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     })
                   );
                 } else if (stateData === window.YT?.PlayerState?.PAUSED) {
+                  if (isAutoTTSPausingRef.current) {
+                    // Intentionally paused by Auto-TTS for subtitle narration: do not reset isPlaying state
+                    return;
+                  }
                   isPlayingRef.current = false;
                   setIsPlaying(false);
                   setShowControls(true);

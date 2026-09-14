@@ -1,6 +1,32 @@
 # User Prompts & Task Tracking (PROMPTS.md)
 
-## Current User Prompt (Fix Git Bash MSYS Path Conversion & INSTALL_GRANT_RUNTIME_PERMISSIONS in update.apk.sh)
+## Current User Prompt (App Stops After Playing 1 Record of Subtitles)
+
+```text
+the app stops after playing a 1 record of subtitles
+```
+
+### Tasks & Review
+
+- [ ] **Task 1 (Fix Playback Pause-and-Resume State Freeze in VideoPlayer)**:
+  - Identify and fix the playback termination where pausing the YouTube player during Auto-TTS speech triggers `onStateChange` (`PAUSED`), resetting `isPlayingRef.current` and `isPlaying` to `false`.
+  - Introduce `isAutoTTSPausingRef` to distinguish internal TTS speech pauses from user-initiated pauses.
+  - In `onStateChange`, prevent clearing `isPlayingRef.current` when `isAutoTTSPausingRef.current` is active.
+  - In the Auto-TTS completion `finally` block, guarantee that `playVideo()` is resumed when playback was active, re-anchoring `playStartTimeRef` so the time does not freeze.
+  - Enable mutual exclusion coordination by accepting `isSyncActive` so `VideoPlayer` Auto-TTS does not collide with `useSyncEngine` Teacher Sync.
+  - **Status**: In Progress
+  - **Review**: Pending verification
+
+- [ ] **Task 2 (Dynamic Active Cue Translation & Multi-Record Continuous Sync in App.tsx)**:
+  - Add an active `useEffect` listener in `App.tsx` that dynamically updates `translatedCueText` on every `activeCue` transition using cached SRT fixtures and fallback translations.
+  - Ensure `onTimeUpdate` is wired to update playback time and active cue detection across both Compact View and Expanded View.
+  - Wire `isSyncActive` state between `SubtitlesTeacherPanel` and `VideoPlayer` to avoid race conditions.
+  - **Status**: In Progress
+  - **Review**: Pending verification
+
+---
+
+## Previous User Prompt (Fix Git Bash MSYS Path Conversion & INSTALL_GRANT_RUNTIME_PERMISSIONS in update.apk.sh)
 
 ```text
 User@DESKTOP-P57U0FL MINGW64 ~/WORK
