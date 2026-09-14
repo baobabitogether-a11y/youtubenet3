@@ -100,7 +100,8 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
@@ -110,7 +111,8 @@ async function startServer() {
   // Fetch / transcribe subtitles for any YouTube video
   app.post('/api/fetch-subtitles', async (req, res) => {
     try {
-      const { videoId, tlang } = req.body;
+      const { videoId, tlang, disableFixtures } = req.body;
+      const shouldDisableFixtures = disableFixtures === true || req.query.disableFixtures === 'true';
       if (!videoId || typeof videoId !== 'string') {
         return res.status(400).json({ error: 'videoId is required' });
       }
@@ -152,7 +154,7 @@ async function startServer() {
         }
       }
 
-      // 2. Fallback for known video FcRzAdI8R9U (authentic Russian interview on Sheinkin40)
+      // 2. Direct timedtext endpoint check for known video FcRzAdI8R9U
       if (videoId === 'FcRzAdI8R9U') {
         const authenticObservedUrl = tlang
           ? buildYouTubeTranslatedTimedTextUrl(SAMPLE_AUTHENTIC_RUSSIAN_URL, tlang, 'srt')
@@ -182,7 +184,17 @@ async function startServer() {
             }
           }
         } catch (fetchErr) {
-          console.warn('[Server] Live fetch for FcRzAdI8R9U timedtext failed, using pre-seeded cues:', fetchErr);
+          console.warn('[Server] Live fetch for FcRzAdI8R9U timedtext failed:', fetchErr);
+        }
+
+        // If fixtures are disabled, do not load static fixtures from disk or pre-seeded arrays
+        if (shouldDisableFixtures) {
+          return res.status(404).json({
+            success: false,
+            videoId,
+            error: `Live timedtext subtitles for ${videoId} could not be retrieved from YouTube, and disableFixtures is set to true.`,
+            source: 'none',
+          });
         }
 
         const srtLang = tlang && typeof tlang === 'string' ? tlang.toLowerCase().split('-')[0] : 'ru';
@@ -408,7 +420,10 @@ async function startServer() {
         requestHeaders,
         originalRequest,
         cues,
+        disableFixtures,
       } = req.body;
+
+      const shouldDisableFixtures = disableFixtures === true || req.query.disableFixtures === 'true';
 
       if (!targetLang) {
         return res.status(400).json({ error: 'targetLang is required' });
@@ -523,6 +538,26 @@ async function startServer() {
       console.warn(
         `[TimedText Translate] Upstream response not ok (${httpsResponse?.status}). Using server-side fallback for ${targetLang}`
       );
+
+      if (shouldDisableFixtures) {
+        return res.status(httpsResponse?.status || 502).json({
+          success: false,
+          source: 'none',
+          targetLang,
+          format: format || 'srt',
+          error: `Live timedtext translation from YouTube failed (HTTP ${httpsResponse?.status || 502}) and disableFixtures is true.`,
+          modifiedUrl: finalUrl,
+          copiedRequest,
+          httpsResponse: httpsResponse || {
+            status: 502,
+            statusText: 'Bad Gateway',
+            ok: false,
+            url: finalUrl,
+            headers: {},
+          },
+        });
+      }
+
       const fallbackTranslatedCues = await translateCuesToTargetLang(cues || [], targetLang);
       const transDict = Object.fromEntries(fallbackTranslatedCues.map((c: any) => [c.id, c.text]));
 

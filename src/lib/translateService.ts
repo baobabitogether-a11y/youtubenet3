@@ -267,6 +267,7 @@ export async function fetchYouTubeNativeTranslation({
   videoId,
   requestSettings,
   originalCues,
+  disableFixtures,
 }: {
   observedUrl?: string | null;
   targetLang: string;
@@ -274,9 +275,15 @@ export async function fetchYouTubeNativeTranslation({
   videoId?: string;
   requestSettings?: TimedTextOriginalRequest;
   originalCues?: CaptionCue[];
+  disableFixtures?: boolean;
 }): Promise<ExtendedYouTubeNativeTranslationResult> {
   const cleanLang = normalizeLanguageCode(targetLang).split('-')[0];
   const vId = videoId || 'FcRzAdI8R9U';
+  const shouldDisableFixtures =
+    disableFixtures ??
+    (typeof window !== 'undefined' &&
+      (new URLSearchParams(window.location.search).get('disableFixtures') === 'true' ||
+        (window as any).DISABLE_FIXTURES === true));
 
   // STEP 4.3 Requirement 1: Copy the original working request for default subtitles with all request settings
   const baseWorkingRequest = requestSettings || getWorkingSubtitleRequest(vId);
@@ -435,6 +442,7 @@ export async function fetchYouTubeNativeTranslation({
         requestHeaders: copiedRequest.headers,
         originalRequest: baseWorkingRequest,
         cues: originalCues,
+        disableFixtures: shouldDisableFixtures,
       }),
     });
 

@@ -230,5 +230,16 @@ test.describe('Step 4.3: Target Language Switch API Suite', () => {
     // Response assertion 2: First subtitle record is DIFFERENT from Russian source and DIFFERENT from Spanish
     expect(dataHe.firstSubtitle.text).not.toBe(initialFirstText);
     expect(dataHe.firstSubtitle.text).not.toBe(dataEs.firstSubtitle.text);
+
+    // Test 3: Verify disableFixtures flag behavior
+    const responseDisabled = await request.post('/api/fetch-subtitles', {
+      data: {
+        videoId: 'non_existent_video_12345',
+        disableFixtures: true,
+      },
+    });
+    expect(responseDisabled.status()).toBe(404);
+    const dataDisabled = await responseDisabled.json();
+    expect(dataDisabled.success).toBe(false);
   });
 });
