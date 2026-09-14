@@ -1105,6 +1105,8 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
               {/* Filter search input */}
               <div className="w-full sm:w-auto">
                 <input
+                  id="subtitles-search-input"
+                  data-testid="subtitles-search-input"
                   type="text"
                   placeholder="Filter subtitles..."
                   value={searchQuery}

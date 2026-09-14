@@ -8,6 +8,18 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Full Real-Network E2E Test Suite (Without Fixtures) Implementation
+
+- **Complete Suite Implementation & Button Coverage**:
+  - Implemented all 6 real-network E2E test cases running against `?disableFixtures=true` with 100% pass rate:
+    1. Video Playback (loads player, input URL, clear/load, theater mode, autoplay & loop controls).
+    2. Subtitles View (captions toggle, cue row rendering, timestamp verification, subtitle search input filter, and pagination navigation).
+    3. Subtitles Translation (Italian translation target selection, live overlay updates, catalog search, Arabic target switch, and RTL verification).
+    4. TTS Config (Language Settings dialog, speaking rate slider adjustment, voice selection dropdown, test audio preview, and player Auto-TTS toggle).
+    5. Synchronized Playback Flow (Settings flow configuration: "TTS First vs Video First" radio selections, sync teacher play/pause controls).
+    6. APK Guide & Inspector Modals (APK update guide modal, QR toggle, update check button, Network Inspector modal filtering, Errors & State Machine Inspector dialog tab switching).
+  - **Status**: Completed & 100% Verified (9/9 Playwright E2E tests passing).
+
 ### Fixes & Enhancements: Default Compact View Translations, TTS & Navbar Inspectors
 
 - **Compact View Translation & Auto-TTS Defaults**:

@@ -314,6 +314,8 @@ export function SettingsModal({
               >
                 <input
                   type="radio"
+                  id="play-order-video-then-tts"
+                  data-testid="play-order-video-then-tts"
                   name="playOrder"
                   checked={settings.playOrder === 'video_then_tts'}
                   onChange={() => onUpdateSettings({ ...settings, playOrder: 'video_then_tts' })}
@@ -338,6 +340,8 @@ export function SettingsModal({
               >
                 <input
                   type="radio"
+                  id="play-order-tts-then-video"
+                  data-testid="play-order-tts-then-video"
                   name="playOrder"
                   checked={settings.playOrder === 'tts_then_video'}
                   onChange={() => onUpdateSettings({ ...settings, playOrder: 'tts_then_video' })}
