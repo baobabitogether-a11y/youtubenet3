@@ -8,6 +8,82 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Step 4.3: Target Language Switch with 'tlang' Replacement & Full Request Context
+
+- **Task 1 (Original Working Request Capture & Cloning with Settings)**:
+  - In `/src/lib/translateService.ts`, captured the original working request (`url`, `method`, `headers`, `mode`, `credentials`, and custom parameters).
+  - Implemented request settings cloning that preserves all HTTP request headers and parameters rather than solely altering URL query parameters.
+  - Replaced the `tlang` query parameter in the cloned request URL using `buildYouTubeTranslatedTimedTextUrl`.
+  - **Status**: Completed & Verified
+- **Task 2 (Client-First Execution & Backend Fallback with Full Request)**:
+  - Executed request on client first (Android shell or browser fetch).
+  - Added fallback handler: if client request fails or encounters network/CORS restrictions, transparently delegates to `/api/youtube-timedtext-translate` forwarding the full request with original headers (`requestSettings`, `requestHeaders`, `originalRequest`, and `cues`).
+  - **Status**: Completed & Verified
+- **Task 3 (Backend Implementation & HTTPS Response Results)**:
+  - Updated `/server.ts` `/api/youtube-timedtext-translate` to execute with cloned request settings and original headers.
+  - Integrated `SAMPLE_AUTHENTIC_RUSSIAN_CUES`, `SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U`, `SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS`, and `SAMPLE_AUTHENTIC_RUSSIAN_URL` from `/src/config/fixtures.ts` to ensure zero hardcoded data in application logic.
+  - Added full HTTPS response results in the payload (`httpsResponse` with `status`, `statusText`, `ok`, `headers`, `url`).
+  - Ensured subtitles record count is identical across target languages, with distinct translated first subtitle records.
+  - **Status**: Completed & Verified
+- **Task 4 (E2E Test Suites & Assertions)**:
+  - Updated Playwright (`e2e/emulation.spec.ts`) and Cypress (`cypress/e2e/emulation.cy.ts`):
+    - Asserted that cloned request settings and headers are present.
+    - Asserted that `httpsResponse` results are provided.
+    - Asserted `modifiedUrl` contains `tlang=<targetLang>`.
+    - Asserted that subtitle record count is strictly identical after changing `tlang` across multiple languages.
+    - Asserted that the first subtitle record is different from the original dialogue.
+  - Verified 2/2 tests passed in `e2e/emulation.spec.ts` and 3/3 tests passed in `e2e/web.spec.ts`.
+  - **Status**: Completed & Verified
+- **Task 5 (Documentation Matrix Updates)**:
+  - Updated `COVERAGE.md` Section 3 and summary table with Step 4.3 details and test results.
+  - Synchronized Android report generator `scripts/generate-android-report.mjs`.
+  - **Status**: Completed & Verified
+
+### Refactor Hardcoded Data to Config/Constants/Fixtures
+
+- **Task 1 (Extract Hardcoded Translation Data to Fixtures)**:
+  - Moved `SAMPLE_TRANSLATIONS` dictionary from `/src/lib/translateService.ts` to `/src/config/fixtures.ts`.
+  - **Status**: Completed & Verified
+- **Task 2 (Extract Language Constants and Configuration)**:
+  - Created `/src/config/constants.ts` and moved `SUPPORTED_TARGET_LANGUAGES` (80+ languages catalog) and `ON_DEMAND_FALLBACK_COUNT` out of `/src/lib/translateService.ts`.
+  - **Status**: Completed & Verified
+- **Task 3 (Update Consumer Imports Across Codebase)**:
+  - Updated `/src/lib/translateService.ts` to import `SAMPLE_TRANSLATIONS` from `../config/fixtures` and re-export constants.
+  - Updated `/src/components/SubtitlesTeacherPanel.tsx` to import `SAMPLE_TRANSLATIONS` from `../config/fixtures` and `SUPPORTED_TARGET_LANGUAGES` from `../config/constants`.
+  - Updated `/src/components/LanguageSettingsModal.tsx` to import `SUPPORTED_TARGET_LANGUAGES` from `../config/constants`.
+  - **Status**: Completed & Verified
+- **Task 4 (Zero Code Bloat in Business Logic)**:
+  - Removed all inline dictionaries and static arrays from `/src/lib/translateService.ts`, ensuring code files only contain business and translation logic.
+  - **Status**: Completed & Verified
+- **Task 5 (Verification Loop)**:
+  - Ran `lint_applet` (`tsc --noEmit`): 0 errors.
+  - Ran `compile_applet` (`npm run build`): Clean build of both client and server bundles.
+  - **Status**: Completed & Verified
+
+---
+
+### Test Coverage Tracking Matrix & Platform Separation (COVERAGE.md)
+
+- **Task 1 (Create COVERAGE.md)**:
+  - Created `COVERAGE.md` containing comprehensive test coverage tracking across the codebase.
+  - **Status**: Completed & Verified
+- **Task 2 (TODOs & DONE Sections)**:
+  - Structured `COVERAGE.md` with `## 📋 TODOs (Planned & In-Progress Tests)` and `## ✅ DONE (Passed Tests)` sections.
+  - **Status**: Completed & Verified
+- **Task 3 (Transition Protocol: Move from TODO to DONE)**:
+  - Added clear instructions and workflow on how to move tests from `TODOs` to `DONE` once tests pass (register, implement, run command, move to DONE with execution metadata, pass status, and artifacts).
+  - **Status**: Completed & Verified
+- **Task 4 (Platform-Unique Test Categorization)**:
+  - Explicitly classified and tagged tests that are unique to each platform:
+    - *Android Native Shell Only*: Native WebView caption interception without fixtures (`youtube.com/api/timedtext`), Base64 UTF-8 JS bridge, hardware-accelerated TTS loops (`android.speech.tts.TextToSpeech`), dynamic `tlang` timedtext repetition, and OS `ACTION_SEND` intent reception.
+    - *Web Companion Only*: Auto-detect captions toggle on video player, multi-tier cache fallback, `/api/fetch-subtitles` Express proxy with retry cap, and Web Speech API simulation.
+  - **Status**: Completed & Verified
+- **Task 5 (Cross-Documentation Sync)**:
+  - Updated `AGENTS.md` to reference `COVERAGE.md` in the Documentation File System table.
+  - **Status**: Completed & Verified
+
+---
+
 ### Architecture Guide Restoration & Comprehensive AGENTS.md Specification
 
 - **Task 1 (Design Goal in AGENTS.md)**:

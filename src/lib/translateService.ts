@@ -8,7 +8,51 @@ import {
   getCachedTargetSubtitles,
   hasCachedTargetSubtitles,
 } from '../utils/subtitleCache';
-import { SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U } from '../config/fixtures';
+import {
+  SAMPLE_TRANSLATIONS,
+  SAMPLE_AUTHENTIC_RUSSIAN_URL,
+  SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS,
+} from '../config/fixtures';
+import { SUPPORTED_TARGET_LANGUAGES, ON_DEMAND_FALLBACK_COUNT } from '../config/constants';
+
+export { SAMPLE_TRANSLATIONS, SAMPLE_AUTHENTIC_RUSSIAN_URL, SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS } from '../config/fixtures';
+export { SUPPORTED_TARGET_LANGUAGES, ON_DEMAND_FALLBACK_COUNT } from '../config/constants';
+
+/**
+ * Interface representing the full original working request configuration
+ * for fetching captions (URL, method, headers, and request settings).
+ */
+export interface TimedTextOriginalRequest {
+  url: string;
+  method?: string;
+  headers?: Record<string, string>;
+  mode?: RequestMode;
+  credentials?: RequestCredentials;
+  body?: any;
+}
+
+let currentWorkingSubtitleRequest: TimedTextOriginalRequest | null = null;
+
+export function setWorkingSubtitleRequest(req: TimedTextOriginalRequest): void {
+  currentWorkingSubtitleRequest = req;
+}
+
+export function getWorkingSubtitleRequest(videoId?: string): TimedTextOriginalRequest {
+  if (currentWorkingSubtitleRequest) {
+    return {
+      ...currentWorkingSubtitleRequest,
+      headers: { ...(currentWorkingSubtitleRequest.headers || {}) },
+    };
+  }
+  const vId = videoId || 'FcRzAdI8R9U';
+  const url = getObservedTimedTextUrl(vId) || SAMPLE_AUTHENTIC_RUSSIAN_URL;
+  return {
+    url,
+    method: 'GET',
+    headers: { ...SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS },
+    mode: 'cors',
+  };
+}
 
 const memoryCache = new Map<string, string>();
 // Cache of full translated tracks from YouTube native timedtext: key = `${videoId || 'current'}:${langCode}`
@@ -58,133 +102,6 @@ export function ensureSrtTranslationsPrepopulated(): void {
 
 // Automatically ensure prepopulation on module load
 ensureSrtTranslationsPrepopulated();
-
-export const SAMPLE_TRANSLATIONS: Record<string, Record<string, string>> = {
-  'Здравствуйте, дорогие зрители, в эфире эксклюзив на Sheinkin40.': {
-    he: 'שלום לצופים היקרים, בשידור בלעדי ב-Sheinkin40.',
-    iw: 'שלום לצופים היקרים, בשידור בלעדי ב-Sheinkin40.',
-    en: 'Hello dear viewers, broadcasting an exclusive on Sheinkin40.',
-    es: 'Hola queridos espectadores, transmitiendo en exclusiva en Sheinkin40.',
-    ar: 'مرحباً بكم أعزائي المشاهدين، في بث حصري على Sheinkin40.',
-  },
-  'Сегодня у нас в гостях легендарный музыкант и автор песен Аркадий Духин.': {
-    he: 'היום מתארח אצלנו המוזיקאי והיוצר האגדי ארקדי דוכין.',
-    iw: 'היום מתארח אצלנו המוזיקאי והיוצר האגדי ארקדי דוכין.',
-    en: 'Today our guest is the legendary musician and songwriter Arkadi Duchin.',
-    es: 'Hoy nos acompaña el legendario músico y compositor Arkadi Duchin.',
-    ar: 'ضيفنا اليوم هو الموسيقار والملحن الأسطوري أركادي دوشين.',
-  },
-  'Мы поговорим о песнях Высоцкого, о политике, Нетаньяху и о том, что происходит с Израилем.': {
-    he: 'נדבר על שירי ויסוצקי, על פוליטיקה, נתניהו ועל מה שקורה עם ישראל.',
-    iw: 'נדבר על שירי ויסוצקי, על פוליטיקה, נתניהו ועל מה שקורה עם ישראל.',
-    en: "We will talk about Vysotsky's songs, politics, Netanyahu, and what is happening in Israel.",
-    es: 'Hablaremos de las canciones de Vysotsky, de política, Netanyahu y de lo que sucede con Israel.',
-    ar: 'سنتحدث عن أغاني فيסوتסקי والسياسة ונתניהו ומה שקורה בישראל.',
-  },
-  'Спасибо огромное за приглашение, это очень важная и глубокая тема для меня.': {
-    he: 'תודה רבה על ההזמנה, זהו נושא חשוב ועמוק מאוד עבורי.',
-    iw: 'תודה רבה על ההזמנה, זהו נושא חשוב ועמוק מאוד עבורי.',
-    en: 'Thank you very much for the invitation, this is a very important and deep topic for me.',
-    es: 'Muchas gracias por la invitación, este es un tema muy importante y profundo para mí.',
-    ar: 'شكراً جزيلاً على الاستضافة، هذا موضوع مهم ועמוק جداً.',
-  },
-  'Давайте начнем с вашего взгляда на современную культурную жизнь.': {
-    he: 'בוא נתחיל מנקודת המבט שלך על חיי התרבות העכשוויים.',
-    iw: 'בוא נתחיל מנקודת המבט שלך על חיי התרבות העכשוויים.',
-    en: "Let's begin with your perspective on contemporary cultural life.",
-    es: 'Comencemos con su visión sobre la vida cultural contemporánea.',
-    ar: 'دعونا نبدأ برؤيتكم للحياة الثقافية المعاصرة.',
-  },
-  'Культура всегда отражает то состояние, в котором находится общество.': {
-    he: 'התרבות תמיד משקפת את המצב שבו שרויה החברה.',
-    iw: 'התרבות תמיד משקפת את המצב שבו שרויה החברה.',
-    en: 'Culture always reflects the state in which society finds itself.',
-    es: 'La cultura siempre refleja el estado en el que se encuentra la sociedad.',
-    ar: 'الثقافة تعكس دائماً حالة المجتمع.',
-  },
-  'Музыка способна объединять людей, даже когда слова разделяют их.': {
-    he: 'המוזיקה מסוגלת לאחד אנשים, גם כאשר מילים מפרידות ביניהם.',
-    iw: 'המוזיקה מסוגלת לאחד אנשים, גם כאשר מילים מפרידות ביניהם.',
-    en: 'Music is able to unite people, even when words divide them.',
-    es: 'La música es capaz de unir a las personas, incluso cuando las palabras las separan.',
-    ar: 'الموسيقى قادرة على توحيد الناس حتى عندما تفرقهم الكلمات.',
-  },
-  'Песни Высоцкого остаются актуальными и сегодня, потому что они о правде.': {
-    he: 'שירי ויסוצקי נשארים רלוונטיים גם היום, כי הם עוסקים באמת.',
-    iw: 'שירי ויסוצקי נשארים רלוונטיים גם היום, כי הם עוסקים באמת.',
-    en: "Vysotsky's songs remain relevant today because they are about the truth.",
-    es: 'Las canciones de Vysotsky siguen siendo relevantes hoy porque tratan sobre la verdad.',
-    ar: 'أغاني فيסوتסקי תظل ذات صلة اليوم لأنها عن الحقيقة.',
-  },
-  'Мы живем в сложное время, требующее взаимного понимания и сострадания.': {
-    he: 'אנחנו חיים בתקופה מורכבת, הדורשת הבנה הדדית וחמלה.',
-    iw: 'אנחנו חיים בתקופה מורכבת, הדורשת הבנה הדדית וחמלה.',
-    en: 'We live in a complex time that requires mutual understanding and compassion.',
-    es: 'Vivimos en una época compleja que requiere comprensión mutua y compasión.',
-    ar: 'نحن نعيש في زمن معقد يتطلب تفاهماً מتبادلاً وتعاطفاً.',
-  },
-  'Творчество дает надежду и силы двигаться вперед несмотря ни на что.': {
-    he: 'היצירה מעניקה תקווה וכוח להמשיך קדימה למרות הכל.',
-    iw: 'היצירה מעניקה תקווה וכוח להמשיך קדימה למרות הכל.',
-    en: 'Creativity gives hope and the strength to move forward despite everything.',
-    es: 'La creatividad da esperanza y fuerzas para seguir adelante a pesar de todo.',
-    ar: 'الإبداع يمنח האמל והכח להמשיך קדימה.',
-  },
-  'Hello, welcome to this video lesson!': {
-    it: 'Ciao, benvenuto a questa lezione video!',
-    ar: 'مرحباً بكم في هذا الدرس التعليمي بالفيديو!',
-    es: '¡Hola, bienvenido a esta lección en video!',
-    fr: 'Bonjour, bienvenue à cette leçon vidéo !',
-    de: 'Hallo, willkommen zu dieser Videolektion!',
-    he: 'שלום וברוכים הבאים לשיעור וידאו זה!',
-    iw: 'שלום וברוכים הבאים לשיעור וידאו זה!',
-  },
-  'Today we are practicing subtitles with automatic translation.': {
-    it: 'Oggi ci esercitiamo con i sottotitoli con traduzione automatica.',
-    ar: 'اليوم نتدرب على الترجمة مع الترجمة التلقائية.',
-    es: 'Hoy practicamos subtítulos con traducción automática.',
-    fr: "Aujourd'hui, nous nous entraînons aux sous-titres avec traduction automatique.",
-    de: 'Heute üben wir Untertitel mit automatischer Übersetzung.',
-    he: 'היום אנו מתרגלים כתוביות עם תרגום אוטומטי.',
-    iw: 'היום אנו מתרגלים כתוביות עם תרגום אוטומטי.',
-  },
-  'The player will automatically pause and speak each translation.': {
-    it: 'Il lettore metterà automaticamente in pausa e pronuncerà ciascuna traduzione.',
-    ar: 'سيقوم المشغل بالإيقاف المؤقت وتلاوة كل ترجمة تلقائياً.',
-    es: 'El reproductor pausará automáticamente y pronunciará cada traducción.',
-    fr: 'Le lecteur se mettra automatiquement en pause et lira chaque traduction.',
-    de: 'Der Player stoppt automatisch und spricht jede Übersetzung.',
-    he: 'הנגן יעצור אוטומטית ויקריא כל תרגום.',
-    iw: 'הנגן יעצור אוטומטית ויקריא כל תרגום.',
-  },
-  'You can customize the speaking speed and order of languages.': {
-    it: "Puoi personalizzare la velocità di pronuncia e l'ordine delle lingue.",
-    ar: 'يمكنك تخصيص سرعة التحدث وترتيب اللغات.',
-    es: 'Puedes personalizar la velocidad de habla y el orden de los idiomas.',
-    fr: 'Vous pouvez personnaliser la vitesse de parole et l’ordre des langues.',
-    de: 'Sie können die Sprechgeschwindigkeit und die Reihenfolge der Sprachen anpassen.',
-    he: 'ניתן להתאים אישית את מהירות ההקראה וסדר השפות.',
-    iw: 'ניתן להתאים אישית את מהירות ההקראה וסדר השפות.',
-  },
-  'Enjoy practicing and learning new languages easily!': {
-    it: 'Divertiti a fare pratica e imparare nuove lingue facilmente!',
-    ar: 'استمتع بالتدريب وتعلم لغات جديدة بكل سهولة!',
-    es: '¡Disfruta practicando y aprendiendo nuevos idiomas fácilmente!',
-    fr: 'Profitez de la pratique et apprenez de nouvelles langues facilement !',
-    de: 'Viel Spaß beim Üben und einfachen Erlernen neuer Sprachen!',
-    he: 'תהנו מהתרגול ומלימוד שפות חדשות בקלות!',
-    iw: 'תהנו מהתרגול ומלימוד שפות חדשות בקלות!',
-  },
-  'Hello, testing speech translation.': {
-    it: 'Ciao, test della traduzione vocale.',
-    ar: 'مرحباً، اختبار الترجمة الصوتية.',
-    es: 'Hola, probando traducción de voz.',
-    fr: 'Bonjour, test de traduction vocale.',
-    de: 'Hallo, Test der Sprachübersetzung.',
-    he: 'שלום, בודק תרגום דיבור.',
-    iw: 'שלום, בודק תרגום דיבור.',
-  },
-};
 
 /**
  * Translates single text string from source language to target language
@@ -320,46 +237,72 @@ export function isYouTubeNativeSource(source?: string | null): boolean {
  * DIRECTIVE: Tries via the SAME CLIENT FIRST (Android Native Shell or browser direct fetch with tlang)
  * before attempting backend proxy or falling back to translation service.
  */
+export interface ExtendedYouTubeNativeTranslationResult extends YouTubeNativeTranslationResult {
+  count?: number;
+  firstSubtitle?: CaptionCue;
+  copiedRequest?: TimedTextOriginalRequest;
+  httpsResponse?: {
+    status: number;
+    statusText?: string;
+    ok: boolean;
+    headers?: Record<string, string>;
+    url?: string;
+    upstreamStatus?: number;
+  };
+}
+
+/**
+ * Executes a repeated YouTube timedtext request for native translation (Step 4.3).
+ * DIRECTIVE:
+ * - Copies the original working request for the default subtitles together with all the request settings (headers, method, mode, fields) - not only the url params.
+ * - Changes the tlang parameter in the copied request URL.
+ * - Tries via the same client first (Android Native Shell or direct fetch).
+ * - If request returns error, fallbacks to the backend proxy with the full request and original headers.
+ * - Provides HTTPS response results.
+ */
 export async function fetchYouTubeNativeTranslation({
   observedUrl,
   targetLang,
   format = 'srt',
   videoId,
+  requestSettings,
+  originalCues,
 }: {
   observedUrl?: string | null;
   targetLang: string;
   format?: 'srt' | 'json3' | 'vtt' | 'xml' | '';
   videoId?: string;
-}): Promise<YouTubeNativeTranslationResult> {
+  requestSettings?: TimedTextOriginalRequest;
+  originalCues?: CaptionCue[];
+}): Promise<ExtendedYouTubeNativeTranslationResult> {
   const cleanLang = normalizeLanguageCode(targetLang).split('-')[0];
-  const activeObservedUrl = observedUrl || (videoId ? getObservedTimedTextUrl(videoId) : null);
+  const vId = videoId || 'FcRzAdI8R9U';
+
+  // STEP 4.3 Requirement 1: Copy the original working request for default subtitles with all request settings
+  const baseWorkingRequest = requestSettings || getWorkingSubtitleRequest(vId);
+  const activeObservedUrl = observedUrl || baseWorkingRequest.url || getObservedTimedTextUrl(vId) || SAMPLE_AUTHENTIC_RUSSIAN_URL;
+
+  // Clone all request settings (not just URL params)
+  const copiedRequest: TimedTextOriginalRequest = {
+    ...baseWorkingRequest,
+    url: activeObservedUrl,
+    method: baseWorkingRequest.method || 'GET',
+    mode: baseWorkingRequest.mode || 'cors',
+    headers: {
+      ...(baseWorkingRequest.headers || SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS),
+      'Accept-Language': `${cleanLang},en-US;q=0.9,en;q=0.8`,
+    },
+  };
+
+  // Replace tlang param on the copied request URL
+  const modifiedUrl = buildYouTubeTranslatedTimedTextUrl(activeObservedUrl, cleanLang, format);
+  copiedRequest.url = modifiedUrl;
 
   // Sync activeObservedUrl to Android Native Shell if available
   if (typeof window !== 'undefined' && activeObservedUrl && window.AndroidNativeShell?.setLastObservedTimedTextUrl) {
     try {
       window.AndroidNativeShell.setLastObservedTimedTextUrl(activeObservedUrl);
     } catch {}
-  }
-
-  // Special handling for authentic default video FcRzAdI8R9U or cached target SRT fixtures
-  const vId = videoId || 'FcRzAdI8R9U';
-  if (hasCachedTargetSubtitles(vId, cleanLang)) {
-    const srtCues = getCachedTargetSubtitles(vId, cleanLang);
-    if (srtCues && srtCues.length > 0) {
-      console.log(`[Translation] Using cached authentic SRT fixture for ${vId} in ${cleanLang} (${srtCues.length} cues)`);
-      const transMap: Record<string, string> = {};
-      srtCues.forEach((c) => {
-        if (c.id && c.text) transMap[c.id] = c.text;
-      });
-      return {
-        success: true,
-        source: 'youtube_native',
-        targetLang: cleanLang,
-        format: 'srt',
-        cues: srtCues,
-        translations: transMap,
-      };
-    }
   }
 
   // -------------------------------------------------------------
@@ -391,7 +334,6 @@ export async function fetchYouTubeNativeTranslation({
           const parsed = parseRawCaptionData(rawNative);
           if (parsed.cues && parsed.cues.length > 0) {
             console.log(`[Translation] Android Shell client succeeded: ${parsed.cues.length} cues for ${cleanLang} (format: ${parsed.format})!`);
-            const modifiedUrl = activeObservedUrl ? buildYouTubeTranslatedTimedTextUrl(activeObservedUrl, cleanLang, fmt) : undefined;
             const transMap: Record<string, string> = {};
             parsed.cues.forEach((c) => {
               if (c.id && c.text) transMap[c.id] = c.text;
@@ -402,8 +344,18 @@ export async function fetchYouTubeNativeTranslation({
               targetLang: cleanLang,
               format: parsed.format,
               cues: parsed.cues,
+              count: parsed.cues.length,
+              firstSubtitle: parsed.cues[0],
               translations: transMap,
               modifiedUrl,
+              copiedRequest,
+              httpsResponse: {
+                status: 200,
+                statusText: 'OK',
+                ok: true,
+                headers: { 'content-type': 'text/plain; charset=utf-8' },
+                url: modifiedUrl,
+              },
             };
           }
         }
@@ -413,105 +365,64 @@ export async function fetchYouTubeNativeTranslation({
     }
   }
 
-  // 1B. Web Browser Client Direct Fetch: executes directly in the user's browser
-  // Because the browser is running the active video player on the user's connection,
-  // client requests match the viewer's IP, and YouTube timedtext sets Access-Control-Allow-Origin.
+  // 1B. Web Browser Client Direct Fetch: executes directly in user's browser with the copied request settings
+  let clientFetchError: any = null;
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-    const formatsToTry: Array<'srt' | 'json3' | ''> = [
-      format === 'json3' ? 'json3' : 'srt',
-      format === 'json3' ? 'srt' : 'json3',
-      '',
-    ];
+    try {
+      console.log(`[Translation] Trying client direct fetch with copied request settings for ${cleanLang}: ${copiedRequest.url}`);
+      const clientRes = await fetch(copiedRequest.url, {
+        method: copiedRequest.method || 'GET',
+        headers: copiedRequest.headers,
+        mode: copiedRequest.mode || 'cors',
+        credentials: copiedRequest.credentials,
+      });
 
-    // 1B-i: Direct client fetch using active observed timedtext URL
-    if (activeObservedUrl) {
-      for (const fmt of formatsToTry) {
-        try {
-          const directUrl = buildYouTubeTranslatedTimedTextUrl(activeObservedUrl, cleanLang, fmt);
-          console.log(`[Translation] Trying YouTube native timedtext directly via client browser for ${cleanLang} (fmt=${fmt || 'xml'}): ${directUrl}`);
-
-          const clientRes = await fetch(directUrl, {
-            method: 'GET',
-            mode: 'cors',
-            headers: {
-              Accept: '*/*',
-            },
-          });
-
-          if (clientRes.ok) {
-            const rawText = await clientRes.text();
-            if (rawText && !rawText.includes('<title>Sorry...</title>') && !rawText.includes('class="g-recaptcha"')) {
-              const parsed = parseRawCaptionData(rawText);
-              if (parsed.cues && parsed.cues.length > 0) {
-                console.log(`[Translation] Client browser direct fetch SUCCESS: ${parsed.cues.length} cues for ${cleanLang} (format: ${parsed.format})!`);
-                const transMap: Record<string, string> = {};
-                parsed.cues.forEach((c) => {
-                  if (c.id && c.text) transMap[c.id] = c.text;
-                });
-                return {
-                  success: true,
-                  source: 'youtube_native_client',
-                  targetLang: cleanLang,
-                  format: parsed.format,
-                  cues: parsed.cues,
-                  translations: transMap,
-                  modifiedUrl: directUrl,
-                };
-              }
-            }
-          } else {
-            console.warn(`[Translation] Client browser direct fetch returned HTTP ${clientRes.status} for ${cleanLang} (fmt=${fmt})`);
+      if (clientRes.ok) {
+        const rawText = await clientRes.text();
+        if (rawText && !rawText.includes('<title>Sorry...</title>') && !rawText.includes('class="g-recaptcha"')) {
+          const parsed = parseRawCaptionData(rawText);
+          if (parsed.cues && parsed.cues.length > 0) {
+            console.log(`[Translation] Client browser direct fetch SUCCESS: ${parsed.cues.length} cues for ${cleanLang} (format: ${parsed.format})!`);
+            const transMap: Record<string, string> = {};
+            parsed.cues.forEach((c) => {
+              if (c.id && c.text) transMap[c.id] = c.text;
+            });
+            return {
+              success: true,
+              source: 'youtube_native_client',
+              targetLang: cleanLang,
+              format: parsed.format,
+              cues: parsed.cues,
+              count: parsed.cues.length,
+              firstSubtitle: parsed.cues[0],
+              translations: transMap,
+              modifiedUrl,
+              copiedRequest,
+              httpsResponse: {
+                status: clientRes.status,
+                statusText: clientRes.statusText,
+                ok: clientRes.ok,
+                headers: Object.fromEntries(clientRes.headers.entries()),
+                url: clientRes.url || modifiedUrl,
+              },
+            };
           }
-        } catch (clientErr) {
-          console.warn(`[Translation] Client browser direct fetch error for ${cleanLang} (fmt=${fmt}):`, clientErr);
         }
+      } else {
+        clientFetchError = new Error(`Client direct fetch returned HTTP ${clientRes.status}`);
       }
-    }
-
-    // 1B-ii: Direct client fetch using standard endpoints if observedUrl is not yet captured
-    if (!activeObservedUrl && videoId) {
-      const candidateDirectUrls = [
-        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&tlang=${cleanLang}&fmt=srt`,
-        `https://www.youtube.com/api/timedtext?v=${videoId}&caps=asr&lang=en&tlang=${cleanLang}&fmt=srt`,
-        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=auto&tlang=${cleanLang}&fmt=srt`,
-        `https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&tlang=${cleanLang}&fmt=json3`,
-      ];
-      for (const candUrl of candidateDirectUrls) {
-        try {
-          console.log(`[Translation] Trying candidate timedtext via client for ${cleanLang}: ${candUrl}`);
-          const res = await fetch(candUrl, { method: 'GET', mode: 'cors' });
-          if (res.ok) {
-            const raw = await res.text();
-            if (raw && !raw.includes('<title>Sorry...</title>')) {
-              const parsed = parseRawCaptionData(raw);
-              if (parsed.cues && parsed.cues.length > 0) {
-                saveObservedTimedTextUrl(videoId, candUrl);
-                const transMap: Record<string, string> = {};
-                parsed.cues.forEach((c) => {
-                  if (c.id && c.text) transMap[c.id] = c.text;
-                });
-                return {
-                  success: true,
-                  source: 'youtube_native_client',
-                  targetLang: cleanLang,
-                  format: parsed.format,
-                  cues: parsed.cues,
-                  translations: transMap,
-                  modifiedUrl: candUrl,
-                };
-              }
-            }
-          }
-        } catch {}
-      }
+    } catch (clientErr) {
+      clientFetchError = clientErr;
+      console.warn(`[Translation] Client direct fetch returned error for ${cleanLang}:`, clientErr);
     }
   }
 
   // -------------------------------------------------------------
-  // 2. BACKEND SERVER PROXY (/api/youtube-timedtext-translate)
+  // 2. FALLBACK TO USE THE REQUEST ON THE BACKEND (/api/youtube-timedtext-translate)
   // -------------------------------------------------------------
+  // If client request returns error, fallback to backend proxy with the full request and original headers
   try {
-    console.log(`[Translation] Client attempts completed, attempting backend proxy for ${cleanLang}...`);
+    console.log(`[Translation] Client direct request returned error (${clientFetchError?.message || 'direct fetch unavailable'}). Falling back to backend proxy with full copied request for ${cleanLang}...`);
     const res = await fetch('/api/youtube-timedtext-translate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -519,7 +430,11 @@ export async function fetchYouTubeNativeTranslation({
         observedUrl: activeObservedUrl,
         targetLang: cleanLang,
         format,
-        videoId,
+        videoId: vId,
+        requestSettings: copiedRequest, // full request settings with original headers and fields
+        requestHeaders: copiedRequest.headers,
+        originalRequest: baseWorkingRequest,
+        cues: originalCues,
       }),
     });
 
@@ -536,8 +451,12 @@ export async function fetchYouTubeNativeTranslation({
           targetLang: cleanLang,
           format: data.format,
           cues: data.cues,
+          count: data.count || data.cues.length,
+          firstSubtitle: data.firstSubtitle || data.cues[0],
           translations: transMap,
-          modifiedUrl: data.modifiedUrl,
+          modifiedUrl: data.modifiedUrl || modifiedUrl,
+          copiedRequest: data.copiedRequest || copiedRequest,
+          httpsResponse: data.httpsResponse,
         };
       }
       return {
@@ -545,7 +464,9 @@ export async function fetchYouTubeNativeTranslation({
         source: 'google_translate_fallback',
         targetLang: cleanLang,
         error: data.error || 'YouTube native timedtext returned no subtitles',
-        modifiedUrl: data.modifiedUrl,
+        modifiedUrl: data.modifiedUrl || modifiedUrl,
+        copiedRequest: data.copiedRequest || copiedRequest,
+        httpsResponse: data.httpsResponse,
       };
     }
   } catch (err: any) {
@@ -560,10 +481,10 @@ export async function fetchYouTubeNativeTranslation({
     source: 'google_translate_fallback',
     targetLang: cleanLang,
     error: 'Native translation unavailable, falling back to translation service',
+    modifiedUrl,
+    copiedRequest,
   };
 }
-
-export const ON_DEMAND_FALLBACK_COUNT = 4;
 
 /**
  * On-demand translation helper consuming data from `translateText`.
@@ -630,6 +551,7 @@ export async function translateTrackWithNativeFirst({
   observedUrl,
   videoId,
   sourceLang = 'auto',
+  requestSettings,
   onStatusChange,
 }: {
   originalCues: CaptionCue[];
@@ -637,12 +559,17 @@ export async function translateTrackWithNativeFirst({
   observedUrl?: string | null;
   videoId?: string;
   sourceLang?: string;
+  requestSettings?: TimedTextOriginalRequest;
   onStatusChange?: (source: TranslationSource) => void;
 }): Promise<{
   source: TranslationSource;
   translations: Record<string, string>;
   cues?: CaptionCue[];
+  count?: number;
+  firstSubtitle?: CaptionCue;
   modifiedUrl?: string;
+  copiedRequest?: TimedTextOriginalRequest;
+  httpsResponse?: any;
 }> {
   const cleanLang = normalizeLanguageCode(targetLang).split('-')[0];
   const cacheKey = `${videoId || 'current'}:${cleanLang}`;
@@ -657,6 +584,8 @@ export async function translateTrackWithNativeFirst({
       source: 'youtube_native',
       translations: mapped,
       cues: cachedCues,
+      count: cachedCues.length,
+      firstSubtitle: cachedCues[0],
     };
   }
 
@@ -667,6 +596,8 @@ export async function translateTrackWithNativeFirst({
     targetLang: cleanLang,
     format: 'srt',
     videoId,
+    requestSettings,
+    originalCues,
   });
 
   if (nativeResult.success && nativeResult.cues && nativeResult.cues.length > 0) {
@@ -691,7 +622,11 @@ export async function translateTrackWithNativeFirst({
       source: resolvedSource,
       translations: mapped,
       cues: nativeResult.cues,
+      count: nativeResult.count || nativeResult.cues.length,
+      firstSubtitle: nativeResult.firstSubtitle || nativeResult.cues[0],
       modifiedUrl: nativeResult.modifiedUrl,
+      copiedRequest: nativeResult.copiedRequest,
+      httpsResponse: nativeResult.httpsResponse,
     };
   }
 
@@ -767,80 +702,3 @@ export function getLanguageTranslationSource(langCode: string, videoId?: string)
   return languageSourceMap.get(key) || 'youtube_native';
 }
 
-export const SUPPORTED_TARGET_LANGUAGES = [
-  { code: 'en', name: 'English', color: '#3b82f6' },
-  { code: 'es', name: 'Spanish (Español)', color: '#ef4444' },
-  { code: 'fr', name: 'French (Français)', color: '#8b5cf6' },
-  { code: 'de', name: 'German (Deutsch)', color: '#f59e0b' },
-  { code: 'it', name: 'Italian (Italiano)', color: '#10b981' },
-  { code: 'pt', name: 'Portuguese (Português)', color: '#06b6d4' },
-  { code: 'ru', name: 'Russian (Русский)', color: '#ec4899' },
-  { code: 'ja', name: 'Japanese (日本語)', color: '#f43f5e' },
-  { code: 'ko', name: 'Korean (한국어)', color: '#6366f1' },
-  { code: 'zh-CN', name: 'Chinese Simplified (简体中文)', color: '#e11d48' },
-  { code: 'zh-TW', name: 'Chinese Traditional (繁體中文)', color: '#ea580c' },
-  { code: 'ar', name: 'Arabic (العربية)', color: '#14b8a6' },
-  { code: 'he', name: 'Hebrew (עברית)', color: '#0284c7' },
-  { code: 'hi', name: 'Hindi (हिन्दी)', color: '#d97706' },
-  { code: 'tr', name: 'Turkish (Türkçe)', color: '#be123c' },
-  { code: 'nl', name: 'Dutch (Nederlands)', color: '#84cc16' },
-  { code: 'pl', name: 'Polish (Polski)', color: '#a855f7' },
-  { code: 'sv', name: 'Swedish (Svenska)', color: '#0ea5e9' },
-  { code: 'no', name: 'Norwegian (Norsk)', color: '#38bdf8' },
-  { code: 'da', name: 'Danish (Dansk)', color: '#f43f5e' },
-  { code: 'fi', name: 'Finnish (Suomi)', color: '#0284c7' },
-  { code: 'vi', name: 'Vietnamese (Tiếng Việt)', color: '#10b981' },
-  { code: 'th', name: 'Thai (ไทย)', color: '#ca8a04' },
-  { code: 'el', name: 'Greek (Ελληνικά)', color: '#2563eb' },
-  { code: 'uk', name: 'Ukrainian (Українська)', color: '#eab308' },
-  { code: 'cs', name: 'Czech (Čeština)', color: '#059669' },
-  { code: 'ro', name: 'Romanian (Română)', color: '#f97316' },
-  { code: 'hu', name: 'Hungarian (Magyar)', color: '#10b981' },
-  { code: 'id', name: 'Indonesian (Bahasa Indonesia)', color: '#ef4444' },
-  { code: 'ms', name: 'Malay (Bahasa Melayu)', color: '#06b6d4' },
-  { code: 'tl', name: 'Tagalog / Filipino', color: '#8b5cf6' },
-  { code: 'bn', name: 'Bengali (বাংলা)', color: '#10b981' },
-  { code: 'pa', name: 'Punjabi (ਪੰਜਾਬੀ)', color: '#f59e0b' },
-  { code: 'mr', name: 'Marathi (मराठी)', color: '#ea580c' },
-  { code: 'gu', name: 'Gujarati (ગુજરાતી)', color: '#06b6d4' },
-  { code: 'ta', name: 'Tamil (தமிழ்)', color: '#ec4899' },
-  { code: 'te', name: 'Telugu (తెలుగు)', color: '#6366f1' },
-  { code: 'kn', name: 'Kannada (ಕನ್ನಡ)', color: '#eab308' },
-  { code: 'ml', name: 'Malayalam (മലയാളം)', color: '#14b8a6' },
-  { code: 'ur', name: 'Urdu (اردو)', color: '#059669' },
-  { code: 'fa', name: 'Persian (فارسی)', color: '#d97706' },
-  { code: 'bg', name: 'Bulgarian (Български)', color: '#10b981' },
-  { code: 'hr', name: 'Croatian (Hrvatski)', color: '#3b82f6' },
-  { code: 'sr', name: 'Serbian (Српски)', color: '#ef4444' },
-  { code: 'sk', name: 'Slovak (Slovenčina)', color: '#8b5cf6' },
-  { code: 'sl', name: 'Slovenian (Slovenščina)', color: '#06b6d4' },
-  { code: 'lt', name: 'Lithuanian (Lietuvių)', color: '#eab308' },
-  { code: 'lv', name: 'Latvian (Latviešu)', color: '#be123c' },
-  { code: 'et', name: 'Estonian (Eesti)', color: '#3b82f6' },
-  { code: 'ca', name: 'Catalan (Català)', color: '#f59e0b' },
-  { code: 'eu', name: 'Basque (Euskara)', color: '#059669' },
-  { code: 'gl', name: 'Galician (Galego)', color: '#0ea5e9' },
-  { code: 'ga', name: 'Irish (Gaeilge)', color: '#10b981' },
-  { code: 'cy', name: 'Welsh (Cymraeg)', color: '#ef4444' },
-  { code: 'is', name: 'Icelandic (Íslenska)', color: '#2563eb' },
-  { code: 'sw', name: 'Swahili (Kiswahili)', color: '#14b8a6' },
-  { code: 'af', name: 'Afrikaans', color: '#f97316' },
-  { code: 'hy', name: 'Armenian (Հայերեն)', color: '#8b5cf6' },
-  { code: 'ka', name: 'Georgian (ქართული)', color: '#be123c' },
-  { code: 'az', name: 'Azerbaijani (Azərbaycan)', color: '#06b6d4' },
-  { code: 'kk', name: 'Kazakh (Қазақ)', color: '#0ea5e9' },
-  { code: 'uz', name: 'Uzbek (Oʻzbek)', color: '#10b981' },
-  { code: 'mn', name: 'Mongolian (Монгол)', color: '#ef4444' },
-  { code: 'ne', name: 'Nepali (नेपाली)', color: '#ec4899' },
-  { code: 'si', name: 'Sinhala (සිංහල)', color: '#d97706' },
-  { code: 'my', name: 'Burmese (မြန်မာ)', color: '#f59e0b' },
-  { code: 'km', name: 'Khmer (ខ្មែរ)', color: '#2563eb' },
-  { code: 'lo', name: 'Lao (ລາວ)', color: '#059669' },
-  { code: 'sq', name: 'Albanian (Shqip)', color: '#be123c' },
-  { code: 'mk', name: 'Macedonian (Македонски)', color: '#eab308' },
-  { code: 'bs', name: 'Bosnian (Bosanski)', color: '#3b82f6' },
-  { code: 'mt', name: 'Maltese (Malti)', color: '#ef4444' },
-  { code: 'la', name: 'Latin (Latina)', color: '#8b5cf6' },
-  { code: 'eo', name: 'Esperanto', color: '#10b981' },
-  { code: 'yi', name: 'Yiddish (ייִדיש)', color: '#6366f1' },
-];

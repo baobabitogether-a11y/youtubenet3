@@ -99,17 +99,22 @@ The following tests have been executed, verified, and confirmed passing:
 - **Artifacts**:
   - Telemetry: `LOGCAT_OUT` tagged `TTS_ENGINE` and `YT_CAPTION_INTERCEPTOR`.
 
-#### 3. Native TimedText Repetition & Dynamic Target Language Switch (`tlang`)
-- **Platform**: `[Android Native Only]`
-- **Spec / Script**: `e2e/emulation.spec.ts` / `cypress/e2e/emulation.cy.ts`
-- **Mechanism**:
-  - Video loaded with authentic observed timedtext URL.
-  - User switches target language to `es` (Spanish).
-  - Native shell clones observed timedtext URL, appends `&tlang=es&fmt=srt`, and fetches translated captions using original session headers.
-  - Subtitle cues and speech queue update instantly with translated text.
-- **Result**: ✅ **PASSED** (URL query param `tlang=es` asserted).
+#### 3. Native TimedText Repetition & Dynamic Target Language Switch (`tlang`) — Step 4.3
+- **Platform**: `[Android Native Only / Emulation]`
+- **Spec / Script**: `e2e/emulation.spec.ts` (Playwright) & `cypress/e2e/emulation.cy.ts` (Cypress)
+- **Target Video**: `https://www.youtube.com/watch?v=FcRzAdI8R9U`
+- **Step 4.3 Mechanisms & Verification**:
+  - **Full Request Cloning**: Clones original working timedtext request settings (`headers`, `method`, `mode`, `credentials`) rather than only URL parameters.
+  - **`tlang` Replacement**: Dynamically swaps or appends `&tlang=<targetLang>&fmt=srt` into the request URL.
+  - **Backend Fallback with Full Request**: If direct client fetch returns an error or status is not ok, transparently falls back to `/api/youtube-timedtext-translate` on the backend forwarding the complete request object with all original headers and parameters.
+  - **HTTPS Response Results Provided**: Both client and server return structured `httpsResponse` metadata (`status`, `statusText`, `ok`, `url`, `headers`).
+  - **Response Assertion 1 (Identical Record Count)**: Subtitle record count is asserted to be strictly identical after changing `tlang` across multiple target languages (`count === cues.length`).
+  - **Response Assertion 2 (Different First Subtitle)**: The first subtitle cue text is asserted to be distinctly translated and different from the source spoken dialogue (`firstSubtitle.text !== initialFirstSubtitleText`).
+- **Result**: ✅ **PASSED** (2/2 tests passed in `e2e/emulation.spec.ts`).
 - **Artifacts**:
   - Screenshot: `cypress/reports/assets/test3-step5.png`
+  - Playwright HTML Report & Trace: `playwright-report/index.html`
+  - Emulator E2E Report: `cypress/reports/android-emulator-report.html`
 
 #### 4. Native OS Intent `ACTION_SEND` YouTube Link Ingestion
 - **Platform**: `[Android Native Only]`

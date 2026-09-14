@@ -11,7 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { TargetLanguage } from '../types';
-import { SUPPORTED_TARGET_LANGUAGES } from '../lib/translateService';
+import { SUPPORTED_TARGET_LANGUAGES } from '../config/constants';
 import { isAndroidNativeTTS } from '../lib/ttsEngine';
 
 interface LanguageSettingsModalProps {
