@@ -42,14 +42,47 @@ describe('YouTube Video Viewer - Android Emulation Subtitle Tests', () => {
       }
     });
 
-    cy.log('Step 6: Switching target language and verifying tlang param replacement in timedtext request');
+    cy.log('Step 6: Switching target language and verifying tlang param replacement with copied request and assertions');
     cy.intercept('POST', '/api/youtube-timedtext-translate*').as('timedtextTranslate');
     cy.get('body').then(($body) => {
+      let initialCount = 0;
+      let initialFirstText = '';
+      if ($body.find('#subtitle-cue-row-0').length > 0) {
+        initialFirstText = $body.find('#subtitle-cue-row-0').first().text().trim();
+        initialCount = $body.find('[id^="subtitle-cue-row-"]').length;
+      } else if ($body.find('#active-subtitle-cue-text').length > 0) {
+        initialFirstText = $body.find('#active-subtitle-cue-text').text().trim();
+      }
+
       if ($body.find('#target-language-select').length > 0) {
         cy.get('#target-language-select').select('es');
         cy.wait('@timedtextTranslate').then((interception) => {
           expect(interception.response?.statusCode).to.eq(200);
-          expect(interception.response?.body.modifiedUrl).to.include('tlang=es');
+          const body = interception.response?.body;
+
+          // 1. Verify tlang param was replaced in modifiedUrl
+          expect(body.modifiedUrl).to.include('tlang=es');
+
+          // 2. Verify original working request settings & headers were copied
+          expect(body.copiedRequest).to.exist;
+          expect(body.copiedRequest.headers).to.exist;
+
+          // 3. Verify https response results provided
+          expect(body.httpsResponse).to.exist;
+          expect(body.httpsResponse.status).to.be.a('number');
+
+          // 4. Response assertion: number of subtitles records should be identical after changing tlang
+          expect(body.count).to.be.a('number');
+          expect(body.count).to.eq(body.cues.length);
+          if (initialCount > 1) {
+            expect(body.cues.length).to.eq(initialCount);
+          }
+
+          // 5. Response assertion: first subtitle record is different
+          expect(body.firstSubtitle).to.exist;
+          if (initialFirstText) {
+            expect(body.firstSubtitle.text).to.not.eq(initialFirstText);
+          }
         });
       }
     });

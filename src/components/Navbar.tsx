@@ -153,51 +153,47 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Network Inspector (if enabled in settings or active) */}
-          {(settings?.enableNetworkInspector ?? false) && (
-            <button
-              type="button"
-              id="navbar-network-inspector-button"
-              data-testid="navbar-network-inspector-button"
-              onClick={() => dispatch(setNetworkInspectorOpen(true))}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-800/60 bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 text-xs font-medium transition active:scale-95"
-              title="Inspect web requests & responses"
-            >
-              <Activity className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Network</span>
-              <span className="px-1.5 py-0.2 rounded-full bg-blue-900/80 text-[10px] font-mono font-bold text-blue-200">
-                {requests.length}
-              </span>
-            </button>
-          )}
+          {/* Network Inspector */}
+          <button
+            type="button"
+            id="navbar-network-inspector-button"
+            data-testid="navbar-network-inspector-button"
+            onClick={() => dispatch(setNetworkInspectorOpen(true))}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-blue-800/60 bg-blue-950/40 hover:bg-blue-900/60 text-blue-300 text-xs font-medium transition active:scale-95 cursor-pointer"
+            title="Inspect web requests & responses"
+          >
+            <Activity className="w-3.5 h-3.5 text-blue-400" />
+            <span className="hidden sm:inline">Network</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-blue-900/80 text-[10px] font-mono font-bold text-blue-200">
+              {requests.length}
+            </span>
+          </button>
 
-          {/* Errors Inspector (shown if errors exist or if enabled in settings) */}
-          {(errors.length > 0 || (settings?.enableErrorInspector ?? false)) && (
-            <button
-              type="button"
-              id="navbar-error-inspector-button"
-              data-testid="navbar-error-inspector-button"
-              onClick={() => dispatch(setInspectorOpen(true))}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition active:scale-95 ${
-                errors.length > 0
-                  ? 'border-red-700/80 bg-red-950/60 hover:bg-red-900/80 text-red-300 animate-pulse'
-                  : 'border-neutral-700 bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300'
+          {/* Errors Inspector */}
+          <button
+            type="button"
+            id="navbar-error-inspector-button"
+            data-testid="navbar-error-inspector-button"
+            onClick={() => dispatch(setInspectorOpen(true))}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition active:scale-95 cursor-pointer ${
+              errors.length > 0
+                ? 'border-red-700/80 bg-red-950/60 hover:bg-red-900/80 text-red-300 animate-pulse'
+                : 'border-neutral-700 bg-neutral-800/80 hover:bg-neutral-800 text-neutral-300'
+            }`}
+            title="Inspect app errors & Redux state machine"
+          >
+            <AlertTriangle
+              className={`w-3.5 h-3.5 ${errors.length > 0 ? 'text-red-400' : 'text-neutral-400'}`}
+            />
+            <span className="hidden sm:inline">Errors</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                errors.length > 0 ? 'bg-red-600 text-white' : 'bg-neutral-900 text-neutral-400'
               }`}
-              title="Inspect app errors & Redux state machine"
             >
-              <AlertTriangle
-                className={`w-3.5 h-3.5 ${errors.length > 0 ? 'text-red-400' : 'text-neutral-400'}`}
-              />
-              <span className="hidden sm:inline">Errors</span>
-              <span
-                className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                  errors.length > 0 ? 'bg-red-600 text-white' : 'bg-neutral-900 text-neutral-400'
-                }`}
-              >
-                {errors.length}
-              </span>
-            </button>
-          )}
+              {errors.length}
+            </span>
+          </button>
 
           {onOpenShare && (
             <button

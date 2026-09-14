@@ -133,7 +133,15 @@ export function detectLanguageFromText(text: string): string {
 export function getAvailableVoices(langCode?: string): SpeechSynthesisVoice[] {
   if (typeof window === 'undefined' || !window.speechSynthesis) return [];
   try {
-    const voices = window.speechSynthesis.getVoices() || [];
+    const rawVoices = window.speechSynthesis.getVoices() || [];
+    const seen = new Set<string>();
+    const voices = rawVoices.filter((v) => {
+      const key = `${v.voiceURI || v.name}::${v.lang}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
     if (!langCode) return voices;
 
     const clean = normalizeLanguageCode(langCode).toLowerCase();

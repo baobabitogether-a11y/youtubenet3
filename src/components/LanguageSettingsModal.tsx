@@ -11,7 +11,7 @@ import {
   Check,
 } from 'lucide-react';
 import { TargetLanguage } from '../types';
-import { SUPPORTED_TARGET_LANGUAGES } from '../lib/translateService';
+import { SUPPORTED_TARGET_LANGUAGES } from '../config/constants';
 import { isAndroidNativeTTS } from '../lib/ttsEngine';
 
 interface LanguageSettingsModalProps {
@@ -234,8 +234,8 @@ export const LanguageSettingsModal: React.FC<LanguageSettingsModalProps> = ({
                             className="w-full py-1 px-2 rounded-lg bg-neutral-900 border border-neutral-700 text-neutral-300 text-xs focus:outline-none focus:border-indigo-500"
                           >
                             <option value="">Default System Voice</option>
-                            {voices.map((v) => (
-                              <option key={v.voiceURI} value={v.voiceURI}>
+                            {voices.map((v, idx) => (
+                              <option key={`voice-${v.voiceURI || v.name}-${v.lang}-${idx}`} value={v.voiceURI || v.name}>
                                 {v.name} ({v.lang})
                               </option>
                             ))}

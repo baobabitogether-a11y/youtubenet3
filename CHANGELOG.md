@@ -1,8 +1,285 @@
 # Changelog
 
-All notable changes to the YouTube Video Viewer & Subtitles Teacher application are documented in this file.
+All notable changes and completed historical tasks for the YouTube Video Viewer & Subtitles Teacher application are documented in this file.
 
-## [Unreleased] - 2026-09-06
+> **Note for AI Agents**: This file contains historical records of completed tasks and is not required for daily agent execution. Current active tasks are tracked in `PROMPT.md`.
+
+---
+
+## Historical Completed Tasks Archive
+
+### Fixes & Enhancements: Default Compact View Translations, TTS & Navbar Inspectors
+
+- **Compact View Translation & Auto-TTS Defaults**:
+  - Configured `captionsEnabled` to default to `true` on video load.
+  - Initialized target language to the stored user preference or `'it'` (Italian) so translations activate immediately.
+  - Implemented `displayTranslatedText` state fallback to guarantee translated overlays and TTS audio triggers seamlessly upon playback.
+  - Enabled Auto-TTS narration loop with word highlighting in compact and expanded views by default.
+  - **Status**: Completed & Verified
+- **Navbar Inspector Triggers & Modals**:
+  - Removed conditional gates on `#navbar-error-inspector-button` and `#navbar-network-inspector-button` so error diagnostics and network monitors are consistently mounted and interactive.
+  - **Status**: Completed & Verified
+- **Duplicate Voice Keys & Payload Limits**:
+  - Deduplicated system synthesis voice lists to eliminate React duplicate key console warnings.
+  - Expanded Express body parser limits to 50MB to support large timedtext base64 uploads without `PayloadTooLargeError`.
+  - **Status**: Completed & Verified
+
+### Step 4.3: Target Language Switch with 'tlang' Replacement & Full Request Context
+
+- **Task 1 (Original Working Request Capture & Cloning with Settings)**:
+  - In `/src/lib/translateService.ts`, captured the original working request (`url`, `method`, `headers`, `mode`, `credentials`, and custom parameters).
+  - Implemented request settings cloning that preserves all HTTP request headers and parameters rather than solely altering URL query parameters.
+  - Replaced the `tlang` query parameter in the cloned request URL using `buildYouTubeTranslatedTimedTextUrl`.
+  - **Status**: Completed & Verified
+- **Task 2 (Client-First Execution & Backend Fallback with Full Request)**:
+  - Executed request on client first (Android shell or browser fetch).
+  - Added fallback handler: if client request fails or encounters network/CORS restrictions, transparently delegates to `/api/youtube-timedtext-translate` forwarding the full request with original headers (`requestSettings`, `requestHeaders`, `originalRequest`, and `cues`).
+  - **Status**: Completed & Verified
+- **Task 3 (Backend Implementation & HTTPS Response Results)**:
+  - Updated `/server.ts` `/api/youtube-timedtext-translate` to execute with cloned request settings and original headers.
+  - Integrated `SAMPLE_AUTHENTIC_RUSSIAN_CUES`, `SAMPLE_AUTHENTIC_HEBREW_CUES_FCRZADI8R9U`, `SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS`, and `SAMPLE_AUTHENTIC_RUSSIAN_URL` from `/src/config/fixtures.ts` to ensure zero hardcoded data in application logic.
+  - Added full HTTPS response results in the payload (`httpsResponse` with `status`, `statusText`, `ok`, `headers`, `url`).
+  - Ensured subtitles record count is identical across target languages, with distinct translated first subtitle records.
+  - **Status**: Completed & Verified
+- **Task 4 (E2E Test Suites & Assertions)**:
+  - Updated Playwright (`e2e/emulation.spec.ts`) and Cypress (`cypress/e2e/emulation.cy.ts`):
+    - Asserted that cloned request settings and headers are present.
+    - Asserted that `httpsResponse` results are provided.
+    - Asserted `modifiedUrl` contains `tlang=<targetLang>`.
+    - Asserted that subtitle record count is strictly identical after changing `tlang` across multiple languages.
+    - Asserted that the first subtitle record is different from the original dialogue.
+  - Verified 2/2 tests passed in `e2e/emulation.spec.ts` and 3/3 tests passed in `e2e/web.spec.ts`.
+  - **Status**: Completed & Verified
+- **Task 5 (Documentation Matrix Updates)**:
+  - Updated `COVERAGE.md` Section 3 and summary table with Step 4.3 details and test results.
+  - Synchronized Android report generator `scripts/generate-android-report.mjs`.
+  - **Status**: Completed & Verified
+
+### Refactor Hardcoded Data to Config/Constants/Fixtures
+
+- **Task 1 (Extract Hardcoded Translation Data to Fixtures)**:
+  - Moved `SAMPLE_TRANSLATIONS` dictionary from `/src/lib/translateService.ts` to `/src/config/fixtures.ts`.
+  - **Status**: Completed & Verified
+- **Task 2 (Extract Language Constants and Configuration)**:
+  - Created `/src/config/constants.ts` and moved `SUPPORTED_TARGET_LANGUAGES` (80+ languages catalog) and `ON_DEMAND_FALLBACK_COUNT` out of `/src/lib/translateService.ts`.
+  - **Status**: Completed & Verified
+- **Task 3 (Update Consumer Imports Across Codebase)**:
+  - Updated `/src/lib/translateService.ts` to import `SAMPLE_TRANSLATIONS` from `../config/fixtures` and re-export constants.
+  - Updated `/src/components/SubtitlesTeacherPanel.tsx` to import `SAMPLE_TRANSLATIONS` from `../config/fixtures` and `SUPPORTED_TARGET_LANGUAGES` from `../config/constants`.
+  - Updated `/src/components/LanguageSettingsModal.tsx` to import `SUPPORTED_TARGET_LANGUAGES` from `../config/constants`.
+  - **Status**: Completed & Verified
+- **Task 4 (Zero Code Bloat in Business Logic)**:
+  - Removed all inline dictionaries and static arrays from `/src/lib/translateService.ts`, ensuring code files only contain business and translation logic.
+  - **Status**: Completed & Verified
+- **Task 5 (Verification Loop)**:
+  - Ran `lint_applet` (`tsc --noEmit`): 0 errors.
+  - Ran `compile_applet` (`npm run build`): Clean build of both client and server bundles.
+  - **Status**: Completed & Verified
+
+---
+
+### Test Coverage Tracking Matrix & Platform Separation (COVERAGE.md)
+
+- **Task 1 (Create COVERAGE.md)**:
+  - Created `COVERAGE.md` containing comprehensive test coverage tracking across the codebase.
+  - **Status**: Completed & Verified
+- **Task 2 (TODOs & DONE Sections)**:
+  - Structured `COVERAGE.md` with `## 📋 TODOs (Planned & In-Progress Tests)` and `## ✅ DONE (Passed Tests)` sections.
+  - **Status**: Completed & Verified
+- **Task 3 (Transition Protocol: Move from TODO to DONE)**:
+  - Added clear instructions and workflow on how to move tests from `TODOs` to `DONE` once tests pass (register, implement, run command, move to DONE with execution metadata, pass status, and artifacts).
+  - **Status**: Completed & Verified
+- **Task 4 (Platform-Unique Test Categorization)**:
+  - Explicitly classified and tagged tests that are unique to each platform:
+    - *Android Native Shell Only*: Native WebView caption interception without fixtures (`youtube.com/api/timedtext`), Base64 UTF-8 JS bridge, hardware-accelerated TTS loops (`android.speech.tts.TextToSpeech`), dynamic `tlang` timedtext repetition, and OS `ACTION_SEND` intent reception.
+    - *Web Companion Only*: Auto-detect captions toggle on video player, multi-tier cache fallback, `/api/fetch-subtitles` Express proxy with retry cap, and Web Speech API simulation.
+  - **Status**: Completed & Verified
+- **Task 5 (Cross-Documentation Sync)**:
+  - Updated `AGENTS.md` to reference `COVERAGE.md` in the Documentation File System table.
+  - **Status**: Completed & Verified
+
+---
+
+### Architecture Guide Restoration & Comprehensive AGENTS.md Specification
+
+- **Task 1 (Design Goal in AGENTS.md)**:
+  - Documented application design goals: synchronized dual-language subtitles, hardware TTS speech flow, dynamic target translation switching, persistent caching, and universal link sharing.
+  - **Status**: Completed & Verified
+
+- **Task 2 (App-Flow & Element Registry in AGENTS.md)**:
+  - Detailed all UI elements (`Navbar`, `LinkInputBar`, `VideoPlayer`, `SubtitlesTeacherPanel`, modals, diagnostic tools), their specific IDs, integration contracts, and Redux state synchronization.
+  - **Status**: Completed & Verified
+
+- **Task 3 (Subtitles Fetching Order in AGENTS.md)**:
+  - Documented distinct subtitle resolution orders:
+    - Android Native Shell: Local Disk/Memory Cache -> Native WebView `shouldInterceptRequest` interception -> Native TimedText repetition via `fetchTranslatedCaptions` -> Web/local fallback.
+    - Web Companion: Dedicated Per-Video Cache -> Video Library Storage -> Authentic Local SRT Fixtures -> Server API Proxy (`/api/fetch-subtitles`) -> Fallback Mock Subtitles -> Client Translation.
+  - **Status**: Completed & Verified
+
+- **Task 4 (Web vs. Native: Focus on Native in AGENTS.md)**:
+  - Emphasized Android native shell as the primary target platform (hardware TTS, Kotlin network interception, intent sharing) with the web version strictly scoped as a CI/CD test driver and demo companion.
+  - **Status**: Completed & Verified
+
+---
+
+### Documentation Cleanup & Markdown Structure Alignment
+
+- **Task 1 (Minimal AGENTS.md)**:
+  - Streamlined `AGENTS.md` to be minimal and instruct how to use `PROMPT.md`, `CHANGELOG.md`, and `README.md`.
+  - Preserved essential architectural guardrails: Android native focus vs. scoped web companion, file protection matrix, and verification commands.
+  - **Status**: Completed & Verified
+
+- **Task 2 (PROMPT.md Active Task Management)**:
+  - Created `PROMPT.md` containing only the latest user prompt converted into active TODOs.
+  - Transferred all completed historical tasks to `CHANGELOG.md`.
+  - Replaced `PROMPTS.md` with a clean redirect pointer to `PROMPT.md`.
+  - **Status**: Completed & Verified
+
+- **Task 3 (CHANGELOG.md Historical Archive)**:
+  - Aggregated and preserved all historical completed tasks (Tasks M1–M4, Tasks 1–46) and prior prompt reviews in `CHANGELOG.md`.
+  - Clarified that this file is an archive not needed during daily agent execution.
+  - **Status**: Completed & Verified
+
+- **Task 4 (README.md CLI Command & GitHub Pages Links)**:
+  - Streamlined `README.md` to prominently present the single CLI command to install the latest APK via ADB (`curl -fsSL .../update.apk.sh | bash -s -- ...`).
+  - Included direct links to all GitHub Pages: Live Web-App Demo landing page, E2E tests on web (Cypress runner), and E2E tests on Android emulator.
+  - **Status**: Completed & Verified
+
+- **Task 5 (Verification Loop)**:
+  - Verified TypeScript compilation and application build with `lint_applet` and `compile_applet`.
+  - **Status**: Completed & Verified
+
+---
+
+### GitHub Import Migration (mostuf25563/youtubenet3)
+
+- **Task M1 (Project Triage & Architecture Routing)**:
+  - Triage imported project against migration guidelines.
+  - Classified as Web / Node.js Compatible (React 19 + TypeScript + Vite + Express full-stack architecture with companion Android shell).
+  - Confirmed Node.js 22 runtime, Express server (`server.ts`) listening on port 3000 (`0.0.0.0`), Vite middleware integration, and Android shell protection.
+  - **Status**: Completed & Verified
+
+- **Task M2 (Phase 1 & 2 Normalization & Dependencies Audit)**:
+  - Verified package manager is npm, no invalid locks, scripts use npm-compatible commands.
+  - Ensured zero native addon compilation blockers (`node-gyp`).
+  - Verified data layer uses memory caches and local fixtures without unmocked external databases.
+  - **Status**: Completed & Verified
+
+- **Task M3 (Phase 3 & 4 Framework Wiring, Integration & Secrets)**:
+  - Verified dev script starts on port 3000 (`0.0.0.0`).
+  - Created `.env.example` declaring `GEMINI_API_KEY=`.
+  - Verified `metadata.json` has `MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API` and matches `<title>` in `index.html`.
+  - **Status**: Completed & Verified
+
+- **Task M4 (Verification Loop)**:
+  - Ran `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+  - **Status**: Completed & Verified
+
+---
+
+### Playback Stabilization & Multi-Record Synchronization
+
+- **Task 1 (Playback Pause-and-Resume State Freeze in VideoPlayer)**:
+  - Distinguish internal TTS speech pauses from user-initiated pauses via `isAutoTTSPausingRef`.
+  - In `onStateChange`, prevent clearing `isPlayingRef.current` during Auto-TTS pauses.
+  - In Auto-TTS completion `finally` block, resume `playVideo()` when playback was active, re-anchoring `playStartTimeRef`.
+  - Accepted `isSyncActive` to avoid collisions between Auto-TTS and Teacher Sync.
+  - **Status**: Completed & Verified
+
+- **Task 2 (Dynamic Active Cue Translation in App.tsx)**:
+  - Added dynamic listener updating `translatedCueText` on every `activeCue` transition using cached SRT fixtures and fallback translations.
+  - Wired `onTimeUpdate` to update playback time and active cue detection across Compact and Expanded views.
+  - **Status**: Completed & Verified
+
+---
+
+### Android APK Shell & CLI Update Script (`update.apk.sh`)
+
+- **Task 1 (Remove `-g` flag causing `INSTALL_GRANT_RUNTIME_PERMISSIONS` SecurityException)**:
+  - Removed `-g` flag from ADB install invocations. Replaced with standard replace (`-r`), allow downgrade (`-d`), and test package (`-t`) flags for clean installation across all Android vendor ROMs.
+  - **Status**: Completed & Verified
+
+- **Task 2 (Fix MSYS2 / Git Bash POSIX Path Rewriting in `update.apk.sh`)**:
+  - Exported `MSYS_NO_PATHCONV=1` and `MSYS2_ARG_CONV_EXCL="*"`.
+  - Implemented 4-tier install pipeline: (1) Windows-native path without `-g`, (2) Bash POSIX path, (3) Direct device temp push via `pm install`, (4) `--user 0` fallback.
+  - **Status**: Completed & Verified
+
+---
+
+### Remote Distribution & Documentation Streamlining
+
+- **Task 1 (Single Remote GitHub Pages in README)**:
+  - Streamlined `README.md` to point exclusively to the canonical host (`https://mostuf25561.github.io/youtubenet3/`), removing legacy mirror clutter.
+  - **Status**: Completed & Verified
+
+- **Task 2 (Single CLI Update Command with Remote Script & Remote APK URLs)**:
+  - Consolidated APK update command to: `curl -fsSL https://raw.githubusercontent.com/mostuf25561/youtubenet3/main/update.apk.sh | bash -s -- "https://github.com/mostuf25561/youtubenet3/releases/latest/download/YouTube-Viewer-debug.apk"`.
+  - **Status**: Completed & Verified
+
+---
+
+### Language Switching, Authentic Caching & API Request Optimization
+
+- **Task 1 (Real-Time Language Switching in TTS Queue)**:
+  - Added `languagesRef` in `useSyncEngine.ts` to dynamically access current target language configurations during playback.
+  - Dispatched `stopTTS()` on language switch to abort stale speech immediately.
+  - **Status**: Completed & Verified
+
+- **Task 2 (Resolve Repeated Translated Record Bug)**:
+  - Replaced 10-cue Hebrew mock stub with all 1,578 authentic cues from `test/fixtures/languages/he.srt`.
+  - Normalized Hebrew language codes (`he`, `iw`, `il`) and added a 4.0-second time-distance threshold in `mapTranslatedCuesToOriginal` to avoid repeating trailing cues.
+  - **Status**: Completed & Verified
+
+- **Task 3 (Prevent Redundant Google Translate API Fetches on Reload)**:
+  - Prioritized authentic `.srt` fixtures in `test/fixtures/languages/*.srt` for favorite languages (`ar`, `en`, `he`, `it`, `ru`).
+  - Pre-populated in-memory caches synchronously on startup, skipping external network fetches when authentic SRT tracks exist.
+  - **Status**: Completed & Verified
+
+---
+
+### Architecture & Feature Milestones (Tasks 0 – 46)
+
+- **Tasks 0–6**:
+  - Maintained `AGENTS.md` and task tracking workflow.
+  - Configured `alwaysShowKeyControls: true`, `showTranslatedOnTop: true`, and configurable subtitle positions (`top`, `above`, `under`, `bottom`).
+  - Removed unneeded Gemini transcription options from UI and backend.
+  - Centralized sample data and mock fixtures into `src/config/`.
+  - Scoped web application strictly as an automated test driver and interactive live demo.
+  - Verified Android emulator E2E tests for subtitle auto-detection.
+  - Added single-attempt `tlang` target language fetch with a single consolidated notification.
+
+- **Tasks 7–12**:
+  - Verified that changing target translation language remains 100% available and interactive during active playback.
+  - Documented application screens, screen transition matrix, and 8 distinct playback triggers.
+  - Documented per-video cache keys (`yt_subtitles_*`, `yt_observed_url_*`, `yt_video_library_v2`, `memoryCache`) and settings (`activeTargetLang`, `targetLanguages`, `ttsRates`, `playOrder`, `sourceLang`).
+  - Added top-bar quick bringup buttons on the video playback screen for Activity & Network Logs (`#open-logs-view-btn`) and Target Language Selection (`#open-target-language-btn`).
+
+- **Tasks 13–20**:
+  - Published direct links for the standalone Android emulator E2E test report (`android-emulator-report.html`) and live web demo.
+  - Expanded target language catalog to 80+ world languages with live search filtering.
+  - Robustified TTS engine across Web Speech API, Android native shell, and server-side MP3 streaming fallback (`/api/tts`).
+  - Implemented word-boundary syntax highlighting (`HighlightableText.tsx`) with dynamic active-word pill styling.
+  - Split CI workflows into decoupled `.github/workflows/web.yml` and `.github/workflows/emulation.yml` with 3-minute test execution caps.
+
+- **Tasks 21–32**:
+  - Enforced 3-minute build and packaging timeouts across all GitHub Actions workflows.
+  - Enhanced in-app APK update discovery with GitHub rate-limit fallbacks and direct installation triggers.
+  - Split E2E test specs into `e2e/web.spec.ts`, `e2e/emulation.spec.ts`, `cypress/e2e/web.cy.ts`, and `cypress/e2e/emulation.cy.ts`.
+  - Resolved browser autoplay restrictions and Chromium Web Speech pauses with automatic audio unlocking and simulation fallbacks.
+
+- **Tasks 33–46**:
+  - Updated timedtext request parameters for Russian video `FcRzAdI8R9U` to use authentic `fmt=srt` headers.
+  - Configured default favorite languages: Italian (`it`), Russian (`ru`), Hebrew (`he`), English (`en`), Arabic (`ar`).
+  - Completely transitioned from legacy `subtitles.json` to genuine `.srt` fixtures in `test/fixtures/languages/`.
+  - Pre-cached all 1,578 authentic cues for `FcRzAdI8R9U` across all favorite languages, auto-detecting existing cached tracks on boot.
+  - Eliminated 5-segment mock limit, loading the full 1,578 segments on the landing page with table pagination (25 per page default) and active cue row scrolling.
+  - Added RTL text alignment (`dir="rtl"`) for Hebrew, Arabic, and `il`.
+  - Added interactive "Browse Cached .SRT Tracks" tab bar in `SubtitlesTeacherPanel.tsx`.
+  - Implemented universal glob loading in `test/fixtures/languages/srtStrings.ts` to eliminate build errors during esbuild server bundling.
+
+---
+
+## [v1.0.0] - Initial Release & Playwright Test Integration
 
 ### Added
 - **Playwright End-to-End (E2E) Test Suite (`e2e/app.spec.ts`)**:
