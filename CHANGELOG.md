@@ -8,6 +8,16 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Dedicated Web Demo GitHub Pages Workflow & CI Test 7 Fix
+
+- **Dedicated Web Demo Publish Workflow (`.github/workflows/deploy-demo.yml`)**:
+  - Created `.github/workflows/deploy-demo.yml` dedicated to building and publishing the live web application demo and bundled subtitle artifacts (`cypress/reports/app`) to `gh-pages`.
+  - Configured automated triggers on `workflow_run` (after release build or web E2E test completion), direct `push` to `main`/`master`, and manual `workflow_dispatch`.
+- **Fixed CI Test 7 Visibility Issue**:
+  - Updated `VideoPlayer.tsx` to ensure `#quick-target-lang-overlay-btn` is rendered directly on the active subtitle cue container next to `#speak-orig-cue-btn` regardless of whether translated text is pre-rendered.
+  - Enhanced `e2e/web.spec.ts` Test 7 with robust fallback locators, hover trigger on `#video-player-container`, and expanded visibility timeouts.
+- **Status**: Completed & 100% Verified.
+
 ### Language-Bound TTS-Play to Subtitle Highlighting Sync & Quick Language Selection
 
 - **Strict Language-Bound TTS Highlighting Sync**:

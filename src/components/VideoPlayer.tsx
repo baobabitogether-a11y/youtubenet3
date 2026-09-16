@@ -1077,6 +1077,22 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <Volume2 className="w-3 h-3" />
                           </button>
+                          {onOpenTargetLanguageModal && (
+                            <button
+                              type="button"
+                              id="quick-target-lang-overlay-btn"
+                              data-testid="quick-target-lang-overlay-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenTargetLanguageModal();
+                              }}
+                              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
+                              title="Quickly select or edit target languages for translation"
+                            >
+                              <Globe className="w-3 h-3 text-indigo-400" />
+                              <span>{targetLangCode}</span>
+                            </button>
+                          )}
                         </div>
                         {effectiveDisplayTranslatedText && (
                           <div className="flex items-center justify-center gap-2 pt-0.5">

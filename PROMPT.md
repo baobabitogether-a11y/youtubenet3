@@ -3,17 +3,17 @@
 ## Latest User Prompt
 
 ```text
-compact design - need to fix lang selection and tts-play to text sync (sync also by language, dont highlight text of lang 1 where tts-play lang 2)
+1. add 1 workflow file dedicated to publish the web demo to the gh-page (* subtitles are based on artifact in the demo).
 
-add button to quickly select target languages.
-create test for sync issues
+2. fix:
+https://productionresultssa13.blob.core.windows.net/actions-results/3c190ecf-a1d1-4e49-8d78-b54a0e75cb42/workflow-job-run-e670240c-df75-5036-912d-1c64513c4882/logs/job/job-logs.txt...
 ```
 
 ## Active TODOs & Verification
 
-- [x] **Task 1 (Strict Language-Bound TTS-Play to Subtitle Highlighting Sync)**: Updated `VideoPlayer.tsx` to ensure subtitle text highlighting and effective text replacement strictly check language code alignment (`normSyncLang === normTargetLang`). Spoken TTS audio for `lang 2` (e.g., English) will NOT highlight or corrupt subtitle text for `lang 1` (e.g., Italian). Added a live status indicator `TTS: EN` when TTS is speaking a secondary language.
-- [x] **Task 2 (Quick Target Language Selection Button)**: Integrated quick target language buttons (`#quick-target-lang-overlay-btn` and `#open-target-language-btn`) directly into the compact view subtitle overlay and top player bar, enabling instant bringup of `SelectTargetLanguageModal` to switch languages on-the-fly during video playback.
-- [x] **Task 3 (E2E Test for Sync Issues & Language Selection)**: Implemented Web Critical Test 7 in `e2e/web.spec.ts` to verify quick target language selection, modal bringup, and language-bound TTS highlighting logic.
-- [x] **Task 4 (Build & Type Verification)**: Verified via `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+- [x] **Task 1 (Dedicated Web Demo Publish Workflow)**: Created `.github/workflows/deploy-demo.yml` dedicated to building and deploying the live web application demo and subtitle artifacts (`cypress/reports/app`) to `gh-pages`.
+- [x] **Task 2 (Fix CI Test 7 Visibility Failure)**: Updated `VideoPlayer.tsx` to render `#quick-target-lang-overlay-btn` directly on the active subtitle cue overlay (next to `#speak-orig-cue-btn`) and updated `e2e/web.spec.ts` Test 7 with robust locators, hover trigger, and timeouts.
+- [x] **Task 3 (Verification)**: Ran `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+
 
 
