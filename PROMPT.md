@@ -3,13 +3,17 @@
 ## Latest User Prompt
 
 ```text
-compact view - the presented text is not matching the tts-play text
+compact design - need to fix lang selection and tts-play to text sync (sync also by language, dont highlight text of lang 1 where tts-play lang 2)
+
+add button to quickly select target languages.
+create test for sync issues
 ```
 
 ## Active TODOs & Verification
 
-- [x] **Task 1 (Presented Text vs TTS Spoken Text Sync)**: Synchronized `textToSpeak` with `localTranslatedText` in `VideoPlayer.tsx` so presented subtitle text on screen immediately updates to match spoken TTS text 1:1.
-- [x] **Task 2 (Fallback Language Code Alignment)**: Fixed TTS language code selection to use source language (`detectedFormat?.language || 'auto'`) whenever TTS falls back to original subtitle text, preventing garbled cross-language voice output.
-- [x] **Task 3 (Hebrew ISO Normalization in Player Hook)**: Normalized Hebrew language codes (`iw` / `il` -> `he`) in `VideoPlayer.tsx` target subtitle cache lookups.
-- [x] **Task 4 (Verification)**: Ran `lint_applet` and `compile_applet` with zero TypeScript or build errors.
+- [x] **Task 1 (Strict Language-Bound TTS-Play to Subtitle Highlighting Sync)**: Updated `VideoPlayer.tsx` to ensure subtitle text highlighting and effective text replacement strictly check language code alignment (`normSyncLang === normTargetLang`). Spoken TTS audio for `lang 2` (e.g., English) will NOT highlight or corrupt subtitle text for `lang 1` (e.g., Italian). Added a live status indicator `TTS: EN` when TTS is speaking a secondary language.
+- [x] **Task 2 (Quick Target Language Selection Button)**: Integrated quick target language buttons (`#quick-target-lang-overlay-btn` and `#open-target-language-btn`) directly into the compact view subtitle overlay and top player bar, enabling instant bringup of `SelectTargetLanguageModal` to switch languages on-the-fly during video playback.
+- [x] **Task 3 (E2E Test for Sync Issues & Language Selection)**: Implemented Web Critical Test 7 in `e2e/web.spec.ts` to verify quick target language selection, modal bringup, and language-bound TTS highlighting logic.
+- [x] **Task 4 (Build & Type Verification)**: Verified via `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+
 

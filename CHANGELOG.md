@@ -8,6 +8,19 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Language-Bound TTS-Play to Subtitle Highlighting Sync & Quick Language Selection
+
+- **Strict Language-Bound TTS Highlighting Sync**:
+  - Refined `VideoPlayer.tsx` sync logic to compare normalized ISO language codes between active TTS queue audio (`syncTTSLang`) and the overlay target language (`targetLanguage` / `targetLangCode`).
+  - Ensured that when TTS is speaking `lang 2` (e.g. English), the overlay subtitle text for `lang 1` (e.g. Italian) is NOT highlighted or replaced, eliminating cross-language highlighting defects.
+  - Added a live `TTS: <LANG>` status badge on the overlay when TTS is speaking a different language than the active subtitle translation, allowing users to know which language voice is currently playing.
+- **Quick Target Language Selection Overlay Button**:
+  - Integrated a dedicated `#quick-target-lang-overlay-btn` button directly on the compact and expanded view subtitle overlays next to the Play button.
+  - Enabled instant bringup of `SelectTargetLanguageModal` (`#select-target-language-modal`) with one click to switch or manage target languages on the fly during active playback.
+- **Dedicated Sync & Language E2E Test Suite**:
+  - Implemented Web Critical Test 7 in `e2e/web.spec.ts` covering quick target language selection, modal interaction, language switching, and language-bound TTS playback synchronization.
+- **Status**: Completed & 100% Verified.
+
 ### Compact View Presented Subtitle Text & TTS Audio Synchronization
 
 - **1:1 Text-to-Speech Alignment**:

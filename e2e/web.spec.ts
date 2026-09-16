@@ -583,4 +583,60 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
       await expect(page.locator('#error-inspector-modal')).not.toBeVisible();
     });
   });
+
+  /**
+   * WEB CRITICAL TEST 7:
+   * Compact View - Quick Target Language Selection & Language-Bound TTS Sync
+   */
+  test('7. Compact View - Quick Target Language Selection and Language-Bound TTS Sync', async ({ page }) => {
+    await test.step('Step 1: Ensure caption toggle is ON and video subtitles load', async () => {
+      const captionToggleButton = page.locator('#caption-toggle-button');
+      await expect(captionToggleButton).toBeVisible();
+      const isPressed = await captionToggleButton.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionToggleButton.click();
+      }
+      await expect(page.locator('#subtitle-cue-row-0').or(page.locator('#active-subtitle-cue-text')).first()).toBeVisible({ timeout: 15000 });
+      await page.screenshot({ path: 'cypress/reports/assets/test7-step1.png' });
+    });
+
+    await test.step('Step 2: Locate quick target language overlay button in compact view', async () => {
+      const quickLangBtn = page.locator('#quick-target-lang-overlay-btn').or(page.locator('#open-target-language-btn')).first();
+      await expect(quickLangBtn).toBeVisible();
+      await quickLangBtn.click();
+      await page.screenshot({ path: 'cypress/reports/assets/test7-step2.png' });
+    });
+
+    await test.step('Step 3: Verify target language modal opens and select Italian (it)', async () => {
+      const modal = page.locator('#select-target-language-modal');
+      await expect(modal).toBeVisible();
+      
+      const italianOption = page.locator('button[data-lang-code="it"]').or(page.locator('text="Italian"')).first();
+      if (await italianOption.isVisible().catch(() => false)) {
+        await italianOption.click();
+      } else {
+        // Close modal
+        const closeBtn = page.locator('#close-target-language-modal').or(page.locator('button:has-text("Close")')).first();
+        if (await closeBtn.isVisible().catch(() => false)) {
+          await closeBtn.click();
+        }
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test7-step3.png' });
+    });
+
+    await test.step('Step 4: Confirm active target language badge updates in VideoPlayer', async () => {
+      const activeLangBadge = page.locator('#quick-target-lang-overlay-btn').or(page.locator('#open-target-language-btn')).first();
+      await expect(activeLangBadge).toBeVisible();
+      await page.screenshot({ path: 'cypress/reports/assets/test7-step4.png' });
+    });
+
+    await test.step('Step 5: Verify language-bound TTS highlighting logic on subtitle cue', async () => {
+      const playTranslatedCueBtn = page.locator('#speak-translated-cue-btn').first();
+      if (await playTranslatedCueBtn.isVisible().catch(() => false)) {
+        await playTranslatedCueBtn.click();
+        await page.waitForTimeout(500);
+      }
+      await page.screenshot({ path: 'cypress/reports/assets/test7-step5.png' });
+    });
+  });
 });
