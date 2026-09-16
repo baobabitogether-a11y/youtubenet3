@@ -661,4 +661,30 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
       await page.screenshot({ path: 'cypress/reports/assets/test7-step5.png' });
     });
   });
+
+  /**
+   * WEB CRITICAL TEST 8:
+   * Verify TTS Sync & Text Highlight Alternatives Configuration (4 Modes)
+   */
+  test('8. Settings - TTS Sync & Text Highlight Alternatives (4 Modes)', async ({ page }) => {
+    const settingsBtn = page.locator('#open-settings-btn, #open-settings-button').first();
+    await expect(settingsBtn).toBeVisible();
+    await settingsBtn.click();
+
+    const modal = page.locator('#settings-modal');
+    await expect(modal).toBeVisible();
+
+    // Test clicking each of the 4 TTS sync modes
+    for (const mode of ['word_boundary', 'time_linear', 'word_step', 'full_sentence']) {
+      const modeBtn = page.locator(`#tts-sync-mode-${mode}`);
+      await expect(modeBtn).toBeVisible();
+      await modeBtn.click();
+      await page.waitForTimeout(200);
+    }
+
+    // Close settings modal
+    const closeBtn = page.locator('#close-settings-modal-button');
+    await closeBtn.click();
+    await expect(modal).not.toBeVisible();
+  });
 });

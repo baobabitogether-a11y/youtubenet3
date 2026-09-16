@@ -29,7 +29,7 @@ import { setPlayerReady as setReduxPlayerReady, setPlayerState as setReduxPlayer
 import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
-import { SubtitlePosition } from '../utils/appSettings';
+import { SubtitlePosition, loadAppSettings, AppSettings } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
@@ -67,6 +67,7 @@ interface VideoPlayerProps {
   syncTTSLang?: string | null;
   isSyncSpeaking?: boolean;
   syncTTSCharIndex?: number | null;
+  settings?: AppSettings;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -101,9 +102,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       syncTTSLang = null,
       isSyncSpeaking = false,
       syncTTSCharIndex = null,
+      settings: propSettings,
     },
     ref
   ) => {
+    const settings = propSettings || loadAppSettings();
     const dispatch = useAppDispatch();
     const [localCaptionsEnabled, setLocalCaptionsEnabled] = useState(controlledCaptionsEnabled ?? true);
     const captionsActive = controlledCaptionsEnabled !== undefined ? controlledCaptionsEnabled : localCaptionsEnabled;
@@ -966,6 +969,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                                 text={effectiveDisplayTranslatedText}
                                 isSpeaking={isTranslatedSpeaking}
                                 activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1029,6 +1033,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               text={activeCue.text}
                               isSpeaking={isOriginalSpeaking}
                               activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1062,6 +1067,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               text={activeCue.text}
                               isSpeaking={isOriginalSpeaking}
                               activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1108,6 +1114,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                                 text={effectiveDisplayTranslatedText}
                                 isSpeaking={isTranslatedSpeaking}
                                 activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1504,10 +1511,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                                 isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
                               }`}
                             >
-                              <HighlightableText
+                               <HighlightableText
                                 text={effectiveDisplayTranslatedText}
                                 isSpeaking={isTranslatedSpeaking}
                                 activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1571,6 +1579,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               text={activeCue.text}
                               isSpeaking={isOriginalSpeaking}
                               activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1604,6 +1613,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               text={activeCue.text}
                               isSpeaking={isOriginalSpeaking}
                               activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1632,6 +1642,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                                 text={effectiveDisplayTranslatedText}
                                 isSpeaking={isTranslatedSpeaking}
                                 activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
