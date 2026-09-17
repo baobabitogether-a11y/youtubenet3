@@ -4,6 +4,7 @@
 [![Build & Release Android APK](https://github.com/mostuf25563/youtubenet3/actions/workflows/release-apk.yml/badge.svg)](https://github.com/mostuf25563/youtubenet3/actions/workflows/release-apk.yml)
 [![Web E2E Tests](https://github.com/mostuf25563/youtubenet3/actions/workflows/web.yml/badge.svg)](https://github.com/mostuf25563/youtubenet3/actions/workflows/web.yml)
 [![Android Emulator E2E Tests](https://github.com/mostuf25563/youtubenet3/actions/workflows/emulation.yml/badge.svg)](https://github.com/mostuf25563/youtubenet3/actions/workflows/emulation.yml)
+[![Publish Web Demo](https://github.com/mostuf25563/youtubenet3/actions/workflows/deploy-demo.yml/badge.svg)](https://github.com/mostuf25563/youtubenet3/actions/workflows/deploy-demo.yml)
 
 A dedicated Android native shell application for YouTube video learning with synchronized multi-language subtitles, native hardware TTS speech flow, and on-the-fly translation switching. Accompanied by a scoped web companion for automated CI/CD test drivers and live interactive demonstration.
 
