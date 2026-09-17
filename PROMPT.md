@@ -3,15 +3,16 @@
 ## Latest User Prompt
 
 ```text
-- Compact view shows translated text and plays Auto-TTS by default
-- Navbar inspector triggers are always actionable
-- Resolved body size limits and duplicate React voice keys
+remember by default we use only 1 target language.
+after enabling tts - it shouldn't change the list of target languages!
+-
+we dont deal yet with translation to multiple languages in parrallel.
 ```
 
-## Active TODOs & Verification
+## Actionable Tasks
 
-- [x] **Task 1 (Body Parser Limit)**: Increase express payload limit to 50MB to handle large base64 caption files without `PayloadTooLargeError`.
-- [x] **Task 2 (Unique React Keys for Voices)**: Deduplicate voice lists across components and modals to eliminate key collision warnings.
-- [x] **Task 3 (Navbar Inspector Buttons)**: Ensure Error and Network inspector triggers and dialogs are always mounted and responsive.
-- [x] **Task 4 (Compact View Defaults)**: Enable captions, translation overlay (`displayTranslatedText`), and Auto-TTS narration by default upon video loading.
-- [x] **Task 5 (Verification)**: Verify with `lint_applet` and `compile_applet`.
+- [ ] Task 1: Enforce single target language by default (`singleTargetLanguageMode: true`, only 1 target language active/enabled).
+- [ ] Task 2: Ensure enabling TTS does NOT change the list of target languages or append extra languages to target languages.
+- [ ] Task 3: Remove parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel.
+- [ ] Task 4: Ensure TTS speaks only for the single active target language (or source/active language as selected) and highlights that cue without modifying target languages.
+- [ ] Task 5: Verify zero TypeScript errors (`lint_applet`), build cleanly (`compile_applet`), run `npm run update:readme mostuf25563`, and document in `CHANGELOG.md`.

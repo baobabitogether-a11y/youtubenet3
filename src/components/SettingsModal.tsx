@@ -17,6 +17,9 @@ import {
   ExternalLink,
   Eye,
   Plus,
+  Volume2,
+  VolumeX,
+  Clock,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -148,6 +151,68 @@ export function SettingsModal({
                 </div>
               </div>
 
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <span>TTS Sync &amp; Text Highlight Mode (4 Alternatives)</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-amber-400 uppercase font-bold">
+                    {settings.ttsSyncMode || 'word_boundary'}
+                  </span>
+                </div>
+                <div className="text-xs text-neutral-400">
+                  Select which synchronization algorithm to use for TTS speech audio playback and target text highlighting.
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {[
+                    {
+                      id: 'word_boundary',
+                      title: '1. Word Boundary Event',
+                      desc: 'Syncs using native TTS boundary event callbacks.',
+                    },
+                    {
+                      id: 'time_linear',
+                      title: '2. Smooth Linear (RAF)',
+                      desc: 'Interpolates character index linearly during speech.',
+                    },
+                    {
+                      id: 'word_step',
+                      title: '3. Discrete Word Step',
+                      desc: 'Steps word-by-word at equal time intervals.',
+                    },
+                    {
+                      id: 'full_sentence',
+                      title: '4. Full Sentence Highlight',
+                      desc: 'Highlights full sentence for complete TTS duration.',
+                    },
+                  ].map((alt) => {
+                    const isSelected = (settings.ttsSyncMode || 'word_boundary') === alt.id;
+                    return (
+                      <button
+                        key={alt.id}
+                        type="button"
+                        id={`tts-sync-mode-${alt.id}`}
+                        onClick={() =>
+                          onUpdateSettings({ ...settings, ttsSyncMode: alt.id as any })
+                        }
+                        className={`p-2.5 rounded-xl text-left border transition-all flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-amber-950/60 border-amber-500/80 text-amber-100 shadow-md ring-1 ring-amber-500/50'
+                            : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:border-neutral-700 hover:text-neutral-200'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="font-semibold text-xs text-neutral-100">{alt.title}</span>
+                          {isSelected && <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                        </div>
+                        <p className="text-[11px] text-neutral-400 mt-1 leading-tight">{alt.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
                 <div>
                   <div className="font-medium text-xs sm:text-sm text-neutral-200">
@@ -248,6 +313,81 @@ export function SettingsModal({
                   className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                 />
               </div>
+
+              {/* Setting 1: Auto-play TTS Speech Narration (OFF by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <span>Auto-play TTS Speech (Dialogue Narration)</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default OFF: only shows the target translation visually without playing TTS speech audio. In compact mode, you can quickly turn it on via the overlay quick control.
+                  </div>
+                </div>
+                <input
+                  id="toggle-autoplay-tts-setting"
+                  data-testid="toggle-autoplay-tts-setting"
+                  type="checkbox"
+                  checked={settings.autoPlayTTS ?? false}
+                  onChange={(e) =>
+                    onUpdateSettings({ ...settings, autoPlayTTS: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              {/* Setting 2: Single Target Language Mode (ON by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-indigo-400" />
+                    <span>Use Only 1 Target Language by Default</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default ON: keeps comprehension focused on 1 primary target language. In compact mode, use the quick &quot;+ Lang&quot; button to enable presentation of more languages.
+                  </div>
+                </div>
+                <input
+                  id="toggle-single-target-lang-mode"
+                  data-testid="toggle-single-target-lang-mode"
+                  type="checkbox"
+                  checked={settings.singleTargetLanguageMode ?? true}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      singleTargetLanguageMode: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-indigo-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              {/* Setting 3: Show Subtitle Time Section Beside Subtitles (ON by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>Show Subtitle Time Section Besides Subtitles</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default ON: displays the subtitle cue&apos;s start and end timeframe (e.g. 00:04 - 00:07) directly beside each subtitle line on screen.
+                  </div>
+                </div>
+                <input
+                  id="toggle-show-subtitle-timestamps"
+                  data-testid="toggle-show-subtitle-timestamps"
+                  type="checkbox"
+                  checked={settings.showSubtitleTimestamps ?? true}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      showSubtitleTimestamps: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
             </div>
           </div>
 
@@ -314,6 +454,8 @@ export function SettingsModal({
               >
                 <input
                   type="radio"
+                  id="play-order-video-then-tts"
+                  data-testid="play-order-video-then-tts"
                   name="playOrder"
                   checked={settings.playOrder === 'video_then_tts'}
                   onChange={() => onUpdateSettings({ ...settings, playOrder: 'video_then_tts' })}
@@ -338,6 +480,8 @@ export function SettingsModal({
               >
                 <input
                   type="radio"
+                  id="play-order-tts-then-video"
+                  data-testid="play-order-tts-then-video"
                   name="playOrder"
                   checked={settings.playOrder === 'tts_then_video'}
                   onChange={() => onUpdateSettings({ ...settings, playOrder: 'tts_then_video' })}

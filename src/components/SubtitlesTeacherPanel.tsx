@@ -72,25 +72,10 @@ interface SubtitlesTeacherPanelProps {
   activeCue?: CaptionCue | null;
   onJumpToCue?: (cue: CaptionCue, index: number) => void;
   onSyncStateChange?: (isActive: boolean) => void;
+  onSyncSpeakingChange?: (isSpeaking: boolean, text: string | null, lang: string | null, charIdx: number | null) => void;
 }
 
 const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
-  {
-    id: 'lang-it',
-    code: 'it',
-    name: 'Italian (Italiano)',
-    ttsRate: 1.0,
-    enabled: true,
-    color: '#10b981',
-  },
-  {
-    id: 'lang-ar',
-    code: 'ar',
-    name: 'Arabic (العربية)',
-    ttsRate: 1.0,
-    enabled: true,
-    color: '#14b8a6',
-  },
   {
     id: 'lang-he',
     code: 'he',
@@ -98,6 +83,14 @@ const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
     ttsRate: 1.0,
     enabled: true,
     color: '#8b5cf6',
+  },
+  {
+    id: 'lang-it',
+    code: 'it',
+    name: 'Italian (Italiano)',
+    ttsRate: 1.0,
+    enabled: false,
+    color: '#10b981',
   },
   {
     id: 'lang-ru',
@@ -144,6 +137,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   activeCue,
   onJumpToCue,
   onSyncStateChange,
+  onSyncSpeakingChange,
 }: SubtitlesTeacherPanelProps) => {
   const dispatch = useAppDispatch();
   const [targetLanguages, setTargetLanguages] = useState<TargetLanguage[]>(() => {
@@ -379,6 +373,10 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   useEffect(() => {
     onSyncStateChange?.(isSyncActive);
   }, [isSyncActive, onSyncStateChange]);
+
+  useEffect(() => {
+    onSyncSpeakingChange?.(isSpeaking, currentTTSText, currentTTSLang, activeCharIndex);
+  }, [isSpeaking, currentTTSText, currentTTSLang, activeCharIndex, onSyncSpeakingChange]);
 
   // Calculate effective active index from sync engine or passed activeCue
   const effectiveActiveIndex = useMemo(() => {
@@ -1105,6 +1103,8 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
               {/* Filter search input */}
               <div className="w-full sm:w-auto">
                 <input
+                  id="subtitles-search-input"
+                  data-testid="subtitles-search-input"
                   type="text"
                   placeholder="Filter subtitles..."
                   value={searchQuery}

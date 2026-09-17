@@ -20,6 +20,7 @@ import {
   Globe,
   Layers,
   Terminal,
+  Plus,
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, formatTypeName } from '../utils/youtube';
 import { YouTubeFormatType, YouTubePlayerHandle, CaptionCue } from '../types';
@@ -29,11 +30,12 @@ import { setPlayerReady as setReduxPlayerReady, setPlayerState as setReduxPlayer
 import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
-import { SubtitlePosition } from '../utils/appSettings';
+import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
-import { getCachedTargetSubtitles } from '../utils/subtitleCache';
+import { getCachedTargetSubtitles, getCachedSubtitles } from '../utils/subtitleCache';
+import { getVideoSettings } from '../utils/videoSettings';
 import { isRtl } from '../utils/rtlUtils';
 
 interface VideoPlayerProps {
@@ -52,6 +54,7 @@ interface VideoPlayerProps {
   activeCue?: CaptionCue | null;
   translatedCueText?: string | null;
   targetLanguage?: string | null;
+  onSelectTargetLanguage?: (lang: string) => void;
   onOpenTargetLanguageModal?: () => void;
   onOpenLogs?: () => void;
   onOpenSettings?: () => void;
@@ -62,6 +65,12 @@ interface VideoPlayerProps {
   showTranslatedOnTop?: boolean;
   onChangeSubtitlePosition?: (pos: SubtitlePosition) => void;
   isSyncActive?: boolean;
+  syncTTSText?: string | null;
+  syncTTSLang?: string | null;
+  isSyncSpeaking?: boolean;
+  syncTTSCharIndex?: number | null;
+  settings?: AppSettings;
+  onUpdateSettings?: (newSettings: AppSettings) => void;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -82,6 +91,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       activeCue = null,
       translatedCueText = null,
       targetLanguage = null,
+      onSelectTargetLanguage,
       onOpenTargetLanguageModal,
       onOpenLogs,
       onOpenSettings,
@@ -92,9 +102,16 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       showTranslatedOnTop = true,
       onChangeSubtitlePosition,
       isSyncActive = false,
+      syncTTSText = null,
+      syncTTSLang = null,
+      isSyncSpeaking = false,
+      syncTTSCharIndex = null,
+      settings: propSettings,
+      onUpdateSettings,
     },
     ref
   ) => {
+    const settings = propSettings || loadAppSettings();
     const dispatch = useAppDispatch();
     const [localCaptionsEnabled, setLocalCaptionsEnabled] = useState(controlledCaptionsEnabled ?? true);
     const captionsActive = controlledCaptionsEnabled !== undefined ? controlledCaptionsEnabled : localCaptionsEnabled;
@@ -102,6 +119,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const targetLangCode = targetLanguage || 'it';
     const cleanTargetLang = targetLangCode.toLowerCase().split('-')[0];
+    const normTargetLang = (cleanTargetLang === 'iw' || cleanTargetLang === 'il') ? 'he' : cleanTargetLang;
 
     // Local state to guarantee translated text is always present even if parent async translation is resolving
     const [localTranslatedText, setLocalTranslatedText] = useState<string | null>(null);
@@ -116,9 +134,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         return;
       }
       // Check authentic target subtitle track cache
-      const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
+      const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
       if (srtCues && srtCues.length > 0) {
-        const match = srtCues.find((c) => c.id === activeCue.id);
+        const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
         if (match?.text) {
           setLocalTranslatedText(match.text);
           return;
@@ -133,9 +151,51 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       return () => {
         isMounted = false;
       };
-    }, [translatedCueText, activeCue?.id, activeCue?.text, videoId, cleanTargetLang, targetLangCode]);
+    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode]);
+
+    // TTS playback state with word boundary syntax highlighting
+    const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
+    const [activeTTSTarget, setActiveTTSTarget] = useState<'translated' | 'original' | null>(null);
+    const [activeTTSCharIndex, setActiveTTSCharIndex] = useState<number | null>(null);
+
+    const normalizeLangCode = (lang: string | null | undefined): string => {
+      if (!lang) return '';
+      const cleaned = lang.toLowerCase().trim().split('-')[0];
+      if (cleaned === 'iw' || cleaned === 'il') return 'he';
+      return cleaned;
+    };
+
+    const normSyncLang = normalizeLangCode(syncTTSLang);
+    const normSourceLang = normalizeLangCode(detectedFormat?.language);
+
+    // Check if TTS is currently speaking the original subtitle
+    const isSyncOriginalSpeaking = isSyncSpeaking && !!syncTTSLang && (
+      normSyncLang === normSourceLang ||
+      syncTTSLang === 'orig' ||
+      (syncTTSLang === 'auto' && syncTTSText === activeCue?.text)
+    );
+
+    const isOriginalSpeaking = isSyncOriginalSpeaking || (isTTSSpeakingState && activeTTSTarget === 'original');
+
+    // Check if TTS is currently speaking the active target language of this overlay
+    const isSyncTargetLangSpeaking = isSyncSpeaking && !!syncTTSLang && (
+      normSyncLang === normTargetLang ||
+      syncTTSLang === targetLangCode
+    );
+
+    const isTranslatedSpeaking = isSyncTargetLangSpeaking
+      ? true
+      : (isTTSSpeakingState && activeTTSTarget === 'translated');
 
     const displayTranslatedText = translatedCueText || localTranslatedText;
+
+    const effectiveDisplayTranslatedText = (isSyncTargetLangSpeaking && syncTTSText)
+      ? syncTTSText
+      : displayTranslatedText;
+
+    const currentSpeakingCharIndex = isSyncTargetLangSpeaking
+      ? (syncTTSCharIndex ?? 0)
+      : activeTTSCharIndex;
 
     const handleToggleCaptions = (e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -163,21 +223,88 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const [showControls, setShowControls] = useState(true);
     const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // TTS playback state with word boundary syntax highlighting
-    const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
-    const [activeTTSTarget, setActiveTTSTarget] = useState<'translated' | 'original' | null>(null);
-    const [activeTTSCharIndex, setActiveTTSCharIndex] = useState<number | null>(null);
-
-    // Auto-TTS Narration State (persisted per session, default ON)
+    // Auto-TTS Narration State (default OFF: by default don't tts-play, only show the target translation)
     const [autoTTSEnabled, setAutoTTSEnabled] = useState<boolean>(() => {
-      if (typeof window === 'undefined') return true;
+      if (typeof window === 'undefined') return settings?.autoPlayTTS ?? false;
       try {
         const val = localStorage.getItem('yt_auto_tts_enabled');
-        return val !== null ? val === 'true' : true;
+        return val !== null ? val === 'true' : (settings?.autoPlayTTS ?? false);
       } catch {
-        return true;
+        return settings?.autoPlayTTS ?? false;
       }
     });
+
+    useEffect(() => {
+      if (settings?.autoPlayTTS !== undefined) {
+        const val = localStorage.getItem('yt_auto_tts_enabled');
+        if (val === null) {
+          setAutoTTSEnabled(settings.autoPlayTTS);
+        }
+      }
+    }, [settings?.autoPlayTTS]);
+
+    const [isHebrewHighlighted, setIsHebrewHighlighted] = useState<boolean>(() => targetLangCode === 'he');
+
+    useEffect(() => {
+      setIsHebrewHighlighted(targetLangCode === 'he');
+    }, [targetLangCode]);
+
+    // Single target language TTS playback: plays TTS only for the current target language and DOES NOT modify the list of target languages!
+    const playCurrentCueTTS = async () => {
+      unlockTTSAudio();
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      try {
+        ytPlayerRef.current?.pauseVideo?.();
+      } catch {}
+      postIframeCommand('pauseVideo');
+
+      const cachedCues = getCachedSubtitles(videoId);
+      const targetCue = activeCue || (cachedCues && cachedCues.length > 0 ? cachedCues[0] : null);
+      if (!targetCue?.text) return;
+
+      setIsTTSSpeakingState(true);
+      isAutoTTSSpeakingRef.current = true;
+
+      try {
+        let textToSpeak = displayTranslatedText || translatedCueText || '';
+        if (!textToSpeak) {
+          const norm = (targetLangCode === 'iw' || targetLangCode === 'il') ? 'he' : targetLangCode.toLowerCase().split('-')[0];
+          const srtCues = getCachedTargetSubtitles(videoId, norm);
+          if (srtCues && srtCues.length > 0) {
+            const match = srtCues.find((c) => c.id === targetCue.id) || srtCues.find((c) => Math.abs(c.start - targetCue.start) < 0.5);
+            if (match?.text) textToSpeak = match.text;
+          }
+        }
+        if (!textToSpeak) {
+          try {
+            textToSpeak = await translateText(targetCue.text, 'auto', targetLangCode);
+          } catch {
+            textToSpeak = targetCue.text;
+          }
+        }
+        if (!textToSpeak) textToSpeak = targetCue.text;
+
+        setLocalTranslatedText(textToSpeak);
+        setActiveTTSTarget('translated');
+        setActiveTTSCharIndex(0);
+
+        try {
+          await speakText(textToSpeak, targetLangCode, 1.0, undefined, (charIdx) => {
+            setActiveTTSCharIndex(charIdx);
+          });
+        } catch (speechErr) {
+          console.warn(`TTS playback error for ${targetLangCode}:`, speechErr);
+        }
+      } catch (err) {
+        console.warn('Error during single target language TTS:', err);
+      } finally {
+        setIsTTSSpeakingState(false);
+        isAutoTTSSpeakingRef.current = false;
+        setActiveTTSTarget(null);
+        setActiveTTSCharIndex(null);
+      }
+    };
 
     const toggleAutoTTS = (e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -187,15 +314,35 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         try {
           localStorage.setItem('yt_auto_tts_enabled', String(next));
         } catch {}
-        if (!next && isTTSSpeakingState) {
-          stopTTS();
-          setIsTTSSpeakingState(false);
-          setActiveTTSTarget(null);
-          setActiveTTSCharIndex(null);
+        if (onUpdateSettings && settings) {
+          onUpdateSettings({ ...settings, autoPlayTTS: next });
+        }
+        if (!next) {
+          if (isTTSSpeakingState) {
+            stopTTS();
+            setIsTTSSpeakingState(false);
+            setActiveTTSTarget(null);
+            setActiveTTSCharIndex(null);
+          }
+        } else {
+          // Enabling TTS should NEVER change the list of target languages!
+          // We speak only the single active target language
+          playCurrentCueTTS();
         }
         return next;
       });
     };
+
+    // Setting: By default we use only 1 target language and do not deal yet with translation to multiple languages in parallel
+    const singleTargetLanguageMode = true;
+
+    // Setting: By default also show the subtitles's time section besides the subtitles
+    const showSubtitleTimestamps = settings?.showSubtitleTimestamps ?? true;
+
+    // Active displayed target languages (strictly 1 target language - no parallel languages)
+    const displayedTargetLanguages = React.useMemo(() => {
+      return [targetLangCode];
+    }, [targetLangCode]);
 
     const handleSpeakCue = async (target: 'translated' | 'original', e?: React.MouseEvent) => {
       e?.stopPropagation();
@@ -211,19 +358,18 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       }
 
       let text = target === 'translated' ? (displayTranslatedText || translatedCueText) : activeCue?.text;
-      const lang = target === 'translated' ? targetLangCode : 'auto';
 
       if (target === 'translated' && !text && activeCue?.text) {
-        const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
+        const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
         if (srtCues && srtCues.length > 0) {
-          const match = srtCues.find((c) => c.id === activeCue.id);
+          const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
           if (match && match.text) {
             text = match.text;
           }
         }
         if (!text) {
           try {
-            text = await translateText(activeCue.text, 'auto', lang);
+            text = await translateText(activeCue.text, 'auto', targetLangCode);
           } catch {
             text = activeCue.text;
           }
@@ -231,6 +377,16 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       }
 
       if (!text) return;
+
+      const isOriginalSpoken = text === activeCue?.text;
+      const speakLang = isOriginalSpoken
+        ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
+        : targetLangCode;
+
+      // Update local translated state so presented text matches spoken text 1:1
+      if (target === 'translated' && !isOriginalSpoken) {
+        setLocalTranslatedText(text);
+      }
 
       // Strict Mutual Exclusion: Pause YouTube video during TTS speech
       setIsPlaying(false);
@@ -241,11 +397,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       postIframeCommand('pauseVideo');
 
       setIsTTSSpeakingState(true);
-      setActiveTTSTarget(target);
+      setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
       setActiveTTSCharIndex(0);
 
       try {
-        await speakText(text, lang, 1.0, undefined, (charIdx) => {
+        await speakText(text, speakLang, 1.0, undefined, (charIdx) => {
           setActiveTTSCharIndex(charIdx);
         });
       } catch (err) {
@@ -308,13 +464,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       (async () => {
         try {
           unlockTTSAudio();
+
           let textToSpeak = displayTranslatedText || '';
 
           // Check authentic cached target subtitles first
-          if (!textToSpeak) {
-            const srtCues = getCachedTargetSubtitles(videoId, cleanTargetLang);
+          if (!textToSpeak && activeCue?.text) {
+            const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
             if (srtCues && srtCues.length > 0) {
-              const match = srtCues.find((c) => c.id === activeCue.id);
+              const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
               if (match && match.text) {
                 textToSpeak = match.text;
               }
@@ -329,17 +486,31 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             }
           }
 
-          if (!textToSpeak) {
+          if (!textToSpeak && activeCue.text) {
             textToSpeak = activeCue.text;
           }
 
-          setIsTTSSpeakingState(true);
-          setActiveTTSTarget(textToSpeak === activeCue.text ? 'original' : 'translated');
-          setActiveTTSCharIndex(0);
+          if (textToSpeak) {
+            const isOriginalSpoken = textToSpeak === activeCue.text;
+            const speakLang = isOriginalSpoken
+              ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
+              : targetLangCode;
 
-          await speakText(textToSpeak, targetLangCode, 1.0, undefined, (charIdx) => {
-            setActiveTTSCharIndex(charIdx);
-          });
+            if (!isOriginalSpoken) {
+              setLocalTranslatedText(textToSpeak);
+            }
+
+            setIsTTSSpeakingState(true);
+            setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
+            setActiveTTSCharIndex(0);
+
+            const vSettings = getVideoSettings(videoId);
+            const langConfig = vSettings?.targetLanguages?.find((l: any) => l.code === targetLangCode);
+
+            await speakText(textToSpeak, speakLang, langConfig?.ttsRate || 1.0, langConfig?.voice, (charIdx) => {
+              setActiveTTSCharIndex(charIdx);
+            });
+          }
         } catch (err) {
           console.warn('[Auto-TTS] Speech failed:', err);
         } finally {
@@ -485,6 +656,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       resetHideControlsTimer();
     };
 
+    const seekTo = useCallback((seconds: number) => {
+      currentTimeRef.current = seconds;
+      setCurrentTime(seconds);
+      onTimeUpdate?.(seconds);
+      playStartTimeRef.current = Date.now() - seconds * 1000;
+      try {
+        ytPlayerRef.current?.seekTo?.(seconds, true);
+      } catch {}
+      postIframeCommand('seekTo', [seconds, true]);
+    }, [onTimeUpdate]);
+
     // Time ticker for progress bar and active cue synchronization
     useEffect(() => {
       const interval = setInterval(() => {
@@ -541,16 +723,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           } catch {}
           postIframeCommand('pauseVideo');
         },
-        seekTo: (seconds: number) => {
-          currentTimeRef.current = seconds;
-          setCurrentTime(seconds);
-          onTimeUpdate?.(seconds);
-          playStartTimeRef.current = Date.now() - seconds * 1000;
-          try {
-            ytPlayerRef.current?.seekTo?.(seconds, true);
-          } catch {}
-          postIframeCommand('seekTo', [seconds, true]);
-        },
+        seekTo,
         getCurrentTime: () => {
           try {
             const t = ytPlayerRef.current?.getCurrentTime?.();
@@ -814,7 +987,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           {isCaptionsActive && (
             <div
               id="video-subtitles-overlay"
-              className={`absolute left-3 right-3 z-20 flex flex-col items-center pointer-events-none transition-all duration-300 ${
+              className={`absolute left-3 right-3 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${
                 subtitlePosition === 'top'
                   ? showControls ? 'top-16 sm:top-20' : 'top-4 sm:top-6'
                   : subtitlePosition === 'above'
@@ -824,7 +997,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   : showControls ? 'bottom-20 sm:bottom-24' : 'bottom-4 sm:bottom-6'
               }`}
             >
-              <div className="max-w-xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1.5 animate-fadeIn">
+              <div
+                className={`max-w-xl px-4 py-2 rounded-xl bg-black/90 backdrop-blur-md shadow-2xl text-center space-y-1.5 animate-fadeIn pointer-events-auto relative z-40 transition-all duration-200 ${
+                  targetLangCode === 'he' || isHebrewHighlighted
+                    ? 'border-2 border-amber-500/90 ring-2 ring-amber-400/40 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
+                    : 'border border-neutral-800/80'
+                }`}
+              >
                 {isFetchingSubtitles ? (
                   <div className="flex items-center justify-center gap-2 text-amber-300 text-xs py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -834,23 +1013,55 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {displayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                        {effectiveDisplayTranslatedText && (
+                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
+                            {showSubtitleTimestamps && activeCue && (
+                              <button
+                                type="button"
+                                id="cue-time-section"
+                                data-testid="cue-time-section"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (activeCue) seekTo(activeCue.start);
+                                }}
+                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
+                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump to time)`}
+                              >
+                                <Clock className="w-3 h-3 text-neutral-400" />
+                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                              </button>
+                            )}
+                            {(targetLangCode === 'he' || isHebrewHighlighted) && (
+                              <span
+                                id="defaulted-hebrew-subtitles-badge"
+                                data-testid="defaulted-hebrew-subtitles-badge"
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/90 border border-amber-500/80 px-2 py-0.5 rounded shrink-0 shadow-sm animate-pulse"
+                                title="Defaulted Hebrew Subtitles"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                <span>עברית (Hebrew)</span>
+                              </span>
+                            )}
                             <p
                               id="active-translated-cue-text"
                               dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                               data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                              className={`text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                targetLangCode === 'he' || isHebrewHighlighted
+                                  ? 'text-amber-300 font-bold bg-amber-950/50 px-2.5 py-0.5 rounded-lg border border-amber-500/70 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                                  : 'text-emerald-400'
+                              } ${
                                 isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className="text-emerald-400"
+                                className={targetLangCode === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'}
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />
                             </p>
@@ -859,15 +1070,80 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               id="speak-translated-cue-btn"
                               data-testid="speak-translated-cue-btn"
                               onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              className="p-1 px-1.5 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-300 hover:text-white border border-emerald-700/60 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] relative z-50"
                               title="Speak translated text (TTS with word highlight)"
                             >
                               <Volume2 className="w-3 h-3" />
                               <span>Play</span>
                             </button>
+                            <button
+                              type="button"
+                              id="quick-toggle-tts-btn"
+                              data-testid="quick-toggle-tts-btn"
+                              onClick={toggleAutoTTS}
+                              className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold relative z-50 ${
+                                autoTTSEnabled
+                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
+                              }`}
+                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
+                            >
+                              {autoTTSEnabled ? (
+                                <Volume2 className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <VolumeX className="w-3 h-3 text-neutral-400" />
+                              )}
+                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
+                            </button>
+                            {onOpenTargetLanguageModal && (
+                              <button
+                                type="button"
+                                id="quick-target-lang-overlay-btn"
+                                data-testid="quick-target-lang-overlay-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
+                                title="Quickly select or edit target languages for translation"
+                              >
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span>{targetLangCode}</span>
+                              </button>
+                            )}
+                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal?.();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 relative z-50"
+                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
+                              >
+                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
+                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
+                              </button>
+                            )}
                           </div>
                         )}
-                        <div className="flex items-center justify-center gap-2 pt-0.5">
+                        <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
+                          {showSubtitleTimestamps && activeCue && (
+                            <button
+                              type="button"
+                              id="cue-orig-time-section"
+                              data-testid="cue-orig-time-section"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (activeCue) seekTo(activeCue.start);
+                              }}
+                              className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
+                              title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump)`}
+                            >
+                              <Clock className="w-3 h-3 text-neutral-400" />
+                              <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                            </button>
+                          )}
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
@@ -879,8 +1155,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <HighlightableText
                               text={activeCue.text}
-                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
-                              activeCharIndex={activeTTSCharIndex}
+                              isSpeaking={isOriginalSpeaking}
+                              activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -891,7 +1168,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             id="speak-orig-cue-btn"
                             data-testid="speak-orig-cue-btn"
                             onClick={(e) => handleSpeakCue('original', e)}
-                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            className="p-1 px-1.5 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 relative z-50"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
                             <Volume2 className="w-3 h-3" />
@@ -900,7 +1177,23 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                       </>
                     ) : (
                       <>
-                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
+                          {showSubtitleTimestamps && activeCue && (
+                            <button
+                              type="button"
+                              id="cue-orig-time-section"
+                              data-testid="cue-orig-time-section"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (activeCue) seekTo(activeCue.start);
+                              }}
+                              className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
+                              title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump)`}
+                            >
+                              <Clock className="w-3 h-3 text-neutral-400" />
+                              <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                            </button>
+                          )}
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
@@ -912,8 +1205,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <HighlightableText
                               text={activeCue.text}
-                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
-                              activeCharIndex={activeTTSCharIndex}
+                              isSpeaking={isOriginalSpeaking}
+                              activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -924,29 +1218,77 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             id="speak-orig-cue-btn"
                             data-testid="speak-orig-cue-btn"
                             onClick={(e) => handleSpeakCue('original', e)}
-                            className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
+                            className="p-1 px-1.5 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 relative z-50"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
                             <Volume2 className="w-3 h-3" />
                           </button>
+                          {onOpenTargetLanguageModal && (
+                            <button
+                              type="button"
+                              id="quick-target-lang-overlay-btn"
+                              data-testid="quick-target-lang-overlay-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenTargetLanguageModal();
+                              }}
+                              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
+                              title="Quickly select or edit target languages for translation"
+                            >
+                              <Globe className="w-3 h-3 text-indigo-400" />
+                              <span>{targetLangCode}</span>
+                            </button>
+                          )}
                         </div>
-                        {displayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pt-0.5">
+                        {effectiveDisplayTranslatedText && (
+                          <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
+                            {showSubtitleTimestamps && activeCue && (
+                              <button
+                                type="button"
+                                id="cue-time-section"
+                                data-testid="cue-time-section"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (activeCue) seekTo(activeCue.start);
+                                }}
+                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
+                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump)`}
+                              >
+                                <Clock className="w-3 h-3 text-neutral-400" />
+                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                              </button>
+                            )}
+                            {(targetLangCode === 'he' || isHebrewHighlighted) && (
+                              <span
+                                id="defaulted-hebrew-subtitles-badge"
+                                data-testid="defaulted-hebrew-subtitles-badge"
+                                className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/90 border border-amber-500/80 px-2 py-0.5 rounded shrink-0 shadow-sm animate-pulse"
+                                title="Defaulted Hebrew Subtitles"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                                <span>עברית (Hebrew)</span>
+                              </span>
+                            )}
                             <p
                               id="active-translated-cue-text"
                               dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                               data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                              className={`text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
+                                targetLangCode === 'he' || isHebrewHighlighted
+                                  ? 'text-amber-300 font-bold bg-amber-950/50 px-2.5 py-0.5 rounded-lg border border-amber-500/70 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                                  : 'text-emerald-400'
+                              } ${
                                 isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className="text-emerald-400"
+                                className={targetLangCode === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'}
                                 activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
                               />
                             </p>
@@ -955,12 +1297,61 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               id="speak-translated-cue-btn"
                               data-testid="speak-translated-cue-btn"
                               onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
+                              className="p-1 px-1.5 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] relative z-50"
                               title="Speak translated text (TTS with word highlight)"
                             >
                               <Volume2 className="w-3 h-3" />
                               <span>Play</span>
                             </button>
+                            <button
+                              type="button"
+                              id="quick-toggle-tts-btn"
+                              data-testid="quick-toggle-tts-btn"
+                              onClick={toggleAutoTTS}
+                              className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold relative z-50 ${
+                                autoTTSEnabled
+                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
+                              }`}
+                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
+                            >
+                              {autoTTSEnabled ? (
+                                <Volume2 className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <VolumeX className="w-3 h-3 text-neutral-400" />
+                              )}
+                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
+                            </button>
+                            {onOpenTargetLanguageModal && (
+                              <button
+                                type="button"
+                                id="quick-target-lang-overlay-btn"
+                                data-testid="quick-target-lang-overlay-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
+                                title="Quickly select or edit target languages for translation"
+                              >
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span>{targetLangCode}</span>
+                              </button>
+                            )}
+                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal?.();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 relative z-50"
+                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
+                              >
+                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
+                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </>
@@ -1006,7 +1397,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           >
             {/* Top Bar: Back/Close, Title/ID, Target Language, Settings */}
             <header
-              className="w-full flex items-center justify-between p-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent"
+              className="w-full flex items-center justify-between p-3 bg-gradient-to-b from-black/80 via-black/40 to-transparent relative z-40 pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center gap-2">
@@ -1016,13 +1407,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     type="button"
                     onClick={onBackOrClose}
                     aria-label="Back"
-                    className="min-w-[48px] min-h-[48px] p-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-white flex items-center justify-center border border-neutral-700/60 shadow-lg active:scale-95 transition"
+                    className="min-w-[48px] min-h-[48px] p-2.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-white flex items-center justify-center border border-neutral-700/60 shadow-lg hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     title="Back / Change Video"
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                 )}
-                <span className="hidden xs:inline-block px-2.5 py-1 rounded-lg bg-neutral-900/80 border border-neutral-800 text-xs font-mono text-neutral-300">
+                <span className="hidden xs:inline-block px-2.5 py-1 rounded-lg bg-neutral-900/80 border border-neutral-800 text-xs font-mono text-neutral-300 select-none">
                   {videoId}
                 </span>
               </div>
@@ -1036,7 +1427,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     type="button"
                     onClick={onOpenLogs}
                     aria-label="Activity Logs & Network Requests"
-                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-cyan-400 hover:border-cyan-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     title="Quick Bringup: Activity Logs & Network Requests"
                   >
                     <Terminal className="w-4 h-4 text-cyan-400" />
@@ -1052,7 +1443,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     type="button"
                     onClick={onOpenTargetLanguageModal}
                     aria-label="Edit Target Languages for Translation"
-                    className="min-h-[44px] px-3 rounded-xl bg-indigo-950/80 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    className="min-h-[44px] px-3 rounded-xl bg-indigo-950/90 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     title="Quick Bringup: Edit Target Languages for Translation"
                   >
                     <Globe className="w-4 h-4 text-indigo-400" />
@@ -1068,10 +1459,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   onClick={toggleAutoTTS}
                   aria-pressed={autoTTSEnabled ? 'true' : 'false'}
                   aria-label={autoTTSEnabled ? 'Auto-TTS Narration is ON' : 'Auto-TTS Narration is OFF'}
-                  className={`min-h-[44px] px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition ${
+                  className={`min-h-[44px] px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40 ${
                     autoTTSEnabled
-                      ? 'bg-emerald-950/80 hover:bg-emerald-900/90 text-emerald-300 border-emerald-700/60'
-                      : 'bg-neutral-900/80 hover:bg-neutral-800 text-neutral-400 border-neutral-700/60'
+                      ? 'bg-emerald-950/90 hover:bg-emerald-900/90 text-emerald-300 border-emerald-700/60'
+                      : 'bg-neutral-900/90 hover:bg-neutral-800 text-neutral-400 border-neutral-700/60'
                   }`}
                   title={autoTTSEnabled ? 'Auto-TTS Narration ON (speaks each subtitle with word highlight)' : 'Auto-TTS Narration OFF'}
                 >
@@ -1089,7 +1480,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     id="cycle-subtitle-position-btn"
                     type="button"
                     onClick={cycleSubtitlePosition}
-                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg active:scale-95 transition"
+                    className="min-h-[44px] px-2.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 border border-neutral-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     title={`Subtitle Position: ${subtitlePosition} (click to cycle: top, above, under, bottom)`}
                   >
                     <Layers className="w-4 h-4 text-emerald-400" />
@@ -1104,7 +1495,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     type="button"
                     onClick={onOpenSettings}
                     aria-label="Settings"
-                    className="min-w-[48px] min-h-[48px] p-2.5 rounded-xl bg-neutral-900/80 hover:bg-neutral-800 text-white flex items-center justify-center border border-neutral-700/60 shadow-lg active:scale-95 transition"
+                    className="min-w-[48px] min-h-[48px] p-2.5 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 text-white flex items-center justify-center border border-neutral-700/60 shadow-lg hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     title="Settings"
                   >
                     <Settings className="w-5 h-5 text-neutral-200" />
@@ -1114,13 +1505,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             </header>
 
             {/* Center: Large Play/Pause Toggle */}
-            <div className="flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-center relative z-40 pointer-events-auto" onClick={(e) => e.stopPropagation()}>
               <button
                 id="center-play-pause-button"
                 type="button"
                 onClick={togglePlayPause}
                 aria-label={isPlaying ? 'Pause video' : 'Play video'}
-                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/75 hover:bg-black/90 border-2 border-neutral-500/80 text-white flex items-center justify-center shadow-2xl backdrop-blur-md active:scale-90 transition min-w-[56px] min-h-[56px]"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-black/80 hover:bg-black/95 border-2 border-neutral-400/80 text-white flex items-center justify-center shadow-2xl backdrop-blur-md hover:ring-4 hover:ring-amber-400/80 hover:border-amber-400 hover:scale-110 active:scale-90 transition-all duration-150 min-w-[56px] min-h-[56px] cursor-pointer pointer-events-auto relative z-40"
               >
                 {isPlaying ? (
                   <Pause className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
@@ -1132,14 +1523,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
             {/* Bottom Bar: Progress Bar + Play/Pause + Volume + CC */}
             <div
-              className="w-full flex flex-col gap-2 p-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent"
+              className="w-full flex flex-col gap-2 p-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent relative z-40 pointer-events-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Progress Bar (Scrubber) */}
               <div className="w-full flex items-center gap-3">
                 <span
                   id="player-time-display"
-                  className="text-[11px] font-mono text-neutral-300 whitespace-nowrap"
+                  className="text-[11px] font-mono text-neutral-300 whitespace-nowrap select-none"
                 >
                   {formatTimestamp(currentTime)} / {duration > 0 ? formatTimestamp(duration) : '0:00'}
                 </span>
@@ -1150,7 +1541,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   aria-valuemax={duration || 100}
                   aria-valuenow={currentTime}
                   onClick={handleSeek}
-                  className="flex-1 h-3 rounded-full bg-neutral-800/80 border border-neutral-700/50 cursor-pointer relative overflow-hidden flex items-center"
+                  className="flex-1 h-3 rounded-full bg-neutral-800/80 border border-neutral-700/50 hover:border-amber-400 hover:ring-2 hover:ring-amber-400/50 cursor-pointer relative overflow-hidden flex items-center transition-all duration-150 pointer-events-auto relative z-40"
                 >
                   <div
                     className="h-full bg-red-600 rounded-full transition-all duration-100"
@@ -1166,7 +1557,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     id="control-play-pause-button"
                     type="button"
                     onClick={togglePlayPause}
-                    className="min-w-[44px] min-h-[44px] p-2 rounded-lg text-white hover:bg-neutral-800/60 flex items-center justify-center transition"
+                    className="min-w-[44px] min-h-[44px] p-2 rounded-lg text-white hover:bg-neutral-800/80 border border-transparent hover:border-amber-400 hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 flex items-center justify-center transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     aria-label={isPlaying ? 'Pause' : 'Play'}
                   >
                     {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
@@ -1176,7 +1567,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     id="volume-toggle-button"
                     type="button"
                     onClick={toggleMute}
-                    className="min-w-[44px] min-h-[44px] p-2 rounded-lg text-neutral-200 hover:text-white hover:bg-neutral-800/60 flex items-center justify-center transition"
+                    className="min-w-[44px] min-h-[44px] p-2 rounded-lg text-neutral-200 hover:text-white hover:bg-neutral-800/80 border border-transparent hover:border-amber-400 hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 flex items-center justify-center transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
                     aria-label={isMuted ? 'Unmute' : 'Mute'}
                   >
                     {isMuted ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
@@ -1191,10 +1582,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     type="button"
                     onClick={toggleAutoTTS}
                     aria-pressed={autoTTSEnabled ? 'true' : 'false'}
-                    className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 transition active:scale-95 ${
+                    className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1.5 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40 ${
                       autoTTSEnabled
-                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600'
-                        : 'bg-neutral-900/80 text-neutral-400 border-neutral-700 hover:text-white'
+                        ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+                        : 'bg-neutral-900/90 text-neutral-400 border-neutral-700 hover:text-white'
                     }`}
                     title={autoTTSEnabled ? 'Auto-TTS Narration is ON' : 'Turn Auto-TTS Narration ON'}
                   >
@@ -1215,13 +1606,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                       onClick={handleToggleCaptions}
                       disabled={isFetchingSubtitles}
                       aria-pressed={isCaptionsActive ? 'true' : 'false'}
-                      className={`min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-2 transition active:scale-95 ${
+                      className={`min-h-[44px] px-3.5 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-2 hover:ring-2 hover:ring-blue-400 hover:border-blue-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40 ${
                         hasSubtitles
-                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600'
+                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
                           : isFetchingSubtitles
-                          ? 'bg-amber-950/80 text-amber-300 border-amber-600 animate-pulse'
+                          ? 'bg-amber-950/90 text-amber-300 border-amber-600 animate-pulse'
                           : isCaptionsActive
-                          ? 'bg-blue-900/80 text-blue-200 border-blue-600'
+                          ? 'bg-blue-900/90 text-blue-200 border-blue-600'
                           : 'bg-red-600 hover:bg-red-500 text-white border-red-500'
                       }`}
                       title={isCaptionsActive ? 'Captions are ON' : 'Turn Captions ON'}
@@ -1300,8 +1691,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {displayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                        {effectiveDisplayTranslatedText && (
+                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
+                            {showSubtitleTimestamps && activeCue && (
+                              <span
+                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
+                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
+                              >
+                                <Clock className="w-3 h-3 text-neutral-400" />
+                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                              </span>
+                            )}
                             <p
                               id="active-translated-cue-text"
                               dir={isTranslatedRtl ? 'rtl' : 'ltr'}
@@ -1311,9 +1711,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1331,9 +1732,65 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               <Volume2 className="w-3 h-3" />
                               <span>Play</span>
                             </button>
+                            <button
+                              type="button"
+                              onClick={toggleAutoTTS}
+                              className={`p-1 px-1.5 rounded-md border transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold ${
+                                autoTTSEnabled
+                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
+                              }`}
+                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
+                            >
+                              {autoTTSEnabled ? (
+                                <Volume2 className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <VolumeX className="w-3 h-3 text-neutral-400" />
+                              )}
+                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
+                            </button>
+                            {onOpenTargetLanguageModal && (
+                              <button
+                                type="button"
+                                id="quick-target-lang-overlay-btn"
+                                data-testid="quick-target-lang-overlay-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
+                                title="Quickly select or edit target languages for translation"
+                              >
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span>{targetLangCode}</span>
+                              </button>
+                            )}
+                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal?.();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold transition pointer-events-auto shrink-0 flex items-center gap-1"
+                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
+                              >
+                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
+                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
+                              </button>
+                            )}
                           </div>
                         )}
-                        <div className="flex items-center justify-center gap-2 pt-0.5">
+                        <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
+                          {showSubtitleTimestamps && activeCue && (
+                            <span
+                              className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
+                              title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
+                            >
+                              <Clock className="w-3 h-3 text-neutral-400" />
+                              <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                            </span>
+                          )}
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
@@ -1345,8 +1802,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <HighlightableText
                               text={activeCue.text}
-                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
-                              activeCharIndex={activeTTSCharIndex}
+                              isSpeaking={isOriginalSpeaking}
+                              activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1366,7 +1824,16 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                       </>
                     ) : (
                       <>
-                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60">
+                        <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
+                          {showSubtitleTimestamps && activeCue && (
+                            <span
+                              className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
+                              title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
+                            >
+                              <Clock className="w-3 h-3 text-neutral-400" />
+                              <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                            </span>
+                          )}
                           <p
                             id="active-subtitle-cue-text"
                             data-testid="active-subtitle-cue-text"
@@ -1378,8 +1845,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <HighlightableText
                               text={activeCue.text}
-                              isSpeaking={isTTSSpeakingState && activeTTSTarget === 'original'}
-                              activeCharIndex={activeTTSCharIndex}
+                              isSpeaking={isOriginalSpeaking}
+                              activeCharIndex={isSyncOriginalSpeaking ? (syncTTSCharIndex ?? 0) : activeTTSCharIndex}
+                              syncMode={settings?.ttsSyncMode || 'word_boundary'}
                               dir={isOriginalRtl ? 'rtl' : 'ltr'}
                               className="text-white"
                               activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
@@ -1393,9 +1861,34 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           >
                             <Volume2 className="w-3 h-3" />
                           </button>
+                          {onOpenTargetLanguageModal && (
+                            <button
+                              type="button"
+                              id="quick-target-lang-overlay-btn"
+                              data-testid="quick-target-lang-overlay-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onOpenTargetLanguageModal();
+                              }}
+                              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
+                              title="Quickly select or edit target languages for translation"
+                            >
+                              <Globe className="w-3 h-3 text-indigo-400" />
+                              <span>{targetLangCode}</span>
+                            </button>
+                          )}
                         </div>
-                        {displayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pt-0.5">
+                        {effectiveDisplayTranslatedText && (
+                          <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
+                            {showSubtitleTimestamps && activeCue && (
+                              <span
+                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
+                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
+                              >
+                                <Clock className="w-3 h-3 text-neutral-400" />
+                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
+                              </span>
+                            )}
                             <p
                               id="active-translated-cue-text"
                               dir={isTranslatedRtl ? 'rtl' : 'ltr'}
@@ -1405,9 +1898,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               }`}
                             >
                               <HighlightableText
-                                text={displayTranslatedText}
-                                isSpeaking={isTTSSpeakingState && activeTTSTarget === 'translated'}
-                                activeCharIndex={activeTTSCharIndex}
+                                text={effectiveDisplayTranslatedText}
+                                isSpeaking={isTranslatedSpeaking}
+                                activeCharIndex={currentSpeakingCharIndex}
+                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
                                 lang={targetLangCode}
                                 dir={isTranslatedRtl ? 'rtl' : 'ltr'}
                                 className="text-emerald-400"
@@ -1423,6 +1917,53 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                               <Volume2 className="w-3 h-3" />
                               <span>Play</span>
                             </button>
+                            <button
+                              type="button"
+                              onClick={toggleAutoTTS}
+                              className={`p-1 px-1.5 rounded-md border transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold ${
+                                autoTTSEnabled
+                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
+                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
+                              }`}
+                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
+                            >
+                              {autoTTSEnabled ? (
+                                <Volume2 className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <VolumeX className="w-3 h-3 text-neutral-400" />
+                              )}
+                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
+                            </button>
+                            {onOpenTargetLanguageModal && (
+                              <button
+                                type="button"
+                                id="quick-target-lang-overlay-btn"
+                                data-testid="quick-target-lang-overlay-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
+                                title="Quickly select or edit target languages for translation"
+                              >
+                                <Globe className="w-3 h-3 text-indigo-400" />
+                                <span>{targetLangCode}</span>
+                              </button>
+                            )}
+                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onOpenTargetLanguageModal?.();
+                                }}
+                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold transition pointer-events-auto shrink-0 flex items-center gap-1"
+                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
+                              >
+                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
+                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
+                              </button>
+                            )}
                           </div>
                         )}
                       </>

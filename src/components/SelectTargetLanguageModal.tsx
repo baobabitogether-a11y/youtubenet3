@@ -386,6 +386,8 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
+                        id={`target-catalog-select-${lang.code}`}
+                        data-testid={`target-catalog-select-${lang.code}`}
                         onClick={() => handleSelect(lang.code)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
                           isSelected

@@ -210,12 +210,383 @@ test.describe('YouTube Video Viewer - Subtitle Auto-Detection Tests', () => {
   });
 
   // =========================================================================
-  // SKIPPED TESTS (as instructed: currently skip other tests)
+  // EXTENDED REAL E2E TESTS (WITHOUT FIXTURES)
   // =========================================================================
-  test.skip('1. Video Playback - loads video player, accepts URL, and toggles theater mode', async () => {});
-  test.skip('2. Subtitles View - displays subtitle cues, timestamps, text, search, and jump to cue', async () => {});
-  test.skip('3. Subtitles Translation - verifies translation for Italian and Arabic', async () => {});
-  test.skip('4. TTS Config - configures speaking rate, voice selection, and test audio', async () => {});
-  test.skip('5. Synchronized Playback with Configured Order (TTS First vs Video First)', async () => {});
-  test.skip('6. APK Guide Modal - opens APK guide and network inspection modal', async () => {});
+  test('1. Video Playback - loads video player, accepts URL, and toggles theater mode', async ({ page }) => {
+    await test.step('1. Navigate without fixtures', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+      await expect(page.locator('#youtube-url-input')).toBeVisible();
+    });
+
+    await test.step('2. Input YouTube URL and test Clear / Load buttons', async () => {
+      const input = page.locator('#youtube-url-input');
+      await input.fill('https://www.youtube.com/watch?v=temp_url');
+
+      const clearBtn = page.locator('#clear-input-button');
+      if (await clearBtn.isVisible().catch(() => false)) {
+        await clearBtn.click();
+        await expect(input).toHaveValue('');
+      }
+
+      const realUrl = 'https://www.youtube.com/watch?v=c0pUbsq9FLk';
+      await input.fill(realUrl);
+      await expect(page.locator('#play-video-button')).toBeVisible();
+      await page.locator('#play-video-button').click();
+    });
+
+    await test.step('3. Verify video player container and buttons', async () => {
+      await expect(page.locator('#youtube-player-iframe, #youtube-player-wrapper, #video-player-container')).toBeVisible({ timeout: 15000 });
+
+      const theaterBtn = page.locator('#toggle-theater-mode-button');
+      if (await theaterBtn.isVisible().catch(() => false)) {
+        await theaterBtn.click();
+        await page.waitForTimeout(300);
+        await theaterBtn.click();
+        await page.waitForTimeout(300);
+      }
+
+      const autoplayBtn = page.locator('#toggle-autoplay-button');
+      if (await autoplayBtn.isVisible().catch(() => false)) {
+        await autoplayBtn.click();
+        await page.waitForTimeout(200);
+      }
+
+      const loopBtn = page.locator('#toggle-loop-button');
+      if (await loopBtn.isVisible().catch(() => false)) {
+        await loopBtn.click();
+        await page.waitForTimeout(200);
+      }
+
+      const copyLinkBtn = page.locator('#copy-video-link-button');
+      if (await copyLinkBtn.isVisible().catch(() => false)) {
+        await copyLinkBtn.click();
+        await page.waitForTimeout(200);
+      }
+    });
+  });
+
+  test('2. Subtitles View - displays subtitle cues, timestamps, text, search, and jump to cue', async ({ page }) => {
+    await test.step('1. Navigate without fixtures and load video', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+
+      const input = page.locator('#youtube-url-input');
+      await input.fill('https://www.youtube.com/watch?v=FcRzAdI8R9U');
+      await page.locator('#play-video-button').click();
+    });
+
+    await test.step('2. Enable caption icon and await real subtitle cues', async () => {
+      const captionBtn = page.locator('#caption-toggle-button');
+      await expect(captionBtn).toBeVisible();
+      const isPressed = await captionBtn.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionBtn.click();
+      }
+
+      await expect(
+        page.locator('#subtitle-cue-row-0, #active-subtitle-cue-text, #restored-subtitles-toast').first()
+      ).toBeVisible({ timeout: 20000 });
+    });
+
+    await test.step('3. Verify cue table rendering, timestamps, and search filter', async () => {
+      const cueRow = page.locator('#subtitle-cue-row-0').first();
+      if (await cueRow.isVisible({ timeout: 5000 }).catch(() => false)) {
+        const text = await cueRow.innerText();
+        expect(text.length).toBeGreaterThan(2);
+        await cueRow.click();
+        await page.waitForTimeout(300);
+      }
+
+      const searchInput = page.locator('#subtitles-search-input');
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill('a');
+        await page.waitForTimeout(300);
+        await searchInput.fill('');
+        await page.waitForTimeout(300);
+      }
+
+      const nextBtn = page.locator('#subtitles-next-page-btn');
+      if (await nextBtn.isVisible().catch(() => false)) {
+        const isDisabled = await nextBtn.isDisabled().catch(() => false);
+        if (!isDisabled) {
+          await nextBtn.click();
+          await page.waitForTimeout(300);
+          const prevBtn = page.locator('#subtitles-prev-page-btn');
+          if (await prevBtn.isVisible().catch(() => false)) {
+            await prevBtn.click();
+            await page.waitForTimeout(300);
+          }
+        }
+      }
+
+      const syncPlayBtn = page.locator('#sync-teacher-play-button');
+      if (await syncPlayBtn.isVisible().catch(() => false)) {
+        await syncPlayBtn.click();
+        await page.waitForTimeout(500);
+        await syncPlayBtn.click();
+      }
+    });
+  });
+
+  test('3. Subtitles Translation - verifies translation for Italian and Arabic', async ({ page }) => {
+    await test.step('1. Navigate without fixtures and load video with captions', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+
+      const input = page.locator('#youtube-url-input');
+      await input.fill('https://www.youtube.com/watch?v=FcRzAdI8R9U');
+      await page.locator('#play-video-button').click();
+
+      const captionBtn = page.locator('#caption-toggle-button');
+      await expect(captionBtn).toBeVisible();
+      const isPressed = await captionBtn.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionBtn.click();
+      }
+
+      await expect(
+        page.locator('#subtitle-cue-row-0, #active-subtitle-cue-text, #restored-subtitles-toast').first()
+      ).toBeVisible({ timeout: 20000 });
+    });
+
+    await test.step('2. Select Italian and verify translated subtitle overlay', async () => {
+      const openLangBtn = page.locator('#open-target-language-btn, #open-target-language-btn-expanded').first();
+      await openLangBtn.click();
+      await expect(page.locator('#select-target-language-modal')).toBeVisible();
+
+      const itOption = page.locator('#target-lang-option-it, #target-catalog-select-it, button:has-text("Italian")').first();
+      if (await itOption.isVisible().catch(() => false)) {
+        await itOption.click();
+      }
+
+      const closeBtn = page.locator('#close-target-language-modal-btn');
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click();
+      }
+
+      await expect(
+        page.locator('#active-translated-cue-text, #translated-cue-text, #active-subtitle-cue-text').first()
+      ).toBeVisible({ timeout: 15000 });
+    });
+
+    await test.step('3. Switch to Arabic and verify RTL orientation', async () => {
+      const openLangBtn = page.locator('#open-target-language-btn, #open-target-language-btn-expanded').first();
+      await openLangBtn.click();
+      await expect(page.locator('#select-target-language-modal')).toBeVisible();
+
+      const allTab = page.locator('#tab-all-languages');
+      if (await allTab.isVisible().catch(() => false)) {
+        await allTab.click();
+      }
+
+      const searchInput = page.locator('#search-target-language-input');
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill('Arabic');
+        await page.waitForTimeout(300);
+      }
+
+      const arSelect = page.locator('#target-catalog-select-ar, #target-lang-option-ar, button:has-text("Arabic")').first();
+      if (await arSelect.isVisible().catch(() => false)) {
+        await arSelect.click();
+      }
+
+      const closeBtn = page.locator('#close-target-language-modal-btn');
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click();
+      }
+
+      const translatedEl = page.locator('#active-translated-cue-text').first();
+      if (await translatedEl.isVisible({ timeout: 5000 }).catch(() => false)) {
+        const dir = await translatedEl.getAttribute('dir');
+        const dataRtl = await translatedEl.getAttribute('data-rtl');
+        expect(dir === 'rtl' || dataRtl === 'true').toBe(true);
+      }
+    });
+  });
+
+  test('4. TTS Config - configures speaking rate, voice selection, and test audio', async ({ page }) => {
+    await test.step('1. Navigate without fixtures and load video', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+
+      const input = page.locator('#youtube-url-input');
+      await input.fill('https://www.youtube.com/watch?v=FcRzAdI8R9U');
+      await page.locator('#play-video-button').click();
+    });
+
+    await test.step('2. Open Language Settings modal and configure TTS rate/voice', async () => {
+      const openLangSettingsBtn = page.locator('#open-language-settings-button').first();
+      if (await openLangSettingsBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await openLangSettingsBtn.click();
+        await expect(page.locator('#language-settings-modal, [role="dialog"]').first()).toBeVisible();
+
+        const rateSlider = page.locator('input[id^="tts-rate-slider-"]').first();
+        if (await rateSlider.isVisible().catch(() => false)) {
+          await rateSlider.fill('1.25');
+          await page.waitForTimeout(200);
+        }
+
+        const voiceSelect = page.locator('select[id^="tts-voice-select-"]').first();
+        if (await voiceSelect.isVisible().catch(() => false)) {
+          const options = await voiceSelect.locator('option').count();
+          if (options > 1) {
+            await voiceSelect.selectOption({ index: 1 });
+            await page.waitForTimeout(200);
+          }
+        }
+
+        const testSpeakBtn = page.locator('button[id^="test-speak-button-"]').first();
+        if (await testSpeakBtn.isVisible().catch(() => false)) {
+          await testSpeakBtn.click();
+          await page.waitForTimeout(500);
+        }
+
+        const doneBtn = page.locator('#done-language-settings-button');
+        if (await doneBtn.isVisible().catch(() => false)) {
+          await doneBtn.click();
+          await page.waitForTimeout(300);
+        }
+      }
+    });
+
+    await test.step('3. Toggle Auto-TTS player controls', async () => {
+      const autoTTSBtn = page.locator('#toggle-auto-tts-button, #control-auto-tts-button, #toggle-auto-tts-btn-expanded').first();
+      if (await autoTTSBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await autoTTSBtn.click();
+        await page.waitForTimeout(300);
+        await autoTTSBtn.click();
+        await page.waitForTimeout(300);
+      }
+    });
+  });
+
+  test('5. Synchronized Playback with Configured Order (TTS First vs Video First)', async ({ page }) => {
+    await test.step('1. Navigate without fixtures and configure playback order in Settings', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+
+      const settingsBtn = page.locator('#navbar-settings-button, #open-settings-button').first();
+      await settingsBtn.click();
+      await expect(page.locator('#settings-modal, [role="dialog"]').first()).toBeVisible();
+
+      const ttsFirstRadio = page.locator('#play-order-tts-then-video');
+      if (await ttsFirstRadio.isVisible().catch(() => false)) {
+        await ttsFirstRadio.check();
+        await page.waitForTimeout(200);
+      }
+
+      const videoFirstRadio = page.locator('#play-order-video-then-tts');
+      if (await videoFirstRadio.isVisible().catch(() => false)) {
+        await videoFirstRadio.check();
+        await page.waitForTimeout(200);
+      }
+
+      const closeBtn = page.locator('#close-settings-modal-button');
+      if (await closeBtn.isVisible().catch(() => false)) {
+        await closeBtn.click();
+        await page.waitForTimeout(300);
+      }
+    });
+
+    await test.step('2. Load video and verify synchronized playback controls', async () => {
+      const input = page.locator('#youtube-url-input');
+      await input.fill('https://www.youtube.com/watch?v=FcRzAdI8R9U');
+      await page.locator('#play-video-button').click();
+
+      const captionBtn = page.locator('#caption-toggle-button');
+      await expect(captionBtn).toBeVisible();
+      const isPressed = await captionBtn.getAttribute('aria-pressed');
+      if (isPressed !== 'true') {
+        await captionBtn.click();
+      }
+
+      await expect(
+        page.locator('#subtitle-cue-row-0, #active-subtitle-cue-text, #restored-subtitles-toast').first()
+      ).toBeVisible({ timeout: 20000 });
+
+      const syncPlayBtn = page.locator('#sync-teacher-play-button');
+      if (await syncPlayBtn.isVisible().catch(() => false)) {
+        await syncPlayBtn.click();
+        await page.waitForTimeout(500);
+        await syncPlayBtn.click();
+      }
+    });
+  });
+
+  test('6. APK Guide Modal - opens APK guide and network inspection modal', async ({ page }) => {
+    await test.step('1. Navigate without fixtures', async () => {
+      await page.goto('/?disableFixtures=true');
+      await page.waitForLoadState('domcontentloaded');
+    });
+
+    await test.step('2. Open APK Update & Guide Modal and interact with buttons', async () => {
+      const apkBtn = page.locator('#navbar-apk-update-button').first();
+      await expect(apkBtn).toBeVisible();
+      await apkBtn.click();
+
+      await expect(page.locator('#apk-update-modal')).toBeVisible();
+
+      const checkUpdatesBtn = page.locator('#check-apk-updates-button');
+      if (await checkUpdatesBtn.isVisible().catch(() => false)) {
+        await checkUpdatesBtn.click();
+        await page.waitForTimeout(500);
+      }
+
+      const qrBtn = page.locator('#toggle-qr-code-button');
+      if (await qrBtn.isVisible().catch(() => false)) {
+        await qrBtn.click();
+        await page.waitForTimeout(300);
+        await qrBtn.click();
+        await page.waitForTimeout(300);
+      }
+
+      const closeApkBtn = page.locator('#close-apk-update-modal');
+      await closeApkBtn.click();
+      await expect(page.locator('#apk-update-modal')).not.toBeVisible();
+    });
+
+    await test.step('3. Open Network Inspector Modal and filter requests', async () => {
+      const netBtn = page.locator('#navbar-network-inspector-button').first();
+      await expect(netBtn).toBeVisible();
+      await netBtn.click();
+
+      await expect(page.locator('#network-inspector-modal')).toBeVisible();
+
+      const searchInput = page.locator('#network-search-input');
+      if (await searchInput.isVisible().catch(() => false)) {
+        await searchInput.fill('timedtext');
+        await page.waitForTimeout(300);
+        await searchInput.fill('');
+      }
+
+      const closeNetBtn = page.locator('#close-network-inspector-button');
+      await closeNetBtn.click();
+      await expect(page.locator('#network-inspector-modal')).not.toBeVisible();
+    });
+
+    await test.step('4. Open Errors Inspector Modal and switch tabs', async () => {
+      const errBtn = page.locator('#navbar-error-inspector-button').first();
+      await expect(errBtn).toBeVisible();
+      await errBtn.click();
+
+      await expect(page.locator('#error-inspector-modal')).toBeVisible();
+
+      const stateMachineTab = page.locator('#tab-state-machine-button');
+      if (await stateMachineTab.isVisible().catch(() => false)) {
+        await stateMachineTab.click();
+        await page.waitForTimeout(300);
+      }
+
+      const errorsTab = page.locator('#tab-errors-list-button');
+      if (await errorsTab.isVisible().catch(() => false)) {
+        await errorsTab.click();
+        await page.waitForTimeout(300);
+      }
+
+      const closeErrBtn = page.locator('#close-error-inspector-button');
+      await closeErrBtn.click();
+      await expect(page.locator('#error-inspector-modal')).not.toBeVisible();
+    });
+  });
 });

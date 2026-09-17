@@ -7,6 +7,7 @@ import { STORAGE_KEYS } from '../config/appConfig';
  */
 
 export type SubtitlePosition = 'top' | 'above' | 'under' | 'bottom';
+export type TTSSyncMode = 'word_boundary' | 'time_linear' | 'word_step' | 'full_sentence';
 
 export interface AppSettings {
   // UI Display: Compact, lightweight view by default (Android UI Guidelines: no scrolling, minimal controls)
@@ -21,6 +22,18 @@ export interface AppSettings {
   // Subtitle Positioning: By default keep translated subs on top (Requirement 1)
   subtitlePosition: SubtitlePosition;
   showTranslatedOnTop: boolean;
+
+  // TTS Auto-Play & Narration: By default do NOT TTS-play (only show the target translation)
+  autoPlayTTS: boolean;
+
+  // Target Language Presentation: By default use only 1 target language
+  singleTargetLanguageMode: boolean;
+
+  // Subtitle Timestamp Display: By default also show the subtitles's time section besides the subtitles
+  showSubtitleTimestamps: boolean;
+
+  // TTS Play & Text Highlight Synchronization Mode (4 Alternatives)
+  ttsSyncMode: TTSSyncMode;
 
   // Learning Languages & Pagination
   learningLanguages: string[];
@@ -144,8 +157,20 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   subtitlePosition: 'top',
   showTranslatedOnTop: true,
 
-  // Favorite languages / learning targets by default: ar, il, ru, it, he
-  learningLanguages: ['ar', 'il', 'ru', 'it', 'he'],
+  // By default do NOT TTS-play (only show the target translation)
+  autoPlayTTS: false,
+
+  // By default use only 1 target language
+  singleTargetLanguageMode: true,
+
+  // By default also show the subtitles's time section besides the subtitles
+  showSubtitleTimestamps: true,
+
+  // TTS Play & Text Highlight Sync Mode (4 Alternatives, default: word_boundary)
+  ttsSyncMode: 'word_boundary',
+
+  // Favorite languages / learning targets by default: 1 target language Hebrew ('he') for focus
+  learningLanguages: ['he'],
   subtitlesPerPage: 25,
 
   // By default try to subtitle fetch using tlang param change once after default subs loaded (Requirement 6)
