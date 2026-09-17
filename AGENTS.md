@@ -8,7 +8,7 @@ Coding agents must understand and respect the role of each markdown documentatio
 | :--- | :--- |
 | **`PROMPT.md`** | **Active Agent Worklist**: Contains ONLY the latest user prompt converted into actionable TODOs. Agents must read this file at the start of each task. **All completed tasks MUST be moved to `CHANGELOG.md`**. |
 | **`CHANGELOG.md`** | **Historical Archive**: Not of interest to agents during active coding. Holds chronological records of completed tasks, previous prompts, implementation logs, and version milestones. |
-| **`README.md`** | **User Guide & Live Links**: Contains the single CLI command for installing the latest APK on Android devices via ADB, and direct links to GitHub Pages (live web-app demo, web E2E tests, and Android emulator E2E tests). |
+| **`README.md`** | **User Guide & Live Links**: Contains the single CLI command for installing the latest APK on Android devices via ADB, and direct links to GitHub Pages (live web-app demo, web E2E tests, and Android emulator E2E tests). To update `README.md` for a new repository owner, run `npm run update:readme [username]` or `node scripts/update-readme.mjs [username]`. |
 | **`COVERAGE.md`** | **Test Coverage Matrix**: Tracks E2E and unit test suites across Web Companion and Android Native Shell. Organizes tests into TODOs and DONE sections, moving items upon test passes and highlighting platform-unique tests. |
 | **`AGENTS.md`** | **Architecture, Guidelines & Guardrails**: System documentation containing the app's design goals, component flow, subtitle fetching orders, platform separation rules, and protected files. |
 
@@ -164,5 +164,6 @@ The repository contains two operational facets, with explicit prioritization:
 
 Before concluding any turn:
 1. Move completed tasks from `PROMPT.md` to `CHANGELOG.md`.
-2. Run `lint_applet` (`tsc --noEmit`) to verify zero TypeScript errors.
-3. Run `compile_applet` (`npm run build`) to verify clean client and server compilation.
+2. Run `npm run update:readme [username]` (or `node scripts/update-readme.mjs`) whenever updating `README.md` for a target username.
+3. Run `lint_applet` (`tsc --noEmit`) to verify zero TypeScript errors.
+4. Run `compile_applet` (`npm run build`) to verify clean client and server compilation.
