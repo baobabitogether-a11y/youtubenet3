@@ -35,6 +35,12 @@ export interface AppSettings {
   // TTS Play & Text Highlight Synchronization Mode (4 Alternatives)
   ttsSyncMode: TTSSyncMode;
 
+  // Non-Native TTS Fallback (Audio Stream): DISABLED by default (only native hardware/WebSpeech is used)
+  allowNonNativeTTSFallback: boolean;
+
+  // TTS Debugger: Present TTS input and TTS queue by default for real-time debugging (toggleable in Settings)
+  showTtsDebugQueue: boolean;
+
   // Learning Languages & Pagination
   learningLanguages: string[];
   subtitlesPerPage: number; // Number of records per page in Subtitles Teacher Panel (e.g. 10, 25, 50, 100, 0=All)
@@ -144,8 +150,8 @@ export const SUPPORTED_LANGUAGES_CATALOG: { code: string; name: string }[] = [
 ];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  // Web Companion / Workspace Mode: Expanded controls enabled by default for interactive demo and E2E test suites; users can toggle compactView in settings
-  compactView: false,
+  // Compact Design: Enabled by default for high performance, tap-to-show controls, and clutter-free viewing; toggleable in Settings
+  compactView: true,
   showExpandedControls: true,
   showTeacherPanel: true,
   showLinkBar: true,
@@ -168,6 +174,12 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
 
   // TTS Play & Text Highlight Sync Mode (4 Alternatives, default: word_boundary)
   ttsSyncMode: 'word_boundary',
+
+  // Non-Native TTS Fallback: DISABLED by default (native only)
+  allowNonNativeTTSFallback: false,
+
+  // Present TTS input and TTS queue by default for real-time debugging
+  showTtsDebugQueue: true,
 
   // Favorite languages / learning targets by default: 1 target language Hebrew ('he') for focus
   learningLanguages: ['he'],
@@ -302,6 +314,19 @@ export function getVideoTargetLang(videoId: string): string | null {
 
 export function setVideoTargetLang(videoId: string, langCode: string): void {
   saveVideoSettings(videoId, { activeTargetLang: langCode });
+}
+
+export function getSingleTargetLanguageMode(): boolean {
+  const settings = loadAppSettings();
+  return settings.singleTargetLanguageMode ?? true;
+}
+
+export function setSingleTargetLanguageMode(singleMode: boolean): void {
+  const current = loadAppSettings();
+  saveAppSettings({
+    ...current,
+    singleTargetLanguageMode: singleMode,
+  });
 }
 
 

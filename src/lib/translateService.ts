@@ -14,6 +14,7 @@ import {
   SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS,
 } from '../config/fixtures';
 import { SUPPORTED_TARGET_LANGUAGES, ON_DEMAND_FALLBACK_COUNT } from '../config/constants';
+import { logWarn, logInfo } from '../utils/logBuffer';
 
 export { SAMPLE_TRANSLATIONS, SAMPLE_AUTHENTIC_RUSSIAN_URL, SAMPLE_AUTHENTIC_TIMEDTEXT_HEADERS } from '../config/fixtures';
 export { SUPPORTED_TARGET_LANGUAGES, ON_DEMAND_FALLBACK_COUNT } from '../config/constants';
@@ -126,7 +127,37 @@ export async function translateText(
   const trimmed = (text || '').trim();
 
   if (!trimmed) return '';
-  if (cleanFrom === cleanTo) return trimmed;
+
+  let sourcePrefix = cleanFrom === 'auto' ? 'auto' : cleanFrom.split(/[-_]/)[0];
+  if (sourcePrefix === 'iw' || sourcePrefix === 'il') sourcePrefix = 'he';
+
+  let targetPrefix = cleanTo.split(/[-_]/)[0];
+  if (targetPrefix === 'iw' || targetPrefix === 'il') targetPrefix = 'he';
+
+  // Guard 1: Direct language equality (e.g. he -> he, iw -> he, en -> en, ru -> ru)
+  if (cleanFrom === cleanTo || (sourcePrefix !== 'auto' && sourcePrefix === targetPrefix)) {
+    logWarn('Translate', `Redundant translation skipped (${cleanFrom} -> ${cleanTo}): Source language equals target language for "${trimmed.substring(0, 15)}..."`);
+    return trimmed;
+  }
+
+  // Guard 2: Script / character detection for target language
+  // If target is Hebrew ('he') and text is already composed of Hebrew characters
+  if (targetPrefix === 'he' && /[\u0590-\u05FF]/.test(trimmed)) {
+    logWarn('Translate', `Redundant translation skipped (to Hebrew): Text is already in Hebrew script for "${trimmed.substring(0, 15)}..."`);
+    return trimmed;
+  }
+
+  // If target is Arabic ('ar') and text is already in Arabic script
+  if (targetPrefix === 'ar' && /[\u0600-\u06FF]/.test(trimmed)) {
+    logWarn('Translate', `Redundant translation skipped (to Arabic): Text is already in Arabic script for "${trimmed.substring(0, 15)}..."`);
+    return trimmed;
+  }
+
+  // If target is Russian ('ru') and text is already in Cyrillic script
+  if (targetPrefix === 'ru' && /[\u0400-\u04FF]/.test(trimmed)) {
+    logWarn('Translate', `Redundant translation skipped (to Russian): Text is already in Cyrillic script for "${trimmed.substring(0, 15)}..."`);
+    return trimmed;
+  }
 
   const cacheKey = `${cleanFrom}:${cleanTo}:${trimmed}`;
   ensureSrtTranslationsPrepopulated();
@@ -134,9 +165,6 @@ export async function translateText(
   if (memoryCache.has(cacheKey)) {
     return memoryCache.get(cacheKey)!;
   }
-
-  let targetPrefix = cleanTo.split('-')[0];
-  if (targetPrefix === 'iw' || targetPrefix === 'il') targetPrefix = 'he';
 
   const autoKey = `auto:${targetPrefix}:${trimmed}`;
   if (memoryCache.has(autoKey)) {

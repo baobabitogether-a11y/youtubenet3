@@ -216,6 +216,16 @@ export function initGlobalNetworkAndErrorInterceptors() {
             })
           );
 
+          logNetwork({
+            category: reqType,
+            url,
+            method,
+            status: response.status,
+            duration,
+            responseBody,
+            message: `${method} ${url} completed (${response.status})`,
+          });
+
           // If HTTP error status (4xx or 5xx), log to errors slice
           if (!response.ok) {
             store.dispatch(
@@ -352,6 +362,16 @@ export function initGlobalNetworkAndErrorInterceptors() {
                 duration,
               })
             );
+
+            logNetwork({
+              category: 'xhr',
+              url,
+              method,
+              status: this.status,
+              duration,
+              responseBody: respBody,
+              message: `XHR ${method} ${url} completed (${this.status})`,
+            });
 
             if (this.status >= 400) {
               store.dispatch(

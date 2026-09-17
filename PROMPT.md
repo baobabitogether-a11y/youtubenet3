@@ -3,16 +3,20 @@
 ## Latest User Prompt
 
 ```text
-remember by default we use only 1 target language.
-after enabling tts - it shouldn't change the list of target languages!
--
-we dont deal yet with translation to multiple languages in parrallel.
+add another view which by default shows the tts input texts. use a list control to present the newer on top .etc
 ```
 
 ## Actionable Tasks
 
-- [ ] Task 1: Enforce single target language by default (`singleTargetLanguageMode: true`, only 1 target language active/enabled).
-- [ ] Task 2: Ensure enabling TTS does NOT change the list of target languages or append extra languages to target languages.
-- [ ] Task 3: Remove parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel.
-- [ ] Task 4: Ensure TTS speaks only for the single active target language (or source/active language as selected) and highlights that cue without modifying target languages.
-- [ ] Task 5: Verify zero TypeScript errors (`lint_applet`), build cleanly (`compile_applet`), run `npm run update:readme mostuf25563`, and document in `CHANGELOG.md`.
+- [x] Task 1: Extend `ttsEngine.ts` to log and broadcast a full historical feed of TTS input records (`TTSInputRecord[]`) with `ttsInputsFeed` array prepended (newer on top).
+- [x] Task 2: Implement dedicated `TTSInputTextsView.tsx` with a high-density, searchable, filterable list control featuring "Newer on Top" ordering, auto-scroll pinning, repeat tags, quick copy, and audio test replay.
+- [x] Task 3: Set `TTSInputTextsView` as the default active tab in `TTSQueueDebugger.tsx` (`#tts-queue-debugger`).
+- [x] Task 4: Create `TTSInputTextsModal.tsx` and integrate standalone launch triggers in `Navbar.tsx` (`#navbar-tts-inputs-button`) and `FloatingDiagnosticDock.tsx` (`#open-tts-inputs-floating-button`).
+- [x] Task 5: Verify build, linting, and typecheck across entire application suite.
+
+## Future / Backlog Tasks
+
+- [ ] Future Task: Advanced multi-language TTS sequence playback (playing each language one after another in auto-TTS mode if configured).
+
+
+

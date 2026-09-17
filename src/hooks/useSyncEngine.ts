@@ -8,6 +8,7 @@ import {
   ON_DEMAND_FALLBACK_COUNT,
 } from '../lib/translateService';
 import { logSync, logTTS } from '../utils/logBuffer';
+import { loadAppSettings } from '../utils/appSettings';
 import {
   getCachedSrtForVideoAndLanguage,
   hasCachedSrtForVideoAndLanguage,
@@ -92,7 +93,10 @@ export function useSyncEngine({
   // Step 2.3 & 4.4: On-demand fallback translation for next X=4 records ONLY when playback reaches a cue
   useEffect(() => {
     if (!cues || cues.length === 0 || activeCueIndex < 0) return;
-    const enabledLangs = languages.filter((l) => l.enabled);
+    const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+    const enabledLangs = isSingleLang
+      ? languages.filter((l) => l.enabled).slice(0, 1)
+      : languages.filter((l) => l.enabled);
     enabledLangs.forEach(async (lang) => {
       try {
         // Collect existing valid translations so we never overwrite them
@@ -148,27 +152,32 @@ export function useSyncEngine({
   const getCueTranslation = useCallback(
     async (cue: CaptionCue, targetLangCode: string): Promise<string> => {
       const cueId = cue.id;
-      const cleanLang = targetLangCode.toLowerCase().split('-')[0];
+      let cleanLang = targetLangCode.toLowerCase().split(/[-_]/)[0];
+      if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
       const vId = videoId || 'FcRzAdI8R9U';
 
-      // 1. Check local authentic SRT fixture first!
+      // 1. Check external and local component translations for this specific cue ID first
+      const fromExt = externalTranslationsRef.current?.[cueId]?.[cleanLang] || externalTranslationsRef.current?.[cueId]?.[targetLangCode];
+      if (fromExt && fromExt.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
+        return fromExt;
+      }
+
+      const fromRef = translationsRef.current[cueId]?.[cleanLang] || translationsRef.current[cueId]?.[targetLangCode];
+      if (fromRef && fromRef.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
+        return fromRef;
+      }
+
+      // 2. Check local authentic SRT fixture by timestamp proximity first, then cue ID
       if (hasCachedSrtForVideoAndLanguage(vId, cleanLang)) {
         const srtCues = getCachedSrtForVideoAndLanguage(vId, cleanLang);
         if (srtCues && srtCues.length > 0) {
-          const match = srtCues.find((c) => c.id === cueId) || (cues ? srtCues[cues.findIndex((c) => c.id === cueId)] : null);
+          const match =
+            srtCues.find((c) => Math.abs(c.start - cue.start) < 0.75) ||
+            srtCues.find((c) => c.id === cueId);
           if (match && match.text) {
             return match.text;
           }
         }
-      }
-
-      const fromRef = translationsRef.current[cueId]?.[targetLangCode];
-      if (fromRef && fromRef.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
-        return fromRef;
-      }
-      const fromExt = externalTranslationsRef.current?.[cueId]?.[targetLangCode];
-      if (fromExt && fromExt.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
-        return fromExt;
       }
 
       const translated = await translateText(cue.text, sourceLang, targetLangCode);
@@ -184,7 +193,7 @@ export function useSyncEngine({
       }
       return translated;
     },
-    [cues, sourceLang, videoId]
+    [sourceLang, videoId]
   );
 
   /**
@@ -198,7 +207,10 @@ export function useSyncEngine({
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
 
-      for (const lang of enabledLangs) {
+      const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+      const langsToPlay = isSingleLang ? enabledLangs.slice(0, 1) : enabledLangs;
+
+      for (const lang of langsToPlay) {
         if (abortRef.current) return false;
 
         // Check if language is still enabled in latest settings
@@ -334,7 +346,10 @@ export function useSyncEngine({
         logSync('SyncLoop', `Block ${idx + 1}/${cues.length} [${playOrder}] starting: "${cue.text.substring(0, 35)}..."`);
 
         // Dynamically get the current enabled languages on every single block iteration
-        const currentEnabledLangs = languagesRef.current.filter((l) => l.enabled);
+        const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+        const currentEnabledLangs = isSingleLang
+          ? languagesRef.current.filter((l) => l.enabled).slice(0, 1)
+          : languagesRef.current.filter((l) => l.enabled);
 
         // Background prefetch translations for upcoming cues
         if (currentEnabledLangs.length > 0) {
@@ -470,7 +485,7 @@ export function useSyncEngine({
    * Firmly pauses video first
    */
   const testSpeakLang = useCallback(
-    async (cue: CaptionCue, lang: TargetLanguage) => {
+    async (cue: CaptionCue, lang: TargetLanguage, customText?: string) => {
       if (isSpeaking && currentTTSLang === lang.code) {
         stopTTS();
         setIsSpeaking(false);
@@ -484,7 +499,10 @@ export function useSyncEngine({
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
 
-      const textToSpeak = await getCueTranslation(cue, lang.code);
+      let textToSpeak = customText;
+      if (!textToSpeak) {
+        textToSpeak = await getCueTranslation(cue, lang.code);
+      }
       if (!textToSpeak) return;
 
       playerRef.current?.pause();

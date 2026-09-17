@@ -12,6 +12,7 @@ import { FloatingDiagnosticDock } from './components/FloatingDiagnosticDock';
 import { useAppDispatch, useAppSelector } from './store';
 import { transition } from './store/stateMachineSlice';
 import { addError } from './store/errorsSlice';
+import { setNetworkInspectorOpen } from './store/networkSlice';
 import {
   setVideo,
   setTheaterMode as setReduxTheaterMode,
@@ -56,9 +57,11 @@ import { ActivityLogModal } from './components/ActivityLogModal';
 import { ApkUpdateModal } from './components/ApkUpdateModal';
 import { checkApkUpdate } from './utils/apkUpdater';
 import { loadAppSettings, saveAppSettings, AppSettings, DEFAULT_APP_SETTINGS, loadVideoSettings, saveVideoSettings, VideoSpecificSettings, getVideoTargetLang, setVideoTargetLang } from './utils/appSettings';
-import { logInfo, logWarn, logSubtitles } from './utils/logBuffer';
+import { logInfo, logWarn, logSubtitles, registerAppStateProvider } from './utils/logBuffer';
+import { checkAndPerformUrlCacheReset, getAppStateFromUrl, syncAppStateToUrl } from './utils/urlStateManager';
 import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../test/fixtures/defaultSubtitles';
 import { SelectTargetLanguageModal } from './components/SelectTargetLanguageModal';
+import { TTSInputTextsModal } from './components/TTSInputTextsModal';
 import { translateText } from './lib/translateService';
 import { DEFAULT_LIBRARY_ITEMS } from './config/appConfig';
 
@@ -68,8 +71,23 @@ export default function App() {
   const dispatch = useAppDispatch();
   const videoState = useAppSelector((state) => state.video);
 
+  // 1. Check and perform zero-memory cache resets if reset_* params exist in URL
+  const [cacheResetToast, setCacheResetToast] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const resetResult = checkAndPerformUrlCacheReset();
+      if (resetResult.wasReset) {
+        return `🧹 Cache reset executed (${resetResult.resetKeys.join(', ')}). Running with clean zero-memory storage.`;
+      }
+    }
+    return null;
+  });
+
+  // 2. Parse initial state from URL parameters
+  const initialUrlState = typeof window !== 'undefined' ? getAppStateFromUrl() : {};
+
   // Determine initial video ID and URL
   const [videoId, setVideoId] = useState<string>(() => {
+    if (initialUrlState.videoId) return initialUrlState.videoId;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const sharedUrl = params.get('url') || params.get('text') || params.get('link') || params.get('share') || params.get('v');
@@ -88,6 +106,7 @@ export default function App() {
   });
 
   const [currentUrl, setCurrentUrl] = useState<string>(() => {
+    if (initialUrlState.url) return initialUrlState.url;
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const sharedUrl = params.get('url') || params.get('text') || params.get('link') || params.get('share') || params.get('v');
@@ -105,23 +124,25 @@ export default function App() {
     return DEFAULT_VIDEO_URL;
   });
 
-  const [startTime, setStartTime] = useState<number | undefined>(undefined);
+  const [startTime, setStartTime] = useState<number | undefined>(() => initialUrlState.time);
   const [detectedFormat, setDetectedFormat] = useState<YouTubeFormatType | undefined>('standard_watch');
   const [theaterMode, setTheaterMode] = useState<boolean>(false);
   const [isLibraryOpen, setIsLibraryOpen] = useState<boolean>(false);
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState<boolean>(false);
+  const [isTTSInputsModalOpen, setIsTTSInputsModalOpen] = useState<boolean>(false);
   const [isApkUpdateModalOpen, setIsApkUpdateModalOpen] = useState<boolean>(false);
   const [hasApkUpdate, setHasApkUpdate] = useState<boolean>(false);
   const [latestApkTag, setLatestApkTag] = useState<string | undefined>(undefined);
   const [settings, setSettings] = useState<AppSettings>(() => loadAppSettings());
   const [interceptedData, setInterceptedData] = useState<InterceptedCaptionData | null>(null);
-  const [captionsEnabled, setCaptionsEnabled] = useState<boolean>(true);
+  const [captionsEnabled, setCaptionsEnabled] = useState<boolean>(() => initialUrlState.captionsEnabled ?? true);
 
   // Target Language Selection per video (Default to 'he' Hebrew subtitles or user learning target)
   const [isTargetLangModalOpen, setIsTargetLangModalOpen] = useState<boolean>(false);
   const [selectedTargetLang, setSelectedTargetLang] = useState<string>(() => {
+    if (initialUrlState.targetLang) return initialUrlState.targetLang;
     return getVideoTargetLang(videoId) || 'he';
   });
   const [activeCue, setActiveCue] = useState<CaptionCue | null>(null);
@@ -206,18 +227,22 @@ export default function App() {
 
   // Synchronize translated text for active cue in real time
   useEffect(() => {
+    // Immediately clear previous translation on cue change to prevent stale cues from lingering or being spoken
+    setTranslatedCueText(null);
+
     if (!activeCue?.text) {
-      setTranslatedCueText(null);
       return;
     }
-    const targetLang = selectedTargetLang || 'it';
-    const cleanLang = targetLang.toLowerCase().split('-')[0];
+    const targetLang = selectedTargetLang || 'he';
+    let cleanLang = targetLang.toLowerCase().split(/[-_]/)[0];
+    if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
 
-    // Check authentic local SRT track / target subtitle cache first
+    // Check authentic local SRT track / target subtitle cache first using timestamp matching
     const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
     if (srtCues && srtCues.length > 0) {
-      const activeList = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
-      const match = srtCues.find((c) => c.id === activeCue.id) || (activeList.length > 0 ? srtCues[activeList.findIndex((c) => c.id === activeCue.id)] : null);
+      const match =
+        srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
+        srtCues.find((c) => c.id === activeCue.id);
       if (match && match.text) {
         setTranslatedCueText(match.text);
         return;
@@ -235,7 +260,7 @@ export default function App() {
     return () => {
       isSubscribed = false;
     };
-  }, [activeCue?.id, activeCue?.text, selectedTargetLang, videoId, customCues, interceptedData]);
+  }, [activeCue?.id, activeCue?.text, activeCue?.start, selectedTargetLang, videoId]);
 
   const [isFetchingSubtitles, setIsFetchingSubtitles] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -270,12 +295,105 @@ export default function App() {
   const playerRef = useRef<YouTubePlayerHandle | null>(null);
   const [isSyncActive, setIsSyncActive] = useState<boolean>(false);
 
+  // Register comprehensive dynamic application state provider for Copy All diagnostics logs
+  useEffect(() => {
+    registerAppStateProvider(() => {
+      const activeCuesList = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+      const currentTime = playerRef.current?.getCurrentTime?.() ?? 0;
+      return {
+        timestamp: new Date().toISOString(),
+        video: {
+          videoId,
+          currentUrl,
+          currentTime,
+          detectedFormat,
+          captionsEnabled,
+          theaterMode,
+        },
+        subtitles: {
+          totalCues: activeCuesList.length,
+          activeCue: activeCue ? {
+            id: activeCue.id,
+            start: activeCue.start,
+            duration: activeCue.duration,
+            text: activeCue.text,
+            translatedText: translatedCueText,
+          } : null,
+          targetLang: selectedTargetLang,
+          observedTimedTextUrl,
+        },
+        tts: {
+          isSpeaking: syncTTSState.isSpeaking,
+          currentTTSText: syncTTSState.currentTTSText,
+          currentTTSLang: syncTTSState.currentTTSLang,
+          activeCharIndex: syncTTSState.activeCharIndex,
+          autoPlayTTS: settings.autoPlayTTS,
+          ttsSyncMode: settings.ttsSyncMode,
+          allowNonNativeFallback: settings.allowNonNativeTTSFallback ?? false,
+        },
+        settings: {
+          compactView: settings.compactView,
+          subtitlePosition: settings.subtitlePosition,
+          showTranslatedOnTop: settings.showTranslatedOnTop,
+          autoFetchTargetTranslationsWithTlang: settings.autoFetchTargetTranslationsWithTlang,
+        },
+        url: typeof window !== 'undefined' ? window.location.href : '',
+      };
+    });
+  }, [
+    videoId,
+    currentUrl,
+    activeCue,
+    translatedCueText,
+    selectedTargetLang,
+    syncTTSState,
+    settings,
+    captionsEnabled,
+    theaterMode,
+    customCues,
+    interceptedData,
+    observedTimedTextUrl,
+    detectedFormat,
+  ]);
+
+  // Synchronize active app state to URL parameters
+  useEffect(() => {
+    const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+    syncAppStateToUrl({
+      videoId,
+      url: currentUrl,
+      targetLang: selectedTargetLang,
+      autoTTS: settings.autoPlayTTS,
+      captionsEnabled,
+      mode: settings.compactView ? 'compact' : 'expanded',
+    });
+  }, [videoId, currentUrl, selectedTargetLang, settings.autoPlayTTS, settings.compactView, captionsEnabled]);
+
   const handlePlayerTimeUpdate = useCallback((t: number) => {
     const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
     if (!active || active.length === 0) return;
-    const match = active.find((c) => t >= c.start && t <= c.start + c.duration);
-    setActiveCue((prev) => (prev?.id === match?.id ? prev : match || (t === 0 ? active[0] : null)));
-  }, [customCues, interceptedData]);
+    const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+    setActiveCue((prev) => {
+      if (match) {
+        return prev?.id === match.id ? prev : match;
+      }
+      // If player is at 0, default to first cue; otherwise maintain previous valid cue during slight gaps
+      if (t === 0) return active[0];
+      return prev || active[0];
+    });
+
+    // Throttled time update to URL
+    if (typeof t === 'number' && t > 0) {
+      syncAppStateToUrl({
+        videoId,
+        time: Math.floor(t),
+        targetLang: selectedTargetLang,
+        autoTTS: settings.autoPlayTTS,
+        captionsEnabled,
+        mode: settings.compactView ? 'compact' : 'expanded',
+      });
+    }
+  }, [customCues, interceptedData, videoId, selectedTargetLang, settings.autoPlayTTS, settings.compactView, captionsEnabled]);
 
   // Active cue tracker from player playback position
   useEffect(() => {
@@ -294,8 +412,14 @@ export default function App() {
       try {
         const t = playerRef.current?.getCurrentTime?.();
         if (typeof t === 'number' && !isNaN(t) && t >= 0) {
-          const match = active.find((c) => t >= c.start && t <= c.start + c.duration);
-          setActiveCue((prev) => (prev?.id === match?.id ? prev : match || (t === 0 ? active[0] : null)));
+          const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+          setActiveCue((prev) => {
+            if (match) {
+              return prev?.id === match.id ? prev : match;
+            }
+            if (t === 0) return active[0];
+            return prev || active[0];
+          });
         }
       } catch {}
     }, 250);
@@ -822,7 +946,7 @@ export default function App() {
     setSharedLinkComplaint(null);
 
     const vSettings = loadVideoSettings(item.id);
-    const resolvedLang = item.activeTargetLang || vSettings?.activeTargetLang || 'it';
+    const resolvedLang = item.activeTargetLang || vSettings?.activeTargetLang || 'he';
     setSelectedTargetLang(resolvedLang);
     setVideoTargetLang(item.id, resolvedLang);
 
@@ -955,7 +1079,7 @@ export default function App() {
   const activeCues = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
 
   // Performance & Display Mode: Default Compact View (fast, tap-to-show controls, no scrolling)
-  if (settings.compactView) {
+  if (settings.compactView ?? true) {
     return (
       <div
         id="compact-view-container"
@@ -1119,6 +1243,10 @@ export default function App() {
               setIsSettingsModalOpen(true);
             }}
             onBackOrClose={() => setIsLibraryOpen(true)}
+            onSelectVideo={handleSelectVideo}
+            onOpenApkUpdate={() => setIsApkUpdateModalOpen(true)}
+            onOpenNetworkInspector={() => dispatch(setNetworkInspectorOpen(true))}
+            onOpenShare={() => setIsShareModalOpen(true)}
           />
         </div>
 
@@ -1200,6 +1328,7 @@ export default function App() {
           setIsSettingsModalOpen(true);
         }}
         onOpenLogs={() => setIsLogsModalOpen(true)}
+        onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
         onOpenApkUpdate={() => setIsApkUpdateModalOpen(true)}
         hasApkUpdate={hasApkUpdate}
         latestApkVersion={latestApkTag}
@@ -1250,6 +1379,29 @@ export default function App() {
                   <X className="w-4 h-4" />
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* URL Cache Reset Indicator Toast */}
+          {cacheResetToast && (
+            <div
+              id="cache-reset-indicator"
+              data-testid="cache-reset-indicator"
+              className="p-3.5 rounded-xl bg-amber-950/80 border border-amber-600/80 text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn shadow-lg"
+            >
+              <div className="flex items-center gap-2.5">
+                <RefreshCw className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="font-medium">{cacheResetToast}</span>
+              </div>
+              <button
+                type="button"
+                id="dismiss-cache-reset-indicator"
+                onClick={() => setCacheResetToast(null)}
+                className="p-1 text-amber-400 hover:text-amber-200 transition"
+                title="Dismiss banner"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -1496,6 +1648,12 @@ export default function App() {
         onClose={() => setIsLogsModalOpen(false)}
       />
 
+      {/* Dedicated TTS Input Texts View Modal (Newer on Top) */}
+      <TTSInputTextsModal
+        isOpen={isTTSInputsModalOpen}
+        onClose={() => setIsTTSInputsModalOpen(false)}
+      />
+
       {/* Settings Modal (Advanced features OFF by default) */}
       <SettingsModal
         isOpen={isSettingsModalOpen}
@@ -1519,7 +1677,11 @@ export default function App() {
       <ErrorInspectorModal />
 
       {/* Persistent Floating Diagnostic Dock (if enabled in settings) */}
-      {settings.enableDiagnosticDock && <FloatingDiagnosticDock />}
+      {settings.enableDiagnosticDock && (
+        <FloatingDiagnosticDock
+          onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
+        />
+      )}
     </div>
   );
 }

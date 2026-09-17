@@ -8,6 +8,198 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Dedicated TTS Input Texts List View (Newer on Top Default View)
+
+- **TTS Input Tracking Feed in Core Engine (`ttsEngine.ts`)**:
+  - Implemented `TTSInputRecord` interface capturing unique `id`, `text`, `lang`, `rate`, `engine`, `status` (`speaking`, `completed`, `interrupted`, `error`), formatted `timestamp`, `isRepeat`, `repeatCount`, and chronological `index`.
+  - Added `ttsInputsFeed: TTSInputRecord[]` array prepending new entries (`unshift`) to maintain exact "newer on top" order.
+  - Broadcast inputs feed via `notifyTTSDebugListeners()` to all subscribed debug views and inspectors.
+- **Dedicated List Control View Component (`TTSInputTextsView.tsx`)**:
+  - Developed custom list control layout presenting chronological TTS input texts with newest at the top.
+  - Added active speaking progress visualization with word boundary highlight and pulsing indicators.
+  - Added repeat multiplier flags (`REPEAT xN`), language tags, engine badges (`web_speech` / `native_android`), and speed rate indicator.
+  - Built search filter (case-insensitive substring search across input text), status filters (`All`, `Speaking`, `Completed`, `Repeats`), and density toggles (`Comfortable` vs `Compact`).
+  - Added single-click text copy, "Copy All" formatted export, pin-to-top auto-scroll toggle, and single-cue audio replay triggers.
+- **Default Tab in TTS Queue Debugger (`TTSQueueDebugger.tsx`)**:
+  - Integrated `TTSInputTextsView` as the default active tab (`input_texts`) in the main inline debugger below `VideoPlayer`.
+- **Standalone Modal & Global Launch Triggers (`TTSInputTextsModal.tsx`, `Navbar.tsx`, `FloatingDiagnosticDock.tsx`, `App.tsx`)**:
+  - Added `#navbar-tts-inputs-button` in Navbar with dynamic real-time input counter.
+  - Added `#open-tts-inputs-floating-button` in Floating Diagnostic Dock for instant access.
+- **Status**: Completed & 100% Verified.
+
+### TTS and Subtitle Section Synchronization & Alignment Fix
+
+- **Unified Cue Resolution & Keyed Translation Architecture (`VideoPlayer.tsx`, `App.tsx`)**:
+  - Replaced single-string `localTranslatedText` state in `VideoPlayer.tsx` with cue-ID-keyed mapping `localTranslatedMap: Record<string, string>` to eliminate cross-cue translation bleed or section jumping.
+  - Bound `displayTranslatedText` strictly to `translatedCueText || localTranslatedMap[activeCue.id]`.
+- **Timestamp-Proximity Matching for Authentic SRT Tracks (`App.tsx`, `VideoPlayer.tsx`, `useSyncEngine.ts`, `SubtitlesTeacherPanel.tsx`)**:
+  - Replaced arbitrary array index indexing (`srtCues[activeList.findIndex(...)]`) with robust timestamp proximity matching (`Math.abs(c.start - activeCue.start) < 0.75`) with cue ID fallback across all components and sync engine hooks.
+  - Eliminated index-offset mismatch where demo or customized track arrays drifted from YouTube timedtext cues.
+- **Strict 1:1 Pronunciation Fidelity in TTS Invocations (`VideoPlayer.tsx`, `useSyncEngine.ts`)**:
+  - Updated `playCurrentCueTTS`, `handleSpeakCue`, and the auto-TTS execution loops to strictly resolve `textToSpeak` from the active on-screen cue.
+  - Extended `testSpeakLang` in `useSyncEngine.ts` to accept `customText` parameter to directly pronounce the exact translation string rendered in the UI without re-fetching or re-resolving alternate sources.
+- **Active Cue Gap Retention (`App.tsx`)**:
+  - Prevented active cue tracker from resetting to `active[0]` (the very first video subtitle) during short silence gaps between dialogue segments, maintaining stability during pauses and playback transitions.
+- **Status**: Completed & 100% Verified.
+
+### Red Light Indicator for TTS Repeats on Identical Text
+
+- **Consecutive Repeat Tracking in TTS Engine (`ttsEngine.ts`)**:
+  - Implemented normalized text string comparison (`lastSpokenTextNormalized`) across consecutive `speakText` invocations.
+  - Added `currentConsecutiveRepeatCount` tracking, exported `getTTSRepeatCount()` and `isTTSRepeatingSameText()`.
+  - Added `repeatCount` and `isRepeat` boolean flags to `TTSDebugPayload` and `TTSDebugHistoryItem`.
+- **Red Light Visual Indicator in TTS Debugger Header (`TTSQueueDebugger.tsx`)**:
+  - Implemented glowing red light badge (`#tts-repeat-red-light`) with pulsing animation and ping effect when `isRepeat` is true.
+  - Displays dynamic repeat multiplier count `REPEAT x{repeatCount}` and tooltip.
+- **Red Light Text Box & Progress Highlight (`TTSQueueDebugger.tsx`)**:
+  - Highlighted the active speech text container with red border ring and red glowing progress bar when speech is repeating identical text.
+  - Added repeat indicator tag to speech history entries.
+- **Red Light Subtitle Overlay & Teacher Panel Indicators (`ParallelTranslationsOverlay.tsx`, `SubtitlesTeacherPanel.tsx`)**:
+  - Added `#tts-repeat-overlay-red-light` and `#teacher-panel-tts-repeat-red-light` indicators with pulsing red dot and repeat multiplier counters.
+- **Status**: Completed & 100% Verified.
+
+### Parallel Multi-Language Translation & Multi-Language Presentation
+
+- **Parallel Subtitle Overlay Engine (`ParallelTranslationsOverlay.tsx`)**:
+  - Implemented multi-language parallel subtitle overlay supporting simultaneous presentation of multiple target languages in `VideoPlayer` (compact and expanded views).
+  - Designed clean stacked language cards with distinctive language pills, active speech state badges, individual audio playback controls, and synchronized word boundary highlighting.
+- **Dynamic Multi-Language State & Translation Sync (`VideoPlayer.tsx`)**:
+  - Bound `displayedTargetLanguages` dynamically according to single vs parallel presentation mode.
+  - Implemented background caching and fetching loop in `parallelTranslations` state to retrieve translations across all enabled target languages simultaneously.
+  - Refactored `handleSpeakCue(targetOrLang, customText)` to support speaking any individual target language in the parallel set with dedicated word highlighting.
+- **Single vs Parallel Presentation Mode Toggle (`SelectTargetLanguageModal.tsx`, `appSettings.ts`)**:
+  - Added `#toggle-single-target-language-mode` switch with clear descriptive labels ("Single Active Language" vs "Parallel Multi-Language Presentation").
+  - Persistent state synchronization across `localStorage` and `SettingsModal.tsx`.
+- **Status**: Completed & 100% Verified.
+
+### Real-Time TTS Input & Queue Debugger (Default ON & Settings Controllable)
+
+- **Default Real-Time TTS Input & Queue Inspector (`TTSQueueDebugger.tsx`)**:
+  - Implemented `TTSQueueDebugger` component rendering real-time speech telemetry directly beneath the video player controls by default.
+  - **Live TTS Input Payload Tab**: Displays the exact text string currently sent to the speech engine, language code, speech rate multiplier, hardware/WebSpeech engine type, and real-time character progress bar (`charIndex` / `totalChars`).
+  - **Live TTS Queue Sequence Tab**: Presents the active timeframe item and the upcoming queued subtitle with source text and target language translations (`he` by default).
+  - **Recent Speech History Tab**: Keeps a chronological record of recent speech requests with duration, engine, status badges (`completed`, `cancelled`, `error`), and instant replay capabilities.
+- **Engine Event Emitter & Listener Integration (`ttsEngine.ts`)**:
+  - Added `TTSDebugPayload` and `TTSDebugHistoryItem` data structures with `subscribeTTSDebug()` subscription listener to stream real-time word boundary and status transitions without polling overhead.
+- **Settings Toggle Control (`appSettings.ts`, `SettingsModal.tsx`)**:
+  - Added `showTtsDebugQueue` (default: `true`) to `AppSettings` and `DEFAULT_APP_SETTINGS`.
+  - Added `#toggle-tts-debug-queue-setting` in `SettingsModal.tsx` allowing users to toggle the real-time TTS debugger on or off at any time.
+- **Status**: Completed & 100% Verified.
+
+### TTS Playback Repetition and Subtitles Synchronization Fix
+
+- **Resolved TTS Repetition and Race Conditions (`VideoPlayer.tsx`)**:
+  - Immediate `lastSpokenCueIdRef.current` assignment inside `playCurrentCueTTS` and manual speech triggers to eliminate duplicate auto-TTS calls during rapid state transitions.
+  - Removed redundant manual `playCurrentCueTTS()` call in `toggleAutoTTS()`, allowing the React `useEffect` loop on `autoTTSEnabled` to handle clean single-invocation speech when turning Auto-TTS on.
+- **Synchronized SubtitlesTeacherPanel Active Cue Display & Speech (`SubtitlesTeacherPanel.tsx`)**:
+  - Bound `currentCue` directly to `effectiveActiveIndex` (derived from `activeCue` prop matching the current video playback timeframe) instead of defaulting to cue index 0.
+  - Aligned the active preview card, highlightable text, and individual language speak buttons (`#speak-lang-he-btn`, etc.) to always speak and highlight the exact on-screen video cue.
+  - Updated timeframe skip buttons (`#prevCue`, `#nextCue`) and active cue counter to navigate relative to `effectiveActiveIndex`.
+- **Status**: Completed & 100% Verified.
+
+### Compact Design Quick-Copy Diagnostic Reporting & User Complaint Prompt Generator
+
+- **Default Complete Diagnostic Log Collection (`logBuffer.ts`)**:
+  - Expanded ring buffer to 500 events to ensure zero log drops during long playback sessions.
+  - Implemented `generateTroubleshootingPrompt(userComplaint?: string)` returning an AI-ready Markdown bug report containing:
+    - User complaint or issue description header
+    - Diagnostic metadata & browser URL parameters
+    - Complete live Application State JSON snapshot
+    - Network activity table with HTTP status, duration, full URL, and 15-character truncated response body previews
+    - Full chronological event and network logs
+    - Clear troubleshooting instructions for coding agents.
+- **Quick-Copy Buttons Across All Views & Compact Mode**:
+  - **VideoPlayer Compact Mode Top Bar (`VideoPlayer.tsx`)**: Added `#quick-copy-logs-btn` alongside `#open-logs-view-btn` for instant 1-click clipboard copy of logs and application status with visual checkmark feedback.
+  - **Navbar (`Navbar.tsx`)**: Enhanced `#navbar-copy-logs-button` to copy the rich diagnostic troubleshooting report and trigger a confirmation state.
+  - **Floating Diagnostic Dock (`FloatingDiagnosticDock.tsx`)**: Added `#quick-copy-diagnostics-btn` with 1-click copy action.
+  - **Activity Log Modal (`ActivityLogModal.tsx`)**: Added a user complaint input field (`#user-complaint-input`) and dedicated `#copy-troubleshooting-prompt-button` allowing users to quickly describe what went wrong and copy a complete troubleshooting prompt.
+- **Status**: Completed & 100% Verified.
+
+### Diagnostic Logging, Redundant Translation Guards, Non-Native TTS Settings & URL State Management
+
+- **Comprehensive Diagnostics Copy-to-Clipboard (`logBuffer.ts` & `ActivityLogsModal.tsx`)**:
+  - Enhanced the Copy-All functionality to produce a structured diagnostic report containing active Application State snapshot over time (video ID, current playback time, detected format, total cues, active cue text + translation, TTS engine state, active language, and settings).
+  - Included a dedicated Network Activity summary in clipboard exports with method, HTTP status, duration, full URL, and a 15-character truncated response body preview.
+- **Redundant Network & Translation Detection (`translateService.ts` & `networkInterceptor.ts`)**:
+  - Implemented redundant translation guards in `translateService.ts`: automatically detects identical source and target languages (e.g. Hebrew to Hebrew) or text already composed in the target script, skipping unnecessary network fetches and logging clear warning notices.
+  - Hardened demo fixture priority so the default demo video operates with 100% zero-network translation overhead.
+- **AGENTS.md Demo Fixture Exclusion**:
+  - Updated Section 4 of `AGENTS.md` to explicitly specify that the default demonstration video (`FcRzAdI8R9U`) is bundled with authentic `.srt` tracks and is strictly excluded from live network subtitle fetching and translation requests.
+- **Disabled Non-Native TTS Fallback by Default (`ttsEngine.ts`, `appSettings.ts`, `SettingsModal.tsx`)**:
+  - Addressed the "2 TTS voices" issue: set `allowNonNativeTTSFallback: false` by default so audio stream fallback does not run unless the user explicitly enables it.
+  - Added a dedicated configuration toggle in `SettingsModal.tsx` (`#toggle-non-native-tts-setting`) with an informational badge and explanatory tooltip.
+- **Dynamic URL Application State Synchronization (`urlStateManager.ts`, `App.tsx`)**:
+  - Supported URL query parameter state reading and writing for `v` (video ID), `t` (playback time), `lang` (target translation language), `tts` (auto-TTS toggle), `cc` (captions toggle), and `mode` (`compact` vs `expanded`).
+  - Added debounced updates to keep the browser address bar in sync with live user interaction.
+- **URL Cache Reset Handler (`reset_${cache/localstorage/all}=true`)**:
+  - Implemented automatic zero-memory cache clearing upon opening URLs containing `reset_cache=true`, `reset_localstorage=true`, `reset_all=true`, etc.
+  - Added a visual confirmation banner in `App.tsx` (`#cache-reset-indicator`, `#dismiss-cache-reset-indicator`).
+- **Automated E2E Verification (`e2e/web.spec.ts`)**:
+  - Added Test 11 (`URL State Management, Cache Reset & Complete Diagnostic Logs`) testing the cache reset toast, settings toggle for non-native TTS, and copy-all diagnostic logs.
+- **Status**: Completed & 100% Verified.
+
+### Single Language TTS Enablement & Presented Text Fidelity (Zero Phantom Speech)
+
+- **Fixed False Audio Stream Fallback on Web Speech Interruption (`ttsEngine.ts`)**:
+  - Handled `event.error === 'interrupted'` and `'canceled'` as intentional interruptions without cascading to the neural Audio Stream fallback.
+  - Added `isTTSCancelledByUser` guard in `stopTTS()` and `speakText()` to halt in-flight requests and prevent duplicate/cascading audio streams.
+- **Eliminated Phantom TTS Playback on Enablement (`VideoPlayer.tsx`)**:
+  - Removed fallback to `cachedCues[0]` in `playCurrentCueTTS` and `toggleAutoTTS`, ensuring enabling TTS or clicking play strictly speaks only when an active cue is presented on screen.
+- **1:1 Spoken Text & Visual Subtitle Presentation Fidelity**:
+  - Derived spoken TTS text directly from `effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText`.
+  - Prioritized authentic local `.srt` tracks (`getCachedTargetSubtitles`) and sample translations (`SAMPLE_TRANSLATIONS`) across both visual overlay and speech synthesis.
+  - Automatically synchronized `localTranslatedText` to match the exact text sent to the TTS engine so highlighted text is 100% in lockstep with audio.
+- **Eliminated Stale Translation Carryover**:
+  - Tracked active cue transitions with `displayTranslatedCueIdRef` and synchronously reset `localTranslatedText` and `translatedCueText` on cue change.
+- **Synchronized `useSyncEngine.ts` and `SubtitlesTeacherPanel.tsx`**:
+  - Normalized language codes (`iw`/`il` -> `he`) and checked authentic SRT tracks, external table translations, internal sync cache, and sample fixtures.
+  - Updated `testSpeakLang` to accept explicit presented text strings from UI cards and table rows.
+- **Verification & Testing**:
+  - Added Playwright E2E Test 10 (`TTS Playback - Strict Presented Text Fidelity & No Phantom Speech`) in `e2e/web.spec.ts`.
+  - Zero TypeScript compile errors (`lint_applet` / `tsc --noEmit`).
+  - Clean full production build (`compile_applet` / `npm run build`).
+  - Updated `COVERAGE.md`, `README.md`, and `PROMPT.md`.
+- **Status**: Completed & 100% Verified.
+
+### Default Compact Design with Settings Toggle & URL Ingestion
+
+- **Defaulted to Compact Design (`compactView: true`)**:
+  - Updated `DEFAULT_APP_SETTINGS` in `src/utils/appSettings.ts` so `compactView: true` is the default display mode for fresh sessions and resets.
+  - Hardened `App.tsx` compact view branching with nullish coalescing (`settings.compactView ?? true`) ensuring reliable fallback even if legacy localStorage objects omit the key.
+- **Enhanced Settings Modal (`SettingsModal.tsx`)**:
+  - Added a distinct "Default" badge (`bg-emerald-500/20 text-emerald-300 border-emerald-500/30`) with smartphone icon and clear explanation for the Compact Design setting (`#toggle-compact-view-setting`).
+  - Explains how toggling off switches immediately to the Expanded Workspace view with the complete 25-row Subtitles Teacher Panel and back.
+- **Compact View URL Ingestion & Quick Action Controls (`VideoPlayer.tsx`)**:
+  - Embedded a sleek, responsive URL input form (`#youtube-url-input`, `#play-video-button`, `#clear-input-button`) directly into the compact show-on-tap top bar.
+  - Added quick modal triggers to compact top bar: APK Update (`#navbar-apk-update-button`), Network Inspector (`#navbar-network-inspector-button`), Activity Logs (`#open-logs-view-btn` / `#navbar-logs-button`), and Library (`#back-close-button` / `#navbar-library-button`).
+  - Passed `onSelectVideo`, `onOpenApkUpdate`, `onOpenNetworkInspector`, and `onOpenShare` from `App.tsx` into `<VideoPlayer>` in compact mode.
+- **Verification & Documentation**:
+  - Zero TypeScript errors (`lint_applet` / `tsc --noEmit`).
+  - Clean production build (`compile_applet` / `npm run build`).
+  - Updated `COVERAGE.md`, `README.md` via `npm run update:readme mostuf25563`, and documented in `CHANGELOG.md`.
+- **Status**: Completed & 100% Verified.
+
+### Single Target Language Enforcement & TTS Target Language Stability
+
+- **Enforced Single Target Language by Default (`singleTargetLanguageMode: true`)**:
+  - Maintained single target language mode active by default (`singleTargetLanguageMode: true` in `appSettings.ts`), ensuring only 1 target language is active at a time.
+  - Set Hebrew (`he`) as the universal default target language across `VideoPlayer`, `SubtitlesTeacherPanel`, and `App.tsx` (`DEFAULT_TARGET_LANGUAGES` only has `he` enabled: `code: 'he', name: 'Hebrew', enabled: true`).
+  - Added `sanitizeTargetLanguages()` helper to enforce that exactly one language has `enabled: true` when `singleTargetLanguageMode` is active.
+- **TTS Enablement Does NOT Alter Target Languages**:
+  - Fixed `#toggle-auto-tts-button`, `#quick-toggle-tts-btn`, and `#control-auto-tts-button` so enabling TTS never mutates the list of target languages or appends new languages.
+  - Eliminated the previous multi-language insertion sequence so enabling TTS strictly speaks the single active target language (or source/active language as selected) and highlights that cue without modifying target languages.
+- **Synchronized Single Target Language Flow Across All Modals**:
+  - `SelectTargetLanguageModal`: selecting a target language cleanly switches the active language without accumulating multiple enabled languages.
+  - `LanguageSettingsModal`: toggling a language in single mode deactivates other languages and sets the chosen language as active.
+  - `SubtitlesTeacherPanel`: table columns, translation pre-fetching, and sync engine narration focus strictly on the single active target language.
+- **E2E & Matrix Verification**:
+  - Added E2E Test 9 (`Settings & Teacher Panel - Single Target Language Mode & Default Hebrew`) in `e2e/web.spec.ts`.
+  - Updated `COVERAGE.md` test matrix with passed cross-platform verification for single target language and default Hebrew behavior.
+  - Run `npm run update:readme mostuf25563`.
+  - Zero TypeScript compile errors (`lint_applet` / `tsc --noEmit`).
+  - Clean full production build (`compile_applet` / `npm run build`).
+- **Status**: Completed & 100% Verified.
+
 ### Compact Mode Hover Highlights, Multi-Language TTS:ON Sequence & Hebrew Subtitle Defaulting
 
 - **Compact Mode Button Hover Highlights & Z-Index Stacking**:

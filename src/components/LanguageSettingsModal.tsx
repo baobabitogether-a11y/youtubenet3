@@ -27,6 +27,7 @@ interface LanguageSettingsModalProps {
   onRemoveLanguage: (id: string) => void;
   onTestSpeak: (lang: TargetLanguage) => void;
   getVoicesForLang: (code: string) => SpeechSynthesisVoice[];
+  singleMode?: boolean;
 }
 
 export const LanguageSettingsModal: React.FC<LanguageSettingsModalProps> = ({
@@ -42,6 +43,7 @@ export const LanguageSettingsModal: React.FC<LanguageSettingsModalProps> = ({
   onRemoveLanguage,
   onTestSpeak,
   getVoicesForLang,
+  singleMode = true,
 }) => {
   const [newLangCode, setNewLangCode] = useState('es');
 
@@ -123,9 +125,16 @@ export const LanguageSettingsModal: React.FC<LanguageSettingsModalProps> = ({
 
           {/* Languages list */}
           <div className="flex flex-col gap-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
-              Active Languages (Ordered for TTS Playback)
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+                {singleMode ? 'Active Target Language (Single Mode)' : 'Active Languages (Ordered for TTS Playback)'}
+              </span>
+              {singleMode && (
+                <span className="text-[11px] text-indigo-400 bg-indigo-950/70 border border-indigo-800/50 px-2 py-0.5 rounded-md font-medium">
+                  Single Target Language
+                </span>
+              )}
+            </div>
 
             {targetLanguages.map((lang, index) => {
               const voices = getVoicesForLang(lang.code);
@@ -135,15 +144,16 @@ export const LanguageSettingsModal: React.FC<LanguageSettingsModalProps> = ({
                   id={`target-language-card-${lang.code}`}
                   className={`p-3.5 rounded-xl border transition flex flex-col gap-3 ${
                     lang.enabled
-                      ? 'bg-neutral-950/80 border-neutral-700/80'
+                      ? 'bg-neutral-950/80 border-indigo-500/50 ring-1 ring-indigo-500/20'
                       : 'bg-neutral-950/40 border-neutral-800 opacity-60'
                   }`}
                 >
-                  {/* Top row: Checkbox, Name, Reorder buttons, Remove button */}
+                  {/* Top row: Checkbox/Radio, Name, Reorder buttons, Remove button */}
                   <div className="flex items-center justify-between gap-2">
                     <label className="flex items-center gap-2.5 cursor-pointer select-none">
                       <input
-                        type="checkbox"
+                        type={singleMode ? 'radio' : 'checkbox'}
+                        name={singleMode ? 'active-target-lang-radio' : undefined}
                         checked={lang.enabled}
                         onChange={() => onToggleLanguage(lang.id)}
                         className="w-4 h-4 rounded border-neutral-700 text-indigo-600 focus:ring-0 cursor-pointer"

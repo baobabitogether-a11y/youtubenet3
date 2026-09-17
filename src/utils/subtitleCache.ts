@@ -432,4 +432,22 @@ export function getAllCachedTargetLanguages(videoId: string): string[] {
   return Array.from(set);
 }
 
+/**
+ * Clears in-memory and localStorage subtitle caches
+ */
+export function clearSubtitleCache(): void {
+  memoryCache.clear();
+  if (!isStorageAvailable()) return;
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(SUBTITLE_CACHE_PREFIX)) {
+        keysToRemove.push(k);
+      }
+    }
+    keysToRemove.forEach((k) => localStorage.removeItem(k));
+  } catch {}
+}
+
 
