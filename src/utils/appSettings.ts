@@ -23,6 +23,15 @@ export interface AppSettings {
   subtitlePosition: SubtitlePosition;
   showTranslatedOnTop: boolean;
 
+  // TTS Auto-Play & Narration: By default do NOT TTS-play (only show the target translation)
+  autoPlayTTS: boolean;
+
+  // Target Language Presentation: By default use only 1 target language
+  singleTargetLanguageMode: boolean;
+
+  // Subtitle Timestamp Display: By default also show the subtitles's time section besides the subtitles
+  showSubtitleTimestamps: boolean;
+
   // TTS Play & Text Highlight Synchronization Mode (4 Alternatives)
   ttsSyncMode: TTSSyncMode;
 
@@ -147,6 +156,15 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // By default keep translated subtitles on top, overlay inside top of video (Requirement 1)
   subtitlePosition: 'top',
   showTranslatedOnTop: true,
+
+  // By default do NOT TTS-play (only show the target translation)
+  autoPlayTTS: false,
+
+  // By default use only 1 target language
+  singleTargetLanguageMode: true,
+
+  // By default also show the subtitles's time section besides the subtitles
+  showSubtitleTimestamps: true,
 
   // TTS Play & Text Highlight Sync Mode (4 Alternatives, default: word_boundary)
   ttsSyncMode: 'word_boundary',

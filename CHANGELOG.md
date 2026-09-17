@@ -8,6 +8,28 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Default Settings, Compact Mode Quick Controls & Subtitle Timestamps
+
+- **Default Settings Architecture (`src/utils/appSettings.ts`)**:
+  - Added `autoPlayTTS: boolean` (default: `false`) — By default, the application does not auto-play TTS speech; it only shows the target translation on screen.
+  - Added `singleTargetLanguageMode: boolean` (default: `true`) — By default, the app presents a single target language for a clean and focused comprehension view.
+  - Added `showSubtitleTimestamps: boolean` (default: `true`) — By default, shows the subtitle's time section (`[mm:ss - mm:ss]`) beside each subtitle cue.
+  - Configured `DEFAULT_TARGET_LANGUAGES` in `SubtitlesTeacherPanel.tsx` to default to 1 active language (`it`).
+- **Settings Modal Toggles (`src/components/SettingsModal.tsx`)**:
+  - Added dedicated toggle for Auto-play TTS Narration (`#toggle-autoplay-tts-setting`).
+  - Added dedicated toggle for Single Target Language Focus (`#toggle-single-target-lang-mode`).
+  - Added dedicated toggle for Subtitle Time Section (`#toggle-show-subtitle-timestamps`).
+- **Compact & Expanded Mode Quick Controls (`src/components/VideoPlayer.tsx`)**:
+  - **Quick TTS Control**: Added instant toggle button (`#quick-toggle-tts-btn` and `#toggle-auto-tts-button`) directly on the compact player overlay with state feedback (`TTS: OFF` / `TTS: ON`).
+  - **Quick Language Presentation Control**: Added quick button (`#quick-enable-more-languages-btn` and `#quick-more-languages-btn`) labeled `+ Lang` to instantly enable multi-language subtitle presentation.
+  - **Multi-Language Rendering**: When more languages are enabled, extra target language translation rows render simultaneously with their own individual TTS Play buttons and language tag pills.
+  - **Subtitle Time Section**: Added formatted timestamp pills (`#cue-time-section`) showing `formatTimestamp(activeCue.start) - formatTimestamp(activeCue.end)` directly adjacent to the subtitle text in both compact and expanded view overlays.
+- **Verification**:
+  - Verified with `npm run update:readme mostuf25563`.
+  - Zero TypeScript compile errors via `lint_applet` (`tsc --noEmit`).
+  - Clean full production build via `compile_applet` (`npm run build`).
+- **Status**: Completed & 100% Verified.
+
 ### Testing & CI/CD Workflow Pipeline Architecture Alignment
 
 - **Documented Pipeline Architecture in `AGENTS.md`**:

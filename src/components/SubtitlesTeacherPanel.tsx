@@ -89,7 +89,7 @@ const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
     code: 'ar',
     name: 'Arabic (العربية)',
     ttsRate: 1.0,
-    enabled: true,
+    enabled: false,
     color: '#14b8a6',
   },
   {
@@ -97,7 +97,7 @@ const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
     code: 'he',
     name: 'Hebrew (עברית)',
     ttsRate: 1.0,
-    enabled: true,
+    enabled: false,
     color: '#8b5cf6',
   },
   {

@@ -17,6 +17,9 @@ import {
   ExternalLink,
   Eye,
   Plus,
+  Volume2,
+  VolumeX,
+  Clock,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -308,6 +311,81 @@ export function SettingsModal({
                     onUpdateSettings({ ...settings, compactView: e.target.checked })
                   }
                   className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              {/* Setting 1: Auto-play TTS Speech Narration (OFF by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-emerald-400" />
+                    <span>Auto-play TTS Speech (Dialogue Narration)</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default OFF: only shows the target translation visually without playing TTS speech audio. In compact mode, you can quickly turn it on via the overlay quick control.
+                  </div>
+                </div>
+                <input
+                  id="toggle-autoplay-tts-setting"
+                  data-testid="toggle-autoplay-tts-setting"
+                  type="checkbox"
+                  checked={settings.autoPlayTTS ?? false}
+                  onChange={(e) =>
+                    onUpdateSettings({ ...settings, autoPlayTTS: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              {/* Setting 2: Single Target Language Mode (ON by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-indigo-400" />
+                    <span>Use Only 1 Target Language by Default</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default ON: keeps comprehension focused on 1 primary target language. In compact mode, use the quick &quot;+ Lang&quot; button to enable presentation of more languages.
+                  </div>
+                </div>
+                <input
+                  id="toggle-single-target-lang-mode"
+                  data-testid="toggle-single-target-lang-mode"
+                  type="checkbox"
+                  checked={settings.singleTargetLanguageMode ?? true}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      singleTargetLanguageMode: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-indigo-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              {/* Setting 3: Show Subtitle Time Section Beside Subtitles (ON by default) */}
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    <span>Show Subtitle Time Section Besides Subtitles</span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    By default ON: displays the subtitle cue&apos;s start and end timeframe (e.g. 00:04 - 00:07) directly beside each subtitle line on screen.
+                  </div>
+                </div>
+                <input
+                  id="toggle-show-subtitle-timestamps"
+                  data-testid="toggle-show-subtitle-timestamps"
+                  type="checkbox"
+                  checked={settings.showSubtitleTimestamps ?? true}
+                  onChange={(e) =>
+                    onUpdateSettings({
+                      ...settings,
+                      showSubtitleTimestamps: e.target.checked,
+                    })
+                  }
+                  className="w-5 h-5 accent-amber-500 rounded cursor-pointer shrink-0"
                 />
               </div>
             </div>

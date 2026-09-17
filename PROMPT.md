@@ -3,25 +3,29 @@
 ## Latest User Prompt
 
 ```text
-1. update AGENTS.md regarding testing:
-
-.github/workflows/web.yml - should run on the deployed website based on : .github/workflows/deploy-demo.yml
-
-.github/workflows/emulation.yml - should run on the build artifact based on .github/workflows/release-apk.yml
---
-2. act accordingly
+add to settings:
+- by default dont tts-play (only show the target translation) [complact mode display - add quick control to turn it on ]
+- by default use only 1 target language [complact mode display - add quick button to enable presentation of more languages ]
+- by default also show the subtitles's time section besides the subtitles
 ```
 
 ## Active TODOs & Verification
 
-- [x] **Task 1 (Update AGENTS.md regarding Testing)**: Added Section 6 "Testing & CI/CD Workflow Pipeline Architecture" defining that `web.yml` runs on the live deployed website based on `deploy-demo.yml`, and `emulation.yml` runs on the pre-built build artifact based on `release-apk.yml`.
-- [x] **Task 2 (Act Accordingly - Workflows & Configs Alignment)**:
-  - Updated `.github/workflows/web.yml` to trigger on `Publish Web Demo to GitHub Pages` (`deploy-demo.yml`), detect the deployed website URL, and pass `PLAYWRIGHT_BASE_URL` & `CYPRESS_BASE_URL` to test the live deployed site.
-  - Updated `.github/workflows/deploy-demo.yml` to remove circular trigger on `Web E2E Tests`.
-  - Updated `.github/workflows/emulation.yml` to verify and stage the pre-built `youtube-viewer-apks` release artifact with GitHub CLI fallback.
-  - Updated `playwright.config.ts` to support dynamic `PLAYWRIGHT_BASE_URL`, bypassing the local dev server when testing against the deployed site.
-- [x] **Task 3 (Verification & Documentation Sync)**: Ran `npm run update:readme`, `lint_applet` (`tsc --noEmit`), and `compile_applet` (`npm run build`) with zero errors. Moved completed records to `CHANGELOG.md`.
-
-
-
-
+- [x] **Task 1 (Settings Architecture & Defaults)**:
+  - Add `autoPlayTTS: boolean` (default `false`) to `AppSettings` in `src/utils/appSettings.ts`.
+  - Add `singleTargetLanguageMode: boolean` (default `true`) to `AppSettings` in `src/utils/appSettings.ts`.
+  - Add `showSubtitleTimestamps: boolean` (default `true`) to `AppSettings` in `src/utils/appSettings.ts`.
+  - Ensure `DEFAULT_TARGET_LANGUAGES` in `src/components/SubtitlesTeacherPanel.tsx` has only 1 language enabled by default (`it`).
+- [x] **Task 2 (Settings UI in SettingsModal.tsx)**:
+  - Add toggle for Auto-play TTS Narration (`#toggle-autoplay-tts-setting`, default OFF: only show target translation).
+  - Add toggle for Single Target Language Focus (`#toggle-single-target-lang-mode`, default ON: 1 target language).
+  - Add toggle for Subtitle Time Section (`#toggle-show-subtitle-timestamps`, default ON: show time section besides subtitles).
+- [x] **Task 3 (Compact Mode & VideoPlayer Display)**:
+  - By default, do not TTS-play (only show target translation). Add quick control (`#quick-toggle-tts-btn` and `#toggle-auto-tts-button`) in compact mode display to turn it ON.
+  - By default, use only 1 target language. Add quick button (`#quick-enable-more-languages-btn` / `#quick-more-languages-btn`) in compact mode display to enable presentation of more languages. Present multi-language translation cues when enabled.
+  - By default, show the subtitle's time section besides the subtitles (`#cue-time-section`).
+- [x] **Task 4 (Verification & Quality Gates)**:
+  - Run `npm run update:readme` to verify documentation synchronization.
+  - Run `lint_applet` (`tsc --noEmit`) to verify zero TypeScript errors.
+  - Run `compile_applet` (`npm run build`) to verify clean production build.
+  - Move completed tasks to `CHANGELOG.md`.
