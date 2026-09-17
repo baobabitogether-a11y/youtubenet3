@@ -151,7 +151,29 @@ The repository contains two operational facets, with explicit prioritization:
 
 ---
 
-## 6. File Protection Matrix
+## 6. Testing & CI/CD Workflow Pipeline Architecture
+
+The project maintains an automated, artifact-driven continuous integration and deployment pipeline designed around explicit dependencies between build outputs and test executions:
+
+### A. Web E2E Testing Pipeline (`.github/workflows/web.yml`)
+- **Execution Mandate**: **Must run on the deployed website based on `.github/workflows/deploy-demo.yml`**.
+- **Trigger Sequence**: Triggered via `workflow_run` upon successful completion of `Publish Web Demo to GitHub Pages` (`deploy-demo.yml`), as well as manual `workflow_dispatch` and `pull_request` events.
+- **Target URL Resolution**: Evaluates the live GitHub Pages application URL (`https://<owner>.github.io/<repo>/app/`) and injects it into `PLAYWRIGHT_BASE_URL` and `CYPRESS_BASE_URL`. Playwright and Cypress test suites execute against the live deployment to validate actual production assets, scripts, and subtitle caches. Falls back to a local server instance only for pull request validation before deployment.
+- **Reports & Artifacts**: Produces and uploads full Playwright test reports (`playwright-report/`) and Cypress Mochawesome test reports (`cypress/reports/`).
+
+### B. Android Emulator E2E Testing Pipeline (`.github/workflows/emulation.yml`)
+- **Execution Mandate**: **Must run on the build artifact based on `.github/workflows/release-apk.yml`**.
+- **Trigger Sequence**: Triggered via `workflow_run` upon successful completion of `Build & Release Android APK` (`release-apk.yml`), as well as manual `workflow_dispatch` and `pull_request` events.
+- **Artifact Retrieval & Staging**: Downloads the compiled `youtube-viewer-apks` release artifact (`YouTube-Viewer-debug.apk`) produced by the release workflow (with GitHub CLI fallback). Stages the pre-compiled APK directly into `android-shell/app/build/outputs/apk/debug/app-debug.apk`, completely skipping redundant Gradle compilation on the macOS runner.
+- **Emulator Verification**: Boots an Android 14 (API 34) ARM64 virtual device, installs the pre-built APK via ADB (`adb install -r`), launches `com.ytviewer.app/.MainActivity` with authentic YouTube deep-links, captures logcat logs for `YT_CAPTION_INTERCEPTOR` and `TTS_ENGINE`, takes automated screen captures, and publishes the standalone Android emulator report.
+
+### C. Dedicated Web Demo Deployment (`.github/workflows/deploy-demo.yml`)
+- **Execution Mandate**: Sole dedicated workflow responsible for publishing the interactive web application demo and subtitle artifacts to GitHub Pages (`gh-pages`).
+- **Trigger Sequence**: Triggers automatically on direct `push` to `main`/`master`, or after `Build & Release Android APK` completes. Upon deployment completion, it automatically triggers `web.yml` to verify the live deployed website.
+
+---
+
+## 7. File Protection Matrix
 
 | Status | Paths | Rule |
 | :--- | :--- | :--- |
@@ -160,7 +182,7 @@ The repository contains two operational facets, with explicit prioritization:
 
 ---
 
-## 7. Verification Workflow
+## 8. Verification Workflow
 
 Before concluding any turn:
 1. Move completed tasks from `PROMPT.md` to `CHANGELOG.md`.

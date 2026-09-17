@@ -2,7 +2,7 @@ name: Web E2E Tests
 
 on:
   workflow_run:
-    workflows: ["Build & Release Android APK"]
+    workflows: ["Publish Web Demo to GitHub Pages"]
     types:
       - completed
   pull_request:
@@ -16,20 +16,15 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  pages: write
-  id-token: write
+  contents: read
   actions: read
 
 jobs:
   web-e2e-tests:
-    name: Run Web E2E Tests & Deploy GitHub Pages
+    name: Run Web E2E Tests on Deployed Website
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout Code
@@ -48,32 +43,57 @@ jobs:
         timeout-minutes: 3
         run: npx playwright install --with-deps chromium
 
-      - name: Download Web Build Artifact from Release Workflow
-        if: github.event_name == 'workflow_run'
+      - name: Compute Target Base URL (Deployed Site vs Local Server)
+        id: target_url
+        run: |
+          DEPLOYED_APP_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name || 'youtubenet3' }}/app/"
+          echo "Checking live deployed website: $DEPLOYED_APP_URL"
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -L "$DEPLOYED_APP_URL" || true)
+          echo "HTTP status: $HTTP_STATUS"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✅ Live deployed website is reachable ($DEPLOYED_APP_URL)."
+            echo "base_url=$DEPLOYED_APP_URL" >> "$GITHUB_OUTPUT"
+            echo "use_deployed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ℹ️ Deployed website not directly reachable (HTTP $HTTP_STATUS), using local server fallback."
+            echo "base_url=http://localhost:3000" >> "$GITHUB_OUTPUT"
+            echo "use_deployed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download Web Build Artifact (Fallback for Local Server)
+        if: steps.target_url.outputs.use_deployed != 'true'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
           name: web-dist
           path: dist
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Web Application
+      - name: Build Web Application (Fallback for Local Server)
+        if: steps.target_url.outputs.use_deployed != 'true'
         timeout-minutes: 3
         run: |
-          if [ -f "dist/index.html" ] && [ -f "dist/server.cjs" ]; then
-            echo "✅ Pre-built web application artifacts found from release-apk workflow. Skipping duplicate build step."
-          else
-            echo "⚙️ Pre-built web artifacts not found. Building web application..."
+          if [ ! -f "dist/index.html" ]; then
+            echo "Building web application for local server..."
             npm run build
           fi
 
       - name: Execute Playwright E2E Tests (Web Specs)
-        timeout-minutes: 3
+        timeout-minutes: 4
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ steps.target_url.outputs.base_url }}
         run: npx playwright test e2e/web.spec.ts --timeout=60000
 
-      - name: Run Cypress Tests with Report Generation (Web Specs)
-        timeout-minutes: 3
+      - name: Run Cypress Tests against Deployed Website
+        if: steps.target_url.outputs.use_deployed == 'true'
+        timeout-minutes: 4
+        env:
+          CYPRESS_BASE_URL: ${{ steps.target_url.outputs.base_url }}
+        run: npm run test:cy:report:web
+        continue-on-error: true
+
+      - name: Run Cypress Tests with Local Server (Fallback)
+        if: steps.target_url.outputs.use_deployed != 'true'
+        timeout-minutes: 4
         uses: cypress-io/github-action@v6
         with:
           install: false
@@ -83,7 +103,7 @@ jobs:
           command: npm run test:cy:report:web
         continue-on-error: true
 
-      - name: Prepare Video & Step Screenshot Assets for GitHub Pages
+      - name: Prepare Video & Step Screenshot Assets
         if: always()
         run: node scripts/prepare-report.mjs
 
@@ -104,33 +124,3 @@ jobs:
           name: cypress-e2e-report
           path: cypress/reports/
           retention-days: 14
-
-      # Deploy to GitHub Pages:
-      # 1. Branch-based deployment to 'gh-pages' (compatible with 'Deploy from a branch' setting)
-      # 2. Native Actions deployment artifact (compatible with 'GitHub Actions' setting)
-      - name: Deploy to GitHub Pages (gh-pages branch)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./cypress/reports
-          publish_branch: gh-pages
-          force_orphan: true
-
-      - name: Setup GitHub Pages (Native Actions Mode)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-
-      - name: Upload GitHub Pages Artifact (Native Actions Mode)
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
-        uses: actions/upload-pages-artifact@v3
-        continue-on-error: true
-        with:
-          path: ./cypress/reports
-
-      - name: Deploy to GitHub Pages (Native Actions Mode)
-        id: deployment
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && !cancelled()
-        uses: actions/deploy-pages@v4
-        continue-on-error: true

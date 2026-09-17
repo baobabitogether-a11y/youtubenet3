@@ -8,6 +8,19 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Testing & CI/CD Workflow Pipeline Architecture Alignment
+
+- **Documented Pipeline Architecture in `AGENTS.md`**:
+  - Added Section 6 defining the explicit execution mandates and dependency flows between build artifacts and automated test suites.
+  - Formally specified that `.github/workflows/web.yml` must run on the live deployed website based on `.github/workflows/deploy-demo.yml`.
+  - Formally specified that `.github/workflows/emulation.yml` must run on the pre-built build artifact (`youtube-viewer-apks`) based on `.github/workflows/release-apk.yml`.
+- **Workflow Alignments & Enhancements**:
+  - **`.github/workflows/web.yml`**: Updated `workflow_run` trigger to depend on `Publish Web Demo to GitHub Pages` (`deploy-demo.yml`). Added automated base URL detection targeting the live deployed GitHub Pages application (`https://<owner>.github.io/<repo>/app/`) with fallback to local server, passing `PLAYWRIGHT_BASE_URL` and `CYPRESS_BASE_URL`. Streamlined steps to eliminate redundant pages deployment.
+  - **`.github/workflows/emulation.yml`**: Verified artifact staging of `youtube-viewer-apks` (`YouTube-Viewer-debug.apk`) produced by `release-apk.yml`, with GitHub CLI automated retrieval fallback, skipping duplicate Gradle compilation on macOS runners.
+  - **`.github/workflows/deploy-demo.yml`**: Removed circular dependency on `Web E2E Tests` so it triggers upon `Build & Release Android APK` (and push/dispatch) to deploy the site, which in turn triggers `web.yml`.
+  - **`playwright.config.ts`**: Supported dynamic `PLAYWRIGHT_BASE_URL` / `BASE_URL`, automatically bypassing the local `webServer` when targeting the remote deployed site.
+- **Status**: Completed & 100% Verified.
+
 ### Dedicated Web Demo GitHub Pages Workflow & CI Test 7 Fix
 
 - **Dedicated Web Demo Publish Workflow (`.github/workflows/deploy-demo.yml`)**:

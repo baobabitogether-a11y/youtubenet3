@@ -3,17 +3,25 @@
 ## Latest User Prompt
 
 ```text
-1. add 1 workflow file dedicated to publish the web demo to the gh-page (* subtitles are based on artifact in the demo).
+1. update AGENTS.md regarding testing:
 
-2. fix:
-https://productionresultssa13.blob.core.windows.net/actions-results/3c190ecf-a1d1-4e49-8d78-b54a0e75cb42/workflow-job-run-e670240c-df75-5036-912d-1c64513c4882/logs/job/job-logs.txt...
+.github/workflows/web.yml - should run on the deployed website based on : .github/workflows/deploy-demo.yml
+
+.github/workflows/emulation.yml - should run on the build artifact based on .github/workflows/release-apk.yml
+--
+2. act accordingly
 ```
 
 ## Active TODOs & Verification
 
-- [x] **Task 1 (Dedicated Web Demo Publish Workflow)**: Created `.github/workflows/deploy-demo.yml` dedicated to building and deploying the live web application demo and subtitle artifacts (`cypress/reports/app`) to `gh-pages`.
-- [x] **Task 2 (Fix CI Test 7 Visibility Failure)**: Updated `VideoPlayer.tsx` to render `#quick-target-lang-overlay-btn` directly on the active subtitle cue overlay (next to `#speak-orig-cue-btn`) and updated `e2e/web.spec.ts` Test 7 with robust locators, hover trigger, and timeouts.
-- [x] **Task 3 (Verification)**: Ran `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+- [x] **Task 1 (Update AGENTS.md regarding Testing)**: Added Section 6 "Testing & CI/CD Workflow Pipeline Architecture" defining that `web.yml` runs on the live deployed website based on `deploy-demo.yml`, and `emulation.yml` runs on the pre-built build artifact based on `release-apk.yml`.
+- [x] **Task 2 (Act Accordingly - Workflows & Configs Alignment)**:
+  - Updated `.github/workflows/web.yml` to trigger on `Publish Web Demo to GitHub Pages` (`deploy-demo.yml`), detect the deployed website URL, and pass `PLAYWRIGHT_BASE_URL` & `CYPRESS_BASE_URL` to test the live deployed site.
+  - Updated `.github/workflows/deploy-demo.yml` to remove circular trigger on `Web E2E Tests`.
+  - Updated `.github/workflows/emulation.yml` to verify and stage the pre-built `youtube-viewer-apks` release artifact with GitHub CLI fallback.
+  - Updated `playwright.config.ts` to support dynamic `PLAYWRIGHT_BASE_URL`, bypassing the local dev server when testing against the deployed site.
+- [x] **Task 3 (Verification & Documentation Sync)**: Ran `npm run update:readme`, `lint_applet` (`tsc --noEmit`), and `compile_applet` (`npm run build`) with zero errors. Moved completed records to `CHANGELOG.md`.
+
 
 
 

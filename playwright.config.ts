@@ -7,7 +7,7 @@ export default defineConfig({
   retries: 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || 'http://127.0.0.1:3000',
     video: 'off',
     trace: 'off',
     screenshot: 'on',
@@ -16,12 +16,14 @@ export default defineConfig({
     },
   },
   outputDir: 'test-results',
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://127.0.0.1:3000',
-    reuseExistingServer: true,
-    timeout: 30000,
-  },
+  webServer: process.env.PLAYWRIGHT_BASE_URL
+    ? undefined
+    : {
+        command: 'npm run dev',
+        url: 'http://127.0.0.1:3000',
+        reuseExistingServer: true,
+        timeout: 30000,
+      },
   projects: [
     {
       name: 'web',
