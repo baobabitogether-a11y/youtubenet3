@@ -235,6 +235,31 @@ export function SettingsModal({
 
               <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
                 <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Allow Non-Native TTS Fallback (Audio Stream)</span>
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-neutral-800 text-neutral-400 border border-neutral-700">
+                      Disabled by default
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    When disabled (default), only native Android hardware TTS or standard browser Web Speech is used. Enable only if you want an external neural audio stream fallback when a local voice is missing.
+                  </div>
+                </div>
+                <input
+                  id="toggle-non-native-tts-setting"
+                  data-testid="toggle-non-native-tts-setting"
+                  type="checkbox"
+                  checked={settings.allowNonNativeTTSFallback ?? false}
+                  onChange={(e) =>
+                    onUpdateSettings({ ...settings, allowNonNativeTTSFallback: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-purple-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
                   <div className="font-medium text-xs sm:text-sm text-neutral-200">
                     Auto-fetch Target Subtitles via tlang
                   </div>
@@ -296,15 +321,20 @@ export function SettingsModal({
 
               <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-medium text-xs sm:text-sm text-neutral-200">
-                    Compact View (Fast, Lightweight, Tap-to-Show Controls)
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Compact Design (Fast, Lightweight, Tap-to-Show Controls)</span>
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Default
+                    </span>
                   </div>
-                  <div className="text-xs text-neutral-400 mt-0.5">
-                    Designed for high performance without scrolling. Controls hide automatically during video playback and appear when tapped.
+                  <div className="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    Designed for high performance without scrolling. Controls hide automatically during video playback and appear when tapped. Turn off to switch to the Expanded Workspace view with the full subtitles teacher panel.
                   </div>
                 </div>
                 <input
                   id="toggle-compact-view-setting"
+                  data-testid="toggle-compact-view-setting"
                   type="checkbox"
                   checked={settings.compactView ?? true}
                   onChange={(e) =>

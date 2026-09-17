@@ -3,6 +3,7 @@ import { logTTS, logError, logWarn, logInfo } from '../utils/logBuffer';
 import { store } from '../store/index';
 import { addError } from '../store/errorsSlice';
 import { recordRequestStart, recordRequestComplete, recordRequestFailed } from '../store/networkSlice';
+import { loadAppSettings } from '../utils/appSettings';
 
 let currentUtterance: SpeechSynthesisUtterance | null = null;
 let currentAudioElement: HTMLAudioElement | null = null;
@@ -10,6 +11,7 @@ let currentNativeUtteranceId: string | null = null;
 let activeBoundaryCallback: ((charIndex: number) => void) | null = null;
 let simulatedBoundaryTimer: NodeJS.Timeout | null = null;
 let nativeTTSResolvers: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
+let isTTSCancelledByUser = false;
 
 /**
  * Unlocks browser audio playback and speech synthesis on user interaction.
@@ -191,6 +193,7 @@ export async function speakText(
 
   const cleanRate = Math.max(0.2, Math.min(3.0, rate || 1.0));
   stopTTS();
+  isTTSCancelledByUser = false;
   unlockTTSAudio();
 
   logTTS(`Speech requested: "${text.substring(0, 45)}..." [lang: ${cleanLang}, rate: ${cleanRate}x, engine: ${getTTSEngineType()}]`);
@@ -330,7 +333,7 @@ function startSimulatedBoundaryProgression(
 }
 
 /**
- * Executes Web Speech synthesis or seamlessly cascades to neural Audio Stream
+ * Executes Web Speech synthesis or seamlessly cascades to neural Audio Stream (only if explicitly enabled in Settings)
  */
 async function fallbackWebOrAudio(
   text: string,
@@ -339,6 +342,11 @@ async function fallbackWebOrAudio(
   voiceName?: string,
   onBoundary?: (charIndex: number) => void
 ): Promise<void> {
+  if (isTTSCancelledByUser) return;
+
+  const appSettings = loadAppSettings();
+  const allowNonNative = appSettings.allowNonNativeTTSFallback === true;
+
   // If Web Speech is available, attempt synthesis
   if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
     try {
@@ -349,21 +357,39 @@ async function fallbackWebOrAudio(
         return langLower === cleanLower || langLower.startsWith(cleanLower.split('-')[0]);
       });
 
-      // If voices are already loaded and none match a non-English language, jump directly to audio stream
+      // If voices are already loaded and none match a non-English language
       if (voices.length > 0 && !hasMatchingVoice && cleanLang !== 'en') {
-        logInfo('TTS', `No local Web Speech voice found for "${cleanLang}", using neural Audio Stream`);
-        return speakViaAudioStream(text, cleanLang, rate, onBoundary);
+        if (isTTSCancelledByUser) return;
+        if (allowNonNative) {
+          logInfo('TTS', `No local Web Speech voice found for "${cleanLang}", using neural Audio Stream fallback`);
+          return speakViaAudioStream(text, cleanLang, rate, onBoundary);
+        } else {
+          logInfo('TTS', `No local Web Speech voice found for "${cleanLang}"; attempting default Web Speech voice (non-native stream disabled by default)`);
+          // Fall through to attemptWebSpeechSynthesis with default voice
+        }
       }
 
       const success = await attemptWebSpeechSynthesis(text, cleanLang, rate, voiceName, onBoundary);
-      if (success) return;
+      if (success || isTTSCancelledByUser) return;
     } catch (err: any) {
-      logWarn('TTS', `Web SpeechSynthesis failed (${err?.message || err}), falling back to Audio Stream`);
+      if (isTTSCancelledByUser) return;
+      if (allowNonNative) {
+        logWarn('TTS', `Web SpeechSynthesis failed (${err?.message || err}), falling back to Audio Stream`);
+      } else {
+        logWarn('TTS', `Web SpeechSynthesis failed (${err?.message || err}); non-native fallback is disabled in settings`);
+        return;
+      }
     }
   }
 
-  // Fallback to high-fidelity audio stream
-  return speakViaAudioStream(text, cleanLang, rate, onBoundary);
+  if (isTTSCancelledByUser) return;
+
+  // Fallback to high-fidelity audio stream ONLY if explicitly allowed by user settings
+  if (allowNonNative) {
+    return speakViaAudioStream(text, cleanLang, rate, onBoundary);
+  } else {
+    logInfo('TTS', 'TTS completed via native engine; non-native Audio Stream fallback is disabled by default.');
+  }
 }
 
 function attemptWebSpeechSynthesis(
@@ -375,6 +401,11 @@ function attemptWebSpeechSynthesis(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     try {
+      if (isTTSCancelledByUser) {
+        resolve(true);
+        return;
+      }
+
       if (window.speechSynthesis.paused) {
         window.speechSynthesis.resume();
       }
@@ -460,6 +491,11 @@ function attemptWebSpeechSynthesis(
       // Fast-fail detection: If synthesis hasn't fired onstart within 600ms, immediately failover to Audio Stream
       const startCheckTimer = setTimeout(() => {
         if (!hasStarted && !isSettled) {
+          if (isTTSCancelledByUser) {
+            isSettled = true;
+            resolve(true);
+            return;
+          }
           try {
             window.speechSynthesis.cancel();
           } catch {}
@@ -487,13 +523,20 @@ function attemptWebSpeechSynthesis(
 
       utterance.onerror = (event: any) => {
         const errType = event?.error || 'error';
-        if (errType === 'canceled') {
-          // Intentional stop
+        if (errType === 'canceled' || errType === 'interrupted' || isTTSCancelledByUser) {
+          // Intentional stop or interruption by next utterance / user action
           if (!isSettled) {
             isSettled = true;
             clearTimeout(startCheckTimer);
             clearTimeout(safetyTimer);
-            resolve(true);
+            if (simulatedBoundaryTimer) {
+              clearTimeout(simulatedBoundaryTimer);
+              simulatedBoundaryTimer = null;
+            }
+            currentUtterance = null;
+            (window as any).__activeTTSUtterance = null;
+            logTTS(`[Web Speech] Speech ${errType} cleanly`);
+            resolve(true); // Resolved cleanly - do not cascade to Audio Stream
           }
         } else {
           finishFailure(errType);
@@ -667,6 +710,7 @@ function speakViaAudioStream(
  * Stops any active TTS playback immediately
  */
 export function stopTTS(): void {
+  isTTSCancelledByUser = true;
   if (simulatedBoundaryTimer) {
     clearTimeout(simulatedBoundaryTimer);
     simulatedBoundaryTimer = null;

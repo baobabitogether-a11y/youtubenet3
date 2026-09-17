@@ -98,37 +98,42 @@ The application runtime is constructed from interconnected functional modules an
 
 Subtitle acquisition follows distinct, deterministic resolution pipelines depending on the host platform:
 
+> [!IMPORTANT]
+> **Demo Application Fixture Exclusion**:
+> The default demonstration video (`FcRzAdI8R9U`) is bundled with complete, authentic 1,578-cue `.srt` tracks in `test/fixtures/languages/*.srt` for source (`ru`) and target languages (`it`, `he`, `en`, `ar`).
+> Therefore, **the demo application is strictly excluded from live network subtitle fetching and translation requests**. It resolves all dialogue and translations instantly from local fixtures with zero network overhead. Live network requests (server-side proxy or native WebView interception) are reserved exclusively for new, user-entered YouTube URLs.
+
 ### A. Subtitle Fetching Order for Android Native Shell:
-1. **Local Disk & Memory Cache**:
-   - Inspects `memoryCache` and app private storage (`getExternalFilesDir("youtube_captions")`).
-   - If previously saved, subtitles load instantaneously with zero network overhead.
+1. **Authentic Local Fixtures & Cache (Demo Video Exclusion)**:
+   - For demo video `FcRzAdI8R9U`, instantaneously loads bundled `.srt` fixtures without network calls.
+   - For all videos, inspects `memoryCache` and app private storage (`getExternalFilesDir("youtube_captions")`).
 2. **Native WebView Traffic Interception (`WebViewClient.shouldInterceptRequest`)**:
-   - When the YouTube video player initiates playback inside the WebView, YouTube's internal caption requests to `youtube.com/api/timedtext` or `/timedtext?` are intercepted by native Kotlin code in `MainActivity.kt`.
+   - For user-provided YouTube videos, when the video player initiates playback inside the WebView, YouTube's internal caption requests to `youtube.com/api/timedtext` or `/timedtext?` are intercepted by native Kotlin code in `MainActivity.kt`.
    - The native shell captures the raw request headers, cookies, and endpoint parameters, saving the URL in `lastObservedTimedTextUrl`.
    - The native shell downloads the raw payload using `OkHttpClient`, writes it to a local disk file (`caption_<timestamp>.xml`), and returns the stream to the WebView so the player continues normally.
    - The raw bytes are Base64 encoded and dispatched directly into the web runtime via `window.onNativeCaptionsInterceptedBase64()`.
    - The web app decodes the UTF-8 payload, resolves encoding/Mojibake via `captionParser.ts`, extracts structured `CaptionCue[]`, saves them to cache, and triggers caption display.
 3. **Native TimedText Repetition (`fetchTranslatedCaptions`)**:
-   - When the user selects a target translation language, the web layer invokes `AndroidNativeShell.fetchTranslatedCaptions(targetLang, "srt")`.
+   - When the user selects a target translation language for a non-demo video, the web layer invokes `AndroidNativeShell.fetchTranslatedCaptions(targetLang, "srt")`.
    - The native bridge clones the observed timedtext URL, appends `&tlang=<targetLang>&fmt=srt`, and executes the request using authentic YouTube session headers via `OkHttpClient`.
 4. **Web API & Local Fixture Fallback**:
-   - If native interception has not yet fired, the app falls back to authentic local `.srt` fixtures or the `/api/fetch-subtitles` proxy.
+   - If native interception has not yet fired on custom videos, the app falls back to the `/api/fetch-subtitles` proxy.
 
 ### B. Subtitle Fetching Order for Web Companion:
-1. **Dedicated Per-Video Cache**:
+1. **Authentic Local SRT Fixtures (Demo Video Priority)**:
+   - For bundled demonstration videos (e.g. `FcRzAdI8R9U`), loads authentic 1,578-cue `.srt` tracks from `test/fixtures/languages/*.srt` for source (`ru`) and target languages (`it`, `he`, `en`, `ar`) without issuing network requests.
+2. **Dedicated Per-Video Cache**:
    - Checks synchronous `memoryCache` first.
    - Checks browser `localStorage` key (`yt_subtitles_${videoId}`).
-2. **Video Library Cache**:
+3. **Video Library Cache**:
    - Checks `yt_video_library_v2` for stored items matching the video ID.
-3. **Authentic Local SRT Fixtures**:
-   - For bundled demonstration videos (e.g. `FcRzAdI8R9U`), loads authentic 1,578-cue `.srt` tracks from `test/fixtures/languages/*.srt` for source (`ru`) and target languages (`it`, `he`, `en`, `ar`).
 4. **Server-Side API Proxy (`/api/fetch-subtitles`)**:
-   - Invokes backend POST `/api/fetch-subtitles` with retry limit ($X=2$).
+   - For custom user-entered videos only: invokes backend POST `/api/fetch-subtitles` with retry limit ($X=2$).
    - The Express backend uses server-side fetch to retrieve timedtext tracks from YouTube endpoints, bypassing browser CORS/Same-Origin restrictions.
 5. **Fallback Mock Subtitles**:
-   - If external network fetches fail or video has no accessible tracks, loads clean default cues (`defaultSubtitles.ts`) so CI/CD automated tests and public demos remain functional.
+   - If external network fetches fail or custom video has no accessible tracks, loads clean default cues (`defaultSubtitles.ts`) so CI/CD automated tests and public demos remain functional.
 6. **Target Language Fetch / Client Translation**:
-   - Executes single `tlang` attempt or falls back to `translateService.ts` for individual active cues.
+   - For non-demo videos: executes single `tlang` attempt or falls back to `translateService.ts` for individual active cues. Redundant translations (e.g. source language matching target language, or text already in target script) are skipped with logged warnings.
 
 ---
 

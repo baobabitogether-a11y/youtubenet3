@@ -3,16 +3,18 @@
 ## Latest User Prompt
 
 ```text
-remember by default we use only 1 target language.
-after enabling tts - it shouldn't change the list of target languages!
--
-we dont deal yet with translation to multiple languages in parrallel.
+compact design - by defualt collect all logs. add quick copy to logs clipboard button to quickly report app status. together with a user complain the prompt should supply all info for troubleshooting the complain.
 ```
 
 ## Actionable Tasks
 
-- [ ] Task 1: Enforce single target language by default (`singleTargetLanguageMode: true`, only 1 target language active/enabled).
-- [ ] Task 2: Ensure enabling TTS does NOT change the list of target languages or append extra languages to target languages.
-- [ ] Task 3: Remove parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel.
-- [ ] Task 4: Ensure TTS speaks only for the single active target language (or source/active language as selected) and highlights that cue without modifying target languages.
-- [ ] Task 5: Verify zero TypeScript errors (`lint_applet`), build cleanly (`compile_applet`), run `npm run update:readme mostuf25563`, and document in `CHANGELOG.md`.
+- [x] Task 1: Collect all logs by default with 500-capacity ring buffer and automatic network request body 15-char previews (Completed -> see `CHANGELOG.md`).
+- [x] Task 2: Quick-copy logs buttons integrated in compact design (`#quick-copy-logs-btn` in VideoPlayer top bar, `#navbar-copy-logs-button` in Navbar, `#quick-copy-diagnostics-btn` in Floating Dock) (Completed -> see `CHANGELOG.md`).
+- [x] Task 3: Troubleshooting prompt generator bundling optional user complaint input, live app state, network activity table, chronological logs, and AI troubleshooting instructions (Completed -> see `CHANGELOG.md`).
+- [x] Task 4: Added user complaint input (`#user-complaint-input`) and prompt copy button (`#copy-troubleshooting-prompt-button`) in `ActivityLogModal.tsx` (Completed -> see `CHANGELOG.md`).
+
+## Future / Backlog Tasks
+
+- [ ] Future Task: Parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel (implement later).
+
+

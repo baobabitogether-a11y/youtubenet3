@@ -6,10 +6,13 @@ import {
   ChevronDown,
   ChevronUp,
   Radio,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setNetworkInspectorOpen } from '../store/networkSlice';
 import { setInspectorOpen } from '../store/errorsSlice';
+import { logBuffer } from '../utils/logBuffer';
 
 export const FloatingDiagnosticDock: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -18,6 +21,26 @@ export const FloatingDiagnosticDock: React.FC = () => {
   const { currentState } = useAppSelector((state) => state.stateMachine);
 
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
+  const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
+
+  const handleQuickCopyLogs = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = logBuffer.copyAll();
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2500);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2500);
+    }
+  };
 
   const pendingRequests = requests.filter((r) => r.isPending).length;
 
@@ -57,6 +80,32 @@ export const FloatingDiagnosticDock: React.FC = () => {
           >
             <Workflow className="w-3 h-3 text-purple-400" />
             <span className="text-purple-300 font-medium">{currentState}</span>
+          </button>
+
+          {/* Quick Copy All Logs & Prompt */}
+          <button
+            id="quick-copy-diagnostics-btn"
+            data-testid="quick-copy-diagnostics-btn"
+            type="button"
+            onClick={handleQuickCopyLogs}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition active:scale-95 font-medium ${
+              copiedPrompt
+                ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300'
+                : 'bg-neutral-850 hover:bg-neutral-800 text-amber-300 border-amber-500/40 hover:border-amber-400'
+            }`}
+            title="Quick Copy Complete App State, Logs & Troubleshooting Prompt to Clipboard"
+          >
+            {copiedPrompt ? (
+              <>
+                <Check className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Copied!</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5 text-amber-400" />
+                <span>Copy Logs</span>
+              </>
+            )}
           </button>
 
           {/* Network Inspector Button (Requirement 2) */}

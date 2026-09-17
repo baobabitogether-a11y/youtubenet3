@@ -8,6 +8,7 @@ import {
   ON_DEMAND_FALLBACK_COUNT,
 } from '../lib/translateService';
 import { logSync, logTTS } from '../utils/logBuffer';
+import { loadAppSettings } from '../utils/appSettings';
 import {
   getCachedSrtForVideoAndLanguage,
   hasCachedSrtForVideoAndLanguage,
@@ -92,7 +93,10 @@ export function useSyncEngine({
   // Step 2.3 & 4.4: On-demand fallback translation for next X=4 records ONLY when playback reaches a cue
   useEffect(() => {
     if (!cues || cues.length === 0 || activeCueIndex < 0) return;
-    const enabledLangs = languages.filter((l) => l.enabled);
+    const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+    const enabledLangs = isSingleLang
+      ? languages.filter((l) => l.enabled).slice(0, 1)
+      : languages.filter((l) => l.enabled);
     enabledLangs.forEach(async (lang) => {
       try {
         // Collect existing valid translations so we never overwrite them
@@ -198,7 +202,10 @@ export function useSyncEngine({
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
 
-      for (const lang of enabledLangs) {
+      const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+      const langsToPlay = isSingleLang ? enabledLangs.slice(0, 1) : enabledLangs;
+
+      for (const lang of langsToPlay) {
         if (abortRef.current) return false;
 
         // Check if language is still enabled in latest settings
@@ -334,7 +341,10 @@ export function useSyncEngine({
         logSync('SyncLoop', `Block ${idx + 1}/${cues.length} [${playOrder}] starting: "${cue.text.substring(0, 35)}..."`);
 
         // Dynamically get the current enabled languages on every single block iteration
-        const currentEnabledLangs = languagesRef.current.filter((l) => l.enabled);
+        const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
+        const currentEnabledLangs = isSingleLang
+          ? languagesRef.current.filter((l) => l.enabled).slice(0, 1)
+          : languagesRef.current.filter((l) => l.enabled);
 
         // Background prefetch translations for upcoming cues
         if (currentEnabledLangs.length > 0) {

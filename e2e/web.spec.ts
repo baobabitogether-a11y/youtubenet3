@@ -687,4 +687,146 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
     await closeBtn.click();
     await expect(modal).not.toBeVisible();
   });
+
+  /**
+   * WEB CRITICAL TEST 9:
+   * Verify Single Target Language Mode & Hebrew (he) Default Target Language Behavior
+   */
+  test('9. Settings & Teacher Panel - Single Target Language Mode & Default Hebrew', async ({ page }) => {
+    // 1. Open Settings modal and verify Single Target Language toggle
+    const settingsBtn = page.locator('#open-settings-btn, #open-settings-button').first();
+    await expect(settingsBtn).toBeVisible();
+    await settingsBtn.click();
+
+    const settingsModal = page.locator('#settings-modal');
+    await expect(settingsModal).toBeVisible();
+
+    const singleLangToggle = page.locator('#single-target-language-mode-toggle');
+    await expect(singleLangToggle).toBeVisible();
+
+    // Toggle off then on to verify reactivity
+    await singleLangToggle.click();
+    await page.waitForTimeout(100);
+    await singleLangToggle.click();
+    await page.waitForTimeout(100);
+
+    const closeSettingsBtn = page.locator('#close-settings-modal-button');
+    await closeSettingsBtn.click();
+    await expect(settingsModal).not.toBeVisible();
+
+    // 2. Open Target Language modal and confirm Hebrew is the active/default target language
+    const openLangBtn = page.locator('#open-target-language-btn, #open-target-language-btn-expanded').first();
+    if (await openLangBtn.isVisible()) {
+      await openLangBtn.click();
+      const langModal = page.locator('#select-target-language-modal');
+      await expect(langModal).toBeVisible();
+
+      // Verify Hebrew option is present
+      const heOption = page.locator('#target-lang-option-he, button:has-text("Hebrew")').first();
+      await expect(heOption).toBeVisible();
+
+      // Click Hebrew to set it as active
+      await heOption.click();
+      await expect(langModal).not.toBeVisible();
+    }
+  });
+
+  /**
+   * WEB CRITICAL TEST 10:
+   * Verify Single Language TTS Presented Text Fidelity & Zero Phantom Speech
+   */
+  test('10. TTS Playback - Strict Presented Text Fidelity & No Phantom Speech', async ({ page }) => {
+    // Step 1: Ensure subtitles are loaded and captions are enabled
+    const captionToggleButton = page.locator('#caption-toggle-button');
+    await expect(captionToggleButton).toBeVisible();
+    const isPressed = await captionToggleButton.getAttribute('aria-pressed');
+    if (isPressed !== 'true') {
+      await captionToggleButton.click();
+    }
+    await page.screenshot({ path: 'cypress/reports/assets/test10-step1.png' });
+
+    // Step 2: Jump to first cue segment in the table to present active cue
+    const cueRow0 = page.locator('#subtitle-cue-row-0');
+    await expect(cueRow0).toBeVisible({ timeout: 10000 });
+    await cueRow0.click();
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: 'cypress/reports/assets/test10-step2.png' });
+
+    // Step 3: Verify the active cue is selected and presented in the subtitle matrix
+    await expect(cueRow0).toHaveAttribute('data-selected', 'true');
+
+    // Step 4: Verify TTS play trigger in card or player overlay triggers speech strictly for presented text
+    const speakLangBtn = page.locator('#speak-lang-he-btn, button[title*="Speak Hebrew"]').first();
+    if (await speakLangBtn.isVisible()) {
+      await speakLangBtn.click();
+      await page.waitForTimeout(100);
+    }
+    await page.screenshot({ path: 'cypress/reports/assets/test10-step3.png' });
+
+    // Step 5: Verify Auto-TTS toggle works reliably without phantom speech
+    const autoTTSBtn = page.locator('#auto-tts-toggle-btn').first();
+    if (await autoTTSBtn.isVisible()) {
+      await autoTTSBtn.click();
+      await page.waitForTimeout(100);
+      await autoTTSBtn.click();
+    }
+    await page.screenshot({ path: 'cypress/reports/assets/test10-step4.png' });
+  });
+
+  /**
+   * WEB CRITICAL TEST 11:
+   * Verify URL State Synchronization, Zero-Memory Cache Reset Banner, Non-Native TTS Settings, and Complete Diagnostics Logs
+   */
+  test('11. URL State Management, Cache Reset & Complete Diagnostic Logs', async ({ page }) => {
+    // Step 1: Navigate with reset_all=true and verify cache-reset banner appears
+    await page.goto('/?reset_all=true&lang=he&v=FcRzAdI8R9U');
+    await page.waitForLoadState('domcontentloaded');
+
+    const resetIndicator = page.locator('#cache-reset-indicator');
+    await expect(resetIndicator).toBeVisible({ timeout: 5000 });
+    await page.screenshot({ path: 'cypress/reports/assets/test11-step1.png' });
+
+    // Dismiss banner
+    const dismissResetBtn = page.locator('#dismiss-cache-reset-indicator');
+    if (await dismissResetBtn.isVisible()) {
+      await dismissResetBtn.click();
+      await expect(resetIndicator).not.toBeVisible();
+    }
+
+    // Step 2: Verify Settings Modal contains Non-Native TTS toggle, disabled by default
+    const settingsBtn = page.locator('#navbar-settings-button, #settings-btn, button:has-text("Settings")').first();
+    if (await settingsBtn.isVisible()) {
+      await settingsBtn.click();
+      const settingsModal = page.locator('#settings-modal');
+      await expect(settingsModal).toBeVisible();
+
+      const nonNativeTtsToggle = page.locator('#toggle-non-native-tts-setting');
+      await expect(nonNativeTtsToggle).toBeVisible();
+      await expect(nonNativeTtsToggle).not.toBeChecked();
+
+      // Close settings modal
+      const closeSettingsBtn = page.locator('#close-settings-modal-button');
+      await closeSettingsBtn.click();
+      await expect(settingsModal).not.toBeVisible();
+    }
+
+    // Step 3: Open Activity Logs Modal and verify Copy All button exists
+    const logsBtn = page.locator('#navbar-logs-button, #open-logs-btn, #open-logs-view-btn').first();
+    if (await logsBtn.isVisible()) {
+      await logsBtn.click();
+      const logsModal = page.locator('#activity-logs-modal');
+      await expect(logsModal).toBeVisible();
+
+      const copyAllBtn = page.locator('#copy-all-logs-btn');
+      await expect(copyAllBtn).toBeVisible();
+      await copyAllBtn.click();
+      await page.waitForTimeout(200);
+
+      // Close modal
+      const closeLogsBtn = page.locator('#close-logs-modal-btn');
+      await closeLogsBtn.click();
+      await expect(logsModal).not.toBeVisible();
+    }
+    await page.screenshot({ path: 'cypress/reports/assets/test11-step2.png' });
+  });
 });

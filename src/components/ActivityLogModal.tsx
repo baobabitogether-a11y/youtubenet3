@@ -22,6 +22,7 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
   const [copied, setCopied] = useState(false);
   const [filterLevel, setFilterLevel] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
+  const [userComplaint, setUserComplaint] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,8 +52,8 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
 
   if (!isOpen) return null;
 
-  const handleCopyAll = async () => {
-    const text = logBuffer.copyAll();
+  const handleCopyAll = async (complaintText?: string) => {
+    const text = logBuffer.copyAll(complaintText !== undefined ? complaintText : userComplaint);
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -172,34 +173,77 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
           </div>
         </div>
 
-        {/* Filter Controls Bar */}
-        <div className="px-4 sm:px-6 py-2.5 bg-neutral-950/60 border-b border-neutral-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1">
-            {['ALL', 'SUBTITLES', 'SYNC', 'TTS', 'NETWORK', 'WARN', 'ERROR'].map((lvl) => (
-              <button
-                key={lvl}
-                id={`filter-btn-${lvl}`}
-                data-testid={`filter-btn-${lvl}`}
-                onClick={() => setFilterLevel(lvl)}
-                className={`px-2.5 py-1 rounded-md transition-all font-mono text-[11px] ${
-                  filterLevel === lvl
-                    ? 'bg-neutral-700 text-white font-semibold'
-                    : 'text-neutral-400 hover:text-neutral-200 bg-neutral-900 border border-neutral-800'
-                }`}
-              >
-                {lvl}
-              </button>
-            ))}
+        {/* Filter Controls Bar & Troubleshooting Prompt Generator */}
+        <div className="px-4 sm:px-6 py-2 bg-neutral-950/80 border-b border-neutral-800/80 flex flex-col gap-2 text-xs">
+          {/* Troubleshooting Complaint Input */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-neutral-900/90 p-2 rounded-xl border border-neutral-800">
+            <div className="flex-1 flex items-center gap-2">
+              <span className="text-[11px] font-semibold text-amber-400 shrink-0">
+                User Complaint / Report:
+              </span>
+              <input
+                id="user-complaint-input"
+                data-testid="user-complaint-input"
+                type="text"
+                value={userComplaint}
+                onChange={(e) => setUserComplaint(e.target.value)}
+                placeholder="e.g. Duplicated TTS voices, subtitles desync, translation failed..."
+                className="w-full bg-neutral-950 border border-neutral-700/80 rounded-lg px-2.5 py-1 text-xs text-neutral-200 placeholder-neutral-500 focus:outline-none focus:border-amber-500 transition"
+              />
+            </div>
+            <button
+              id="copy-troubleshooting-prompt-button"
+              data-testid="copy-troubleshooting-prompt-button"
+              onClick={() => handleCopyAll(userComplaint)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0 transition border shadow-sm ${
+                copied
+                  ? 'bg-emerald-950 border-emerald-500 text-emerald-300'
+                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/40 hover:border-amber-500/60'
+              }`}
+              title="Copy complete markdown troubleshooting prompt including your complaint, app state, and all logs"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Copied Report!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Copy Troubleshooting Prompt</span>
+                </>
+              )}
+            </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Search logs..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-200 placeholder-neutral-500 text-xs focus:outline-none focus:border-neutral-600 w-36 sm:w-48"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+              {['ALL', 'SUBTITLES', 'SYNC', 'TTS', 'NETWORK', 'WARN', 'ERROR'].map((lvl) => (
+                <button
+                  key={lvl}
+                  id={`filter-btn-${lvl}`}
+                  data-testid={`filter-btn-${lvl}`}
+                  onClick={() => setFilterLevel(lvl)}
+                  className={`px-2.5 py-0.5 rounded-md transition-all font-mono text-[11px] ${
+                    filterLevel === lvl
+                      ? 'bg-neutral-700 text-white font-semibold'
+                      : 'text-neutral-400 hover:text-neutral-200 bg-neutral-900 border border-neutral-800'
+                  }`}
+                >
+                  {lvl}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Search logs..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-200 placeholder-neutral-500 text-xs focus:outline-none focus:border-neutral-600 w-36 sm:w-48"
+              />
+            </div>
           </div>
         </div>
 
