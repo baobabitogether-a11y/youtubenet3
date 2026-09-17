@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download } from 'lucide-react';
+import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download, Volume2 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setNetworkInspectorOpen } from '../store/networkSlice';
 import { setInspectorOpen } from '../store/errorsSlice';
 import { logBuffer } from '../utils/logBuffer';
 import { AppSettings } from '../utils/appSettings';
+import { subscribeTTSDebug, TTSInputRecord } from '../lib/ttsEngine';
 
 interface NavbarProps {
   onOpenLibrary?: () => void;
@@ -12,6 +13,7 @@ interface NavbarProps {
   onOpenShare?: () => void;
   onOpenSettings?: () => void;
   onOpenLogs?: () => void;
+  onOpenTTSInputs?: () => void;
   onOpenApkUpdate?: () => void;
   hasApkUpdate?: boolean;
   latestApkVersion?: string;
@@ -24,6 +26,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenShare,
   onOpenSettings,
   onOpenLogs,
+  onOpenTTSInputs,
   onOpenApkUpdate,
   hasApkUpdate = false,
   latestApkVersion,
@@ -34,12 +37,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   const { errors } = useAppSelector((state) => state.errors);
   const [logCount, setLogCount] = useState(() => logBuffer.getEntries().length);
   const [copiedLogs, setCopiedLogs] = useState(false);
+  const [ttsInputsCount, setTtsInputsCount] = useState(0);
 
   useEffect(() => {
-    const unsub = logBuffer.subscribe(() => {
+    const unsubLogs = logBuffer.subscribe(() => {
       setLogCount(logBuffer.getEntries().length);
     });
-    return unsub;
+    const unsubTTS = subscribeTTSDebug((state) => {
+      setTtsInputsCount(state.inputs.length);
+    });
+    return () => {
+      unsubLogs();
+      unsubTTS();
+    };
   }, []);
 
   const handleQuickCopyLogs = async (e: React.MouseEvent) => {
@@ -104,6 +114,24 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {copiedLogs ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
+          )}
+
+          {/* Dedicated TTS Input Texts View Button */}
+          {onOpenTTSInputs && (
+            <button
+              type="button"
+              id="navbar-tts-inputs-button"
+              data-testid="navbar-tts-inputs-button"
+              onClick={onOpenTTSInputs}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-emerald-800/70 bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 text-xs font-medium transition active:scale-95"
+              title="Open Dedicated TTS Input Texts View (Newer on Top)"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">TTS Inputs</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-neutral-900 text-[10px] font-mono font-bold text-neutral-300">
+                {ttsInputsCount}
+              </span>
+            </button>
           )}
 
           {/* Settings Button */}

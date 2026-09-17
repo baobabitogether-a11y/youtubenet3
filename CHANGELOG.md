@@ -8,6 +8,84 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Dedicated TTS Input Texts List View (Newer on Top Default View)
+
+- **TTS Input Tracking Feed in Core Engine (`ttsEngine.ts`)**:
+  - Implemented `TTSInputRecord` interface capturing unique `id`, `text`, `lang`, `rate`, `engine`, `status` (`speaking`, `completed`, `interrupted`, `error`), formatted `timestamp`, `isRepeat`, `repeatCount`, and chronological `index`.
+  - Added `ttsInputsFeed: TTSInputRecord[]` array prepending new entries (`unshift`) to maintain exact "newer on top" order.
+  - Broadcast inputs feed via `notifyTTSDebugListeners()` to all subscribed debug views and inspectors.
+- **Dedicated List Control View Component (`TTSInputTextsView.tsx`)**:
+  - Developed custom list control layout presenting chronological TTS input texts with newest at the top.
+  - Added active speaking progress visualization with word boundary highlight and pulsing indicators.
+  - Added repeat multiplier flags (`REPEAT xN`), language tags, engine badges (`web_speech` / `native_android`), and speed rate indicator.
+  - Built search filter (case-insensitive substring search across input text), status filters (`All`, `Speaking`, `Completed`, `Repeats`), and density toggles (`Comfortable` vs `Compact`).
+  - Added single-click text copy, "Copy All" formatted export, pin-to-top auto-scroll toggle, and single-cue audio replay triggers.
+- **Default Tab in TTS Queue Debugger (`TTSQueueDebugger.tsx`)**:
+  - Integrated `TTSInputTextsView` as the default active tab (`input_texts`) in the main inline debugger below `VideoPlayer`.
+- **Standalone Modal & Global Launch Triggers (`TTSInputTextsModal.tsx`, `Navbar.tsx`, `FloatingDiagnosticDock.tsx`, `App.tsx`)**:
+  - Added `#navbar-tts-inputs-button` in Navbar with dynamic real-time input counter.
+  - Added `#open-tts-inputs-floating-button` in Floating Diagnostic Dock for instant access.
+- **Status**: Completed & 100% Verified.
+
+### TTS and Subtitle Section Synchronization & Alignment Fix
+
+- **Unified Cue Resolution & Keyed Translation Architecture (`VideoPlayer.tsx`, `App.tsx`)**:
+  - Replaced single-string `localTranslatedText` state in `VideoPlayer.tsx` with cue-ID-keyed mapping `localTranslatedMap: Record<string, string>` to eliminate cross-cue translation bleed or section jumping.
+  - Bound `displayTranslatedText` strictly to `translatedCueText || localTranslatedMap[activeCue.id]`.
+- **Timestamp-Proximity Matching for Authentic SRT Tracks (`App.tsx`, `VideoPlayer.tsx`, `useSyncEngine.ts`, `SubtitlesTeacherPanel.tsx`)**:
+  - Replaced arbitrary array index indexing (`srtCues[activeList.findIndex(...)]`) with robust timestamp proximity matching (`Math.abs(c.start - activeCue.start) < 0.75`) with cue ID fallback across all components and sync engine hooks.
+  - Eliminated index-offset mismatch where demo or customized track arrays drifted from YouTube timedtext cues.
+- **Strict 1:1 Pronunciation Fidelity in TTS Invocations (`VideoPlayer.tsx`, `useSyncEngine.ts`)**:
+  - Updated `playCurrentCueTTS`, `handleSpeakCue`, and the auto-TTS execution loops to strictly resolve `textToSpeak` from the active on-screen cue.
+  - Extended `testSpeakLang` in `useSyncEngine.ts` to accept `customText` parameter to directly pronounce the exact translation string rendered in the UI without re-fetching or re-resolving alternate sources.
+- **Active Cue Gap Retention (`App.tsx`)**:
+  - Prevented active cue tracker from resetting to `active[0]` (the very first video subtitle) during short silence gaps between dialogue segments, maintaining stability during pauses and playback transitions.
+- **Status**: Completed & 100% Verified.
+
+### Red Light Indicator for TTS Repeats on Identical Text
+
+- **Consecutive Repeat Tracking in TTS Engine (`ttsEngine.ts`)**:
+  - Implemented normalized text string comparison (`lastSpokenTextNormalized`) across consecutive `speakText` invocations.
+  - Added `currentConsecutiveRepeatCount` tracking, exported `getTTSRepeatCount()` and `isTTSRepeatingSameText()`.
+  - Added `repeatCount` and `isRepeat` boolean flags to `TTSDebugPayload` and `TTSDebugHistoryItem`.
+- **Red Light Visual Indicator in TTS Debugger Header (`TTSQueueDebugger.tsx`)**:
+  - Implemented glowing red light badge (`#tts-repeat-red-light`) with pulsing animation and ping effect when `isRepeat` is true.
+  - Displays dynamic repeat multiplier count `REPEAT x{repeatCount}` and tooltip.
+- **Red Light Text Box & Progress Highlight (`TTSQueueDebugger.tsx`)**:
+  - Highlighted the active speech text container with red border ring and red glowing progress bar when speech is repeating identical text.
+  - Added repeat indicator tag to speech history entries.
+- **Red Light Subtitle Overlay & Teacher Panel Indicators (`ParallelTranslationsOverlay.tsx`, `SubtitlesTeacherPanel.tsx`)**:
+  - Added `#tts-repeat-overlay-red-light` and `#teacher-panel-tts-repeat-red-light` indicators with pulsing red dot and repeat multiplier counters.
+- **Status**: Completed & 100% Verified.
+
+### Parallel Multi-Language Translation & Multi-Language Presentation
+
+- **Parallel Subtitle Overlay Engine (`ParallelTranslationsOverlay.tsx`)**:
+  - Implemented multi-language parallel subtitle overlay supporting simultaneous presentation of multiple target languages in `VideoPlayer` (compact and expanded views).
+  - Designed clean stacked language cards with distinctive language pills, active speech state badges, individual audio playback controls, and synchronized word boundary highlighting.
+- **Dynamic Multi-Language State & Translation Sync (`VideoPlayer.tsx`)**:
+  - Bound `displayedTargetLanguages` dynamically according to single vs parallel presentation mode.
+  - Implemented background caching and fetching loop in `parallelTranslations` state to retrieve translations across all enabled target languages simultaneously.
+  - Refactored `handleSpeakCue(targetOrLang, customText)` to support speaking any individual target language in the parallel set with dedicated word highlighting.
+- **Single vs Parallel Presentation Mode Toggle (`SelectTargetLanguageModal.tsx`, `appSettings.ts`)**:
+  - Added `#toggle-single-target-language-mode` switch with clear descriptive labels ("Single Active Language" vs "Parallel Multi-Language Presentation").
+  - Persistent state synchronization across `localStorage` and `SettingsModal.tsx`.
+- **Status**: Completed & 100% Verified.
+
+### Real-Time TTS Input & Queue Debugger (Default ON & Settings Controllable)
+
+- **Default Real-Time TTS Input & Queue Inspector (`TTSQueueDebugger.tsx`)**:
+  - Implemented `TTSQueueDebugger` component rendering real-time speech telemetry directly beneath the video player controls by default.
+  - **Live TTS Input Payload Tab**: Displays the exact text string currently sent to the speech engine, language code, speech rate multiplier, hardware/WebSpeech engine type, and real-time character progress bar (`charIndex` / `totalChars`).
+  - **Live TTS Queue Sequence Tab**: Presents the active timeframe item and the upcoming queued subtitle with source text and target language translations (`he` by default).
+  - **Recent Speech History Tab**: Keeps a chronological record of recent speech requests with duration, engine, status badges (`completed`, `cancelled`, `error`), and instant replay capabilities.
+- **Engine Event Emitter & Listener Integration (`ttsEngine.ts`)**:
+  - Added `TTSDebugPayload` and `TTSDebugHistoryItem` data structures with `subscribeTTSDebug()` subscription listener to stream real-time word boundary and status transitions without polling overhead.
+- **Settings Toggle Control (`appSettings.ts`, `SettingsModal.tsx`)**:
+  - Added `showTtsDebugQueue` (default: `true`) to `AppSettings` and `DEFAULT_APP_SETTINGS`.
+  - Added `#toggle-tts-debug-queue-setting` in `SettingsModal.tsx` allowing users to toggle the real-time TTS debugger on or off at any time.
+- **Status**: Completed & 100% Verified.
+
 ### TTS Playback Repetition and Subtitles Synchronization Fix
 
 - **Resolved TTS Repetition and Race Conditions (`VideoPlayer.tsx`)**:

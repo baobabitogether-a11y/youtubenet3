@@ -38,6 +38,9 @@ export interface AppSettings {
   // Non-Native TTS Fallback (Audio Stream): DISABLED by default (only native hardware/WebSpeech is used)
   allowNonNativeTTSFallback: boolean;
 
+  // TTS Debugger: Present TTS input and TTS queue by default for real-time debugging (toggleable in Settings)
+  showTtsDebugQueue: boolean;
+
   // Learning Languages & Pagination
   learningLanguages: string[];
   subtitlesPerPage: number; // Number of records per page in Subtitles Teacher Panel (e.g. 10, 25, 50, 100, 0=All)
@@ -175,6 +178,9 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // Non-Native TTS Fallback: DISABLED by default (native only)
   allowNonNativeTTSFallback: false,
 
+  // Present TTS input and TTS queue by default for real-time debugging
+  showTtsDebugQueue: true,
+
   // Favorite languages / learning targets by default: 1 target language Hebrew ('he') for focus
   learningLanguages: ['he'],
   subtitlesPerPage: 25,
@@ -308,6 +314,19 @@ export function getVideoTargetLang(videoId: string): string | null {
 
 export function setVideoTargetLang(videoId: string, langCode: string): void {
   saveVideoSettings(videoId, { activeTargetLang: langCode });
+}
+
+export function getSingleTargetLanguageMode(): boolean {
+  const settings = loadAppSettings();
+  return settings.singleTargetLanguageMode ?? true;
+}
+
+export function setSingleTargetLanguageMode(singleMode: boolean): void {
+  const current = loadAppSettings();
+  saveAppSettings({
+    ...current,
+    singleTargetLanguageMode: singleMode,
+  });
 }
 
 

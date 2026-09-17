@@ -20,6 +20,7 @@ import {
   Volume2,
   VolumeX,
   Clock,
+  Terminal,
 } from 'lucide-react';
 
 interface SettingsModalProps {
@@ -255,6 +256,31 @@ export function SettingsModal({
                     onUpdateSettings({ ...settings, allowNonNativeTTSFallback: e.target.checked })
                   }
                   className="w-5 h-5 accent-purple-500 rounded cursor-pointer shrink-0"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Present TTS Input &amp; Queue Debugger</span>
+                    <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-950/80 text-emerald-300 border border-emerald-800/60">
+                      Default: ON
+                    </span>
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-1 leading-relaxed">
+                    Display real-time TTS input payload, active utterance status, character progress, and upcoming speech queue for live debugging.
+                  </div>
+                </div>
+                <input
+                  id="toggle-tts-debug-queue-setting"
+                  data-testid="toggle-tts-debug-queue-setting"
+                  type="checkbox"
+                  checked={settings.showTtsDebugQueue ?? true}
+                  onChange={(e) =>
+                    onUpdateSettings({ ...settings, showTtsDebugQueue: e.target.checked })
+                  }
+                  className="w-5 h-5 accent-emerald-500 rounded cursor-pointer shrink-0"
                 />
               </div>
 

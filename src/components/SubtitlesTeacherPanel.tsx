@@ -45,7 +45,7 @@ import { SUPPORTED_TARGET_LANGUAGES } from '../config/constants';
 import { SAMPLE_TRANSLATIONS } from '../config/fixtures';
 import { formatTimestamp, cleanAndFixEncoding, parseRawCaptionData } from '../utils/captionParser';
 import { HighlightableText } from './HighlightableText';
-import { isAndroidNativeTTS } from '../lib/ttsEngine';
+import { isAndroidNativeTTS, subscribeTTSDebug, TTSDebugPayload } from '../lib/ttsEngine';
 import { LanguageSettingsModal } from './LanguageSettingsModal';
 import { ObservedTimedTextModal } from './ObservedTimedTextModal';
 import { loadVideoSettings, saveVideoSettings, VideoSpecificSettings, loadAppSettings } from '../utils/appSettings';
@@ -255,6 +255,15 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     }
     return 'auto';
   });
+
+  const [ttsDebugPayload, setTtsDebugPayload] = useState<TTSDebugPayload | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeTTSDebug((payload) => {
+      setTtsDebugPayload(payload);
+    });
+    return unsubscribe;
+  }, []);
 
   // Load per-video settings when videoId changes
   useEffect(() => {
@@ -588,22 +597,13 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   }, [activeCueIndex, effectiveCues, targetLanguages, langSources, sourceLang, translations, tableTranslations, videoId]);
 
   const getCueTranslation = (cue: CaptionCue, langCode: string): string => {
-    let clean = (langCode || '').toLowerCase().split('-')[0];
+    let clean = (langCode || '').toLowerCase().split(/[-_]/)[0];
     if (clean === 'iw' || clean === 'il') clean = 'he';
-
-    // Priority 0: Authentic SRT fixture directly!
-    const vId = videoId || 'FcRzAdI8R9U';
-    const srtCues = getCachedSrtForVideoAndLanguage(vId, clean);
-    if (srtCues && srtCues.length > 0) {
-      const match = srtCues.find((c) => c.id === cue.id) || (effectiveCues ? srtCues[effectiveCues.findIndex((c) => c.id === cue.id)] : null);
-      if (match && match.text) return match.text;
-    }
 
     const fromTable = tableTranslations[cue.id]?.[clean] || tableTranslations[cue.id]?.[langCode];
     const fromSync = translations[cue.id]?.[clean] || translations[cue.id]?.[langCode];
-    const sample = SAMPLE_TRANSLATIONS[cue.text]?.[clean] || SAMPLE_TRANSLATIONS[cue.text]?.[langCode];
 
-    // Priority 1: Table translations (from native timedtext track) if NOT equal to cue.text
+    // Priority 1: Table translations (from native timedtext track / UI edits) if NOT equal to cue.text
     if (fromTable && fromTable.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
       return fromTable;
     }
@@ -611,9 +611,20 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     if (fromSync && fromSync.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
       return fromSync;
     }
-    // Priority 3: Known sample translations
+
+    // Priority 3: Authentic SRT fixture matched by timestamp proximity first, then cue ID
+    const vId = videoId || 'FcRzAdI8R9U';
+    const srtCues = getCachedSrtForVideoAndLanguage(vId, clean);
+    if (srtCues && srtCues.length > 0) {
+      const match =
+        srtCues.find((c) => Math.abs(c.start - cue.start) < 0.75) ||
+        srtCues.find((c) => c.id === cue.id);
+      if (match && match.text) return match.text;
+    }
+
+    const sample = SAMPLE_TRANSLATIONS[cue.text]?.[clean] || SAMPLE_TRANSLATIONS[cue.text]?.[langCode];
     if (sample) return sample;
-    // Fallback: whatever was retrieved
+
     if (fromTable) return fromTable;
     if (fromSync) return fromSync;
     return '';
@@ -1184,6 +1195,22 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                     <span className="font-medium">
                       Speaking {targetLanguages.find((l) => l.code === currentTTSLang)?.name || currentTTSLang}
                     </span>
+                  </div>
+                )}
+
+                {/* TTS Repeat Red Light Indicator */}
+                {ttsDebugPayload?.isRepeat && isSpeaking && (
+                  <div
+                    id="teacher-panel-tts-repeat-red-light"
+                    data-testid="teacher-panel-tts-repeat-red-light"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-950/90 border border-rose-600 text-rose-200 animate-pulse font-bold shadow-[0_0_12px_rgba(244,63,94,0.7)]"
+                    title={`TTS Repeating on identical text (${ttsDebugPayload.repeatCount} times)`}
+                  >
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-80" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_6px_rgba(239,68,68,1)]" />
+                    </span>
+                    <span>REPEAT x{ttsDebugPayload.repeatCount}</span>
                   </div>
                 )}
 

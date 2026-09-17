@@ -61,6 +61,7 @@ import { logInfo, logWarn, logSubtitles, registerAppStateProvider } from './util
 import { checkAndPerformUrlCacheReset, getAppStateFromUrl, syncAppStateToUrl } from './utils/urlStateManager';
 import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../test/fixtures/defaultSubtitles';
 import { SelectTargetLanguageModal } from './components/SelectTargetLanguageModal';
+import { TTSInputTextsModal } from './components/TTSInputTextsModal';
 import { translateText } from './lib/translateService';
 import { DEFAULT_LIBRARY_ITEMS } from './config/appConfig';
 
@@ -130,6 +131,7 @@ export default function App() {
   const [isShareModalOpen, setIsShareModalOpen] = useState<boolean>(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState<boolean>(false);
+  const [isTTSInputsModalOpen, setIsTTSInputsModalOpen] = useState<boolean>(false);
   const [isApkUpdateModalOpen, setIsApkUpdateModalOpen] = useState<boolean>(false);
   const [hasApkUpdate, setHasApkUpdate] = useState<boolean>(false);
   const [latestApkTag, setLatestApkTag] = useState<string | undefined>(undefined);
@@ -235,11 +237,12 @@ export default function App() {
     let cleanLang = targetLang.toLowerCase().split(/[-_]/)[0];
     if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
 
-    // Check authentic local SRT track / target subtitle cache first
+    // Check authentic local SRT track / target subtitle cache first using timestamp matching
     const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
     if (srtCues && srtCues.length > 0) {
-      const activeList = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
-      const match = srtCues.find((c) => c.id === activeCue.id) || (activeList.length > 0 ? srtCues[activeList.findIndex((c) => c.id === activeCue.id)] : null);
+      const match =
+        srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
+        srtCues.find((c) => c.id === activeCue.id);
       if (match && match.text) {
         setTranslatedCueText(match.text);
         return;
@@ -257,7 +260,7 @@ export default function App() {
     return () => {
       isSubscribed = false;
     };
-  }, [activeCue?.id, activeCue?.text, selectedTargetLang, videoId, customCues, interceptedData]);
+  }, [activeCue?.id, activeCue?.text, activeCue?.start, selectedTargetLang, videoId]);
 
   const [isFetchingSubtitles, setIsFetchingSubtitles] = useState<boolean>(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -369,8 +372,15 @@ export default function App() {
   const handlePlayerTimeUpdate = useCallback((t: number) => {
     const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
     if (!active || active.length === 0) return;
-    const match = active.find((c) => t >= c.start && t <= c.start + c.duration);
-    setActiveCue((prev) => (prev?.id === match?.id ? prev : match || (t === 0 ? active[0] : null)));
+    const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+    setActiveCue((prev) => {
+      if (match) {
+        return prev?.id === match.id ? prev : match;
+      }
+      // If player is at 0, default to first cue; otherwise maintain previous valid cue during slight gaps
+      if (t === 0) return active[0];
+      return prev || active[0];
+    });
 
     // Throttled time update to URL
     if (typeof t === 'number' && t > 0) {
@@ -402,8 +412,14 @@ export default function App() {
       try {
         const t = playerRef.current?.getCurrentTime?.();
         if (typeof t === 'number' && !isNaN(t) && t >= 0) {
-          const match = active.find((c) => t >= c.start && t <= c.start + c.duration);
-          setActiveCue((prev) => (prev?.id === match?.id ? prev : match || (t === 0 ? active[0] : null)));
+          const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+          setActiveCue((prev) => {
+            if (match) {
+              return prev?.id === match.id ? prev : match;
+            }
+            if (t === 0) return active[0];
+            return prev || active[0];
+          });
         }
       } catch {}
     }, 250);
@@ -1312,6 +1328,7 @@ export default function App() {
           setIsSettingsModalOpen(true);
         }}
         onOpenLogs={() => setIsLogsModalOpen(true)}
+        onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
         onOpenApkUpdate={() => setIsApkUpdateModalOpen(true)}
         hasApkUpdate={hasApkUpdate}
         latestApkVersion={latestApkTag}
@@ -1631,6 +1648,12 @@ export default function App() {
         onClose={() => setIsLogsModalOpen(false)}
       />
 
+      {/* Dedicated TTS Input Texts View Modal (Newer on Top) */}
+      <TTSInputTextsModal
+        isOpen={isTTSInputsModalOpen}
+        onClose={() => setIsTTSInputsModalOpen(false)}
+      />
+
       {/* Settings Modal (Advanced features OFF by default) */}
       <SettingsModal
         isOpen={isSettingsModalOpen}
@@ -1654,7 +1677,11 @@ export default function App() {
       <ErrorInspectorModal />
 
       {/* Persistent Floating Diagnostic Dock (if enabled in settings) */}
-      {settings.enableDiagnosticDock && <FloatingDiagnosticDock />}
+      {settings.enableDiagnosticDock && (
+        <FloatingDiagnosticDock
+          onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
+        />
+      )}
     </div>
   );
 }

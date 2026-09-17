@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Globe, Check, Settings2, X, ArrowLeft, Volume2, Gauge, Search, Plus } from 'lucide-react';
+import { Globe, Check, Settings2, X, ArrowLeft, Volume2, Gauge, Search, Plus, Layers, Sparkles } from 'lucide-react';
 import {
   SUPPORTED_LANGUAGES_CATALOG,
   getUserLearningLanguages,
@@ -7,6 +7,11 @@ import {
   setVideoTargetLang,
   loadVideoSettings,
   saveVideoSettings,
+  AppSettings,
+  loadAppSettings,
+  saveAppSettings,
+  getSingleTargetLanguageMode,
+  setSingleTargetLanguageMode,
 } from '../utils/appSettings';
 
 interface SelectTargetLanguageModalProps {
@@ -16,6 +21,8 @@ interface SelectTargetLanguageModalProps {
   onSelectLanguage: (langCode: string) => void;
   onUpdateTtsRate?: (langCode: string, rate: number) => void;
   currentSelectedLang?: string | null;
+  settings?: AppSettings;
+  onUpdateSettings?: (newSettings: AppSettings) => void;
 }
 
 const TTS_RATE_PRESETS = [0.8, 1.0, 1.2, 1.5];
@@ -27,6 +34,8 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
   onSelectLanguage,
   onUpdateTtsRate,
   currentSelectedLang,
+  settings: propSettings,
+  onUpdateSettings,
 }) => {
   const [learningLanguages, setLearningLanguages] = useState<string[]>(() =>
     getUserLearningLanguages()
@@ -34,6 +43,18 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
   const [activeTab, setActiveTab] = useState<'my_languages' | 'all_languages'>('my_languages');
   const [searchQuery, setSearchQuery] = useState('');
   const [ttsRates, setTtsRates] = useState<Record<string, number>>({});
+  const [isSingleMode, setIsSingleMode] = useState<boolean>(() => {
+    if (propSettings?.singleTargetLanguageMode !== undefined) {
+      return propSettings.singleTargetLanguageMode;
+    }
+    return getSingleTargetLanguageMode();
+  });
+
+  useEffect(() => {
+    if (propSettings?.singleTargetLanguageMode !== undefined) {
+      setIsSingleMode(propSettings.singleTargetLanguageMode);
+    }
+  }, [propSettings?.singleTargetLanguageMode]);
 
   useEffect(() => {
     if (!videoId) return;
@@ -68,11 +89,24 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
 
   if (!isOpen) return null;
 
+  const handleToggleParallelMode = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const newSingle = !isSingleMode;
+    setIsSingleMode(newSingle);
+    setSingleTargetLanguageMode(newSingle);
+    if (propSettings && onUpdateSettings) {
+      onUpdateSettings({ ...propSettings, singleTargetLanguageMode: newSingle });
+    }
+  };
+
   const handleSelect = (code: string) => {
     if (!learningLanguages.includes(code)) {
       const updated = [...learningLanguages, code];
       setLearningLanguages(updated);
       setUserLearningLanguages(updated);
+      if (propSettings && onUpdateSettings) {
+        onUpdateSettings({ ...propSettings, learningLanguages: updated });
+      }
     }
     setVideoTargetLang(videoId, code);
     onSelectLanguage(code);
@@ -100,6 +134,9 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
     }
     setLearningLanguages(updated);
     setUserLearningLanguages(updated);
+    if (propSettings && onUpdateSettings) {
+      onUpdateSettings({ ...propSettings, learningLanguages: updated });
+    }
   };
 
   return (
@@ -138,6 +175,36 @@ export const SelectTargetLanguageModal: React.FC<SelectTargetLanguageModalProps>
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Parallel Multi-Language Translation Mode Toggle */}
+        <div className="pt-3 pb-1">
+          <div className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold text-neutral-200 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Parallel Multi-Language Presentation</span>
+              </div>
+              <div className="text-[11px] text-neutral-400 mt-0.5">
+                {isSingleMode
+                  ? 'Showing 1 primary language. Turn on to display multiple languages in parallel.'
+                  : `Parallel mode ON: Translating ${learningLanguages.length} languages simultaneously.`}
+              </div>
+            </div>
+            <button
+              type="button"
+              id="toggle-parallel-mode-in-modal"
+              data-testid="toggle-parallel-mode-in-modal"
+              onClick={handleToggleParallelMode}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition shrink-0 ${
+                !isSingleMode
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-sm shadow-indigo-950'
+                  : 'bg-neutral-900 border-neutral-700 text-neutral-400 hover:text-white hover:border-neutral-600'
+              }`}
+            >
+              {!isSingleMode ? 'Parallel: ON' : '1 Lang Only'}
+            </button>
+          </div>
         </div>
 
         {/* Search Bar */}

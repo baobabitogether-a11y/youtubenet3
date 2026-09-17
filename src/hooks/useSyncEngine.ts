@@ -152,27 +152,32 @@ export function useSyncEngine({
   const getCueTranslation = useCallback(
     async (cue: CaptionCue, targetLangCode: string): Promise<string> => {
       const cueId = cue.id;
-      const cleanLang = targetLangCode.toLowerCase().split('-')[0];
+      let cleanLang = targetLangCode.toLowerCase().split(/[-_]/)[0];
+      if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
       const vId = videoId || 'FcRzAdI8R9U';
 
-      // 1. Check local authentic SRT fixture first!
+      // 1. Check external and local component translations for this specific cue ID first
+      const fromExt = externalTranslationsRef.current?.[cueId]?.[cleanLang] || externalTranslationsRef.current?.[cueId]?.[targetLangCode];
+      if (fromExt && fromExt.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
+        return fromExt;
+      }
+
+      const fromRef = translationsRef.current[cueId]?.[cleanLang] || translationsRef.current[cueId]?.[targetLangCode];
+      if (fromRef && fromRef.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
+        return fromRef;
+      }
+
+      // 2. Check local authentic SRT fixture by timestamp proximity first, then cue ID
       if (hasCachedSrtForVideoAndLanguage(vId, cleanLang)) {
         const srtCues = getCachedSrtForVideoAndLanguage(vId, cleanLang);
         if (srtCues && srtCues.length > 0) {
-          const match = srtCues.find((c) => c.id === cueId) || (cues ? srtCues[cues.findIndex((c) => c.id === cueId)] : null);
+          const match =
+            srtCues.find((c) => Math.abs(c.start - cue.start) < 0.75) ||
+            srtCues.find((c) => c.id === cueId);
           if (match && match.text) {
             return match.text;
           }
         }
-      }
-
-      const fromRef = translationsRef.current[cueId]?.[targetLangCode];
-      if (fromRef && fromRef.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
-        return fromRef;
-      }
-      const fromExt = externalTranslationsRef.current?.[cueId]?.[targetLangCode];
-      if (fromExt && fromExt.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
-        return fromExt;
       }
 
       const translated = await translateText(cue.text, sourceLang, targetLangCode);
@@ -188,7 +193,7 @@ export function useSyncEngine({
       }
       return translated;
     },
-    [cues, sourceLang, videoId]
+    [sourceLang, videoId]
   );
 
   /**
@@ -480,7 +485,7 @@ export function useSyncEngine({
    * Firmly pauses video first
    */
   const testSpeakLang = useCallback(
-    async (cue: CaptionCue, lang: TargetLanguage) => {
+    async (cue: CaptionCue, lang: TargetLanguage, customText?: string) => {
       if (isSpeaking && currentTTSLang === lang.code) {
         stopTTS();
         setIsSpeaking(false);
@@ -494,7 +499,10 @@ export function useSyncEngine({
       playerRef.current?.pause();
       await new Promise((r) => setTimeout(r, 120));
 
-      const textToSpeak = await getCueTranslation(cue, lang.code);
+      let textToSpeak = customText;
+      if (!textToSpeak) {
+        textToSpeak = await getCueTranslation(cue, lang.code);
+      }
       if (!textToSpeak) return;
 
       playerRef.current?.pause();

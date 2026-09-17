@@ -35,8 +35,9 @@ import { setPlayerReady as setReduxPlayerReady, setPlayerState as setReduxPlayer
 import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
-import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings } from '../utils/appSettings';
+import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings, getSingleTargetLanguageMode, setSingleTargetLanguageMode } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
+import { ParallelTranslationsOverlay } from './ParallelTranslationsOverlay';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
 import { translateText } from '../lib/translateService';
 import { getCachedTargetSubtitles, getCachedSubtitles } from '../utils/subtitleCache';
@@ -44,6 +45,7 @@ import { getVideoSettings } from '../utils/videoSettings';
 import { isRtl } from '../utils/rtlUtils';
 import { SAMPLE_TRANSLATIONS } from '../config/fixtures';
 import { logBuffer } from '../utils/logBuffer';
+import { TTSQueueDebugger } from './TTSQueueDebugger';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -137,50 +139,47 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const cleanTargetLang = targetLangCode.toLowerCase().split('-')[0];
     const normTargetLang = (cleanTargetLang === 'iw' || cleanTargetLang === 'il') ? 'he' : cleanTargetLang;
 
-    // Local state to guarantee translated text is always present even if parent async translation is resolving
-    const [localTranslatedText, setLocalTranslatedText] = useState<string | null>(null);
-    const displayTranslatedCueIdRef = useRef<string | number | null>(null);
+    // Local state to guarantee translated text is always present per cue ID without cross-cue pollution
+    const [localTranslatedMap, setLocalTranslatedMap] = useState<Record<string, string>>({});
 
     useEffect(() => {
-      // If active cue changed, immediately clear local translation to eliminate stale translation carryover
-      if (displayTranslatedCueIdRef.current !== (activeCue?.id ?? null)) {
-        displayTranslatedCueIdRef.current = activeCue?.id ?? null;
-        setLocalTranslatedText(null);
-      }
+      if (!activeCue?.text || !activeCue?.id) return;
+      const cueId = activeCue.id;
+      const cueStart = activeCue.start;
+      const cueText = activeCue.text;
 
-      if (translatedCueText) {
-        setLocalTranslatedText(null);
-        return;
-      }
-      if (!activeCue?.text) {
-        setLocalTranslatedText(null);
-        return;
-      }
-      // Check authentic target subtitle track cache
+      if (translatedCueText) return;
+      if (localTranslatedMap[cueId]) return;
+
+      // Check authentic target subtitle track cache with time-based precision
       const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
       if (srtCues && srtCues.length > 0) {
-        const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
+        const match =
+          srtCues.find((c) => Math.abs(c.start - cueStart) < 0.75) ||
+          srtCues.find((c) => c.id === cueId);
         if (match?.text) {
-          setLocalTranslatedText(match.text);
+          setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: match.text }));
           return;
         }
       }
       // Check known sample translations
-      const sample = SAMPLE_TRANSLATIONS[activeCue.text]?.[normTargetLang] || SAMPLE_TRANSLATIONS[activeCue.text]?.[targetLangCode];
+      const sample = SAMPLE_TRANSLATIONS[cueText]?.[normTargetLang] || SAMPLE_TRANSLATIONS[cueText]?.[targetLangCode];
       if (sample) {
-        setLocalTranslatedText(sample);
+        setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: sample }));
         return;
       }
       let isMounted = true;
-      translateText(activeCue.text, 'auto', targetLangCode)
+      translateText(cueText, 'auto', targetLangCode)
         .then((res) => {
-          if (isMounted && res) setLocalTranslatedText(res);
+          if (isMounted && res) {
+            setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: res }));
+          }
         })
         .catch(() => {});
       return () => {
         isMounted = false;
       };
-    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode]);
+    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode, localTranslatedMap]);
 
     // TTS playback state with word boundary syntax highlighting
     const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
@@ -216,7 +215,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       ? true
       : (isTTSSpeakingState && activeTTSTarget === 'translated');
 
-    const displayTranslatedText = translatedCueText || localTranslatedText;
+    const displayTranslatedText = translatedCueText || (activeCue ? localTranslatedMap[activeCue.id] : undefined) || '';
 
     const effectiveDisplayTranslatedText = (isSyncTargetLangSpeaking && syncTTSText)
       ? syncTTSText
@@ -320,12 +319,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
       try {
         // Guarantee 1:1 fidelity between the text presented on screen and the text spoken by TTS
-        let textToSpeak = effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || '';
+        let textToSpeak = effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || (targetCue ? localTranslatedMap[targetCue.id] : '') || '';
         if (!textToSpeak) {
           const norm = (targetLangCode === 'iw' || targetLangCode === 'il') ? 'he' : targetLangCode.toLowerCase().split('-')[0];
           const srtCues = getCachedTargetSubtitles(videoId, norm);
           if (srtCues && srtCues.length > 0) {
-            const match = srtCues.find((c) => c.id === targetCue.id) || srtCues.find((c) => Math.abs(c.start - targetCue.start) < 0.5);
+            const match =
+              srtCues.find((c) => Math.abs(c.start - targetCue.start) < 0.75) ||
+              srtCues.find((c) => c.id === targetCue.id);
             if (match?.text) textToSpeak = match.text;
           }
         }
@@ -342,7 +343,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         }
         if (!textToSpeak) textToSpeak = targetCue.text;
 
-        setLocalTranslatedText(textToSpeak);
+        setLocalTranslatedMap((prev) => ({ ...prev, [targetCue.id]: textToSpeak }));
         setActiveTTSTarget('translated');
         setActiveTTSCharIndex(0);
 
@@ -386,23 +387,112 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       });
     };
 
-    // Setting: By default we use only 1 target language and do not deal yet with translation to multiple languages in parallel
-    const singleTargetLanguageMode = true;
+    // Parallel / Single Target Language Mode
+    const [singleTargetLanguageMode, setSingleTargetLanguageModeState] = useState<boolean>(() => {
+      return settings?.singleTargetLanguageMode ?? getSingleTargetLanguageMode();
+    });
+
+    useEffect(() => {
+      if (settings?.singleTargetLanguageMode !== undefined) {
+        setSingleTargetLanguageModeState(settings.singleTargetLanguageMode);
+      }
+    }, [settings?.singleTargetLanguageMode]);
+
+    useEffect(() => {
+      const handleStorage = () => {
+        setSingleTargetLanguageModeState(getSingleTargetLanguageMode());
+      };
+      window.addEventListener('storage', handleStorage);
+      return () => window.removeEventListener('storage', handleStorage);
+    }, []);
+
+    const handleToggleParallelMode = (e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      const nextMode = !singleTargetLanguageMode;
+      setSingleTargetLanguageModeState(nextMode);
+      setSingleTargetLanguageMode(nextMode);
+      if (settings && onUpdateSettings) {
+        onUpdateSettings({ ...settings, singleTargetLanguageMode: nextMode });
+      }
+    };
 
     // Setting: By default also show the subtitles's time section besides the subtitles
     const showSubtitleTimestamps = settings?.showSubtitleTimestamps ?? true;
 
-    // Active displayed target languages (strictly 1 target language - no parallel languages)
+    // Active displayed target languages (1 or parallel multi-languages)
     const displayedTargetLanguages = React.useMemo(() => {
-      return [targetLangCode];
-    }, [targetLangCode]);
+      if (singleTargetLanguageMode) {
+        return [targetLangCode];
+      }
+      const learning = settings?.learningLanguages || ['he', 'it', 'en', 'ar', 'ru'];
+      const unique = Array.from(new Set([targetLangCode, ...learning]));
+      return unique.filter(Boolean);
+    }, [singleTargetLanguageMode, targetLangCode, settings?.learningLanguages]);
 
-    const handleSpeakCue = async (target: 'translated' | 'original', e?: React.MouseEvent) => {
+    const [parallelTranslations, setParallelTranslations] = useState<Record<string, string>>({});
+
+    useEffect(() => {
+      if (!activeCue?.text) {
+        setParallelTranslations({});
+        return;
+      }
+
+      let isMounted = true;
+      const initialMap: Record<string, string> = {};
+
+      displayedTargetLanguages.forEach((lang) => {
+        const norm = (lang === 'iw' || lang === 'il') ? 'he' : lang;
+        if (lang === targetLangCode && (effectiveDisplayTranslatedText || displayTranslatedText)) {
+          initialMap[lang] = effectiveDisplayTranslatedText || displayTranslatedText || '';
+          return;
+        }
+        const srtCues = getCachedTargetSubtitles(videoId, norm);
+        if (srtCues && srtCues.length > 0) {
+          const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
+          if (match?.text) {
+            initialMap[lang] = match.text;
+            return;
+          }
+        }
+        const sample = SAMPLE_TRANSLATIONS[activeCue.text]?.[norm] || SAMPLE_TRANSLATIONS[activeCue.text]?.[lang];
+        if (sample) {
+          initialMap[lang] = sample;
+        }
+      });
+
+      setParallelTranslations(initialMap);
+
+      displayedTargetLanguages.forEach((lang) => {
+        if (initialMap[lang]) return;
+        translateText(activeCue.text, 'auto', lang)
+          .then((res) => {
+            if (isMounted && res) {
+              setParallelTranslations((prev) => ({ ...prev, [lang]: res }));
+            }
+          })
+          .catch(() => {});
+      });
+
+      return () => {
+        isMounted = false;
+      };
+    }, [
+      activeCue?.id,
+      activeCue?.text,
+      activeCue?.start,
+      displayedTargetLanguages,
+      videoId,
+      targetLangCode,
+      effectiveDisplayTranslatedText,
+      displayTranslatedText,
+    ]);
+
+    const handleSpeakCue = async (targetOrLang: 'original' | 'translated' | string, customText?: string, e?: React.MouseEvent) => {
       e?.stopPropagation();
       unlockTTSAudio();
 
       // If already speaking this target, clicking again acts as stop
-      if (isTTSSpeakingState && activeTTSTarget === target) {
+      if (isTTSSpeakingState && (activeTTSTarget === targetOrLang || (targetOrLang === 'translated' && activeTTSTarget === targetLangCode))) {
         stopTTS();
         setIsTTSSpeakingState(false);
         setActiveTTSTarget(null);
@@ -412,25 +502,42 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
       if (!activeCue?.text) return;
 
-      let text = target === 'translated' ? (effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText) : activeCue.text;
+      let text = customText;
+      let speakLang = targetLangCode;
+      const isOriginal = targetOrLang === 'original';
 
-      if (target === 'translated' && !text && activeCue.text) {
-        const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
+      if (isOriginal) {
+        text = activeCue.text;
+        speakLang = detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto';
+      } else if (targetOrLang === 'translated') {
+        text = text || (effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || (activeCue ? localTranslatedMap[activeCue.id] : '') || parallelTranslations[targetLangCode]);
+        speakLang = targetLangCode;
+      } else {
+        // Specific language code (e.g. 'it', 'en', 'ar', 'ru', 'he')
+        speakLang = targetOrLang;
+        text = text || parallelTranslations[targetOrLang];
+      }
+
+      if (!text && !isOriginal) {
+        const normLang = (speakLang === 'iw' || speakLang === 'il') ? 'he' : speakLang;
+        const srtCues = getCachedTargetSubtitles(videoId, normLang);
         if (srtCues && srtCues.length > 0) {
-          const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
-          if (match && match.text) {
+          const match =
+            srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
+            srtCues.find((c) => c.id === activeCue.id);
+          if (match?.text) {
             text = match.text;
           }
         }
         if (!text) {
-          const sample = SAMPLE_TRANSLATIONS[activeCue.text]?.[normTargetLang] || SAMPLE_TRANSLATIONS[activeCue.text]?.[targetLangCode];
+          const sample = SAMPLE_TRANSLATIONS[activeCue.text]?.[normLang] || SAMPLE_TRANSLATIONS[activeCue.text]?.[speakLang];
           if (sample) {
             text = sample;
           }
         }
         if (!text) {
           try {
-            text = await translateText(activeCue.text, 'auto', targetLangCode);
+            text = await translateText(activeCue.text, 'auto', speakLang);
           } catch {
             text = activeCue.text;
           }
@@ -439,14 +546,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
       if (!text) return;
 
-      const isOriginalSpoken = target === 'original' || text === activeCue.text;
-      const speakLang = isOriginalSpoken
-        ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
-        : targetLangCode;
-
-      // Update local translated state so presented text matches spoken text 1:1
-      if (target === 'translated' && !isOriginalSpoken) {
-        setLocalTranslatedText(text);
+      if (!isOriginal && (targetOrLang === 'translated' || targetOrLang === targetLangCode)) {
+        setLocalTranslatedMap((prev) => ({ ...prev, [activeCue.id]: text! }));
       }
 
       // Strict Mutual Exclusion: Pause YouTube video during TTS speech
@@ -458,7 +559,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       postIframeCommand('pauseVideo');
 
       setIsTTSSpeakingState(true);
-      setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
+      setActiveTTSTarget(isOriginal ? 'original' : targetOrLang);
       setActiveTTSCharIndex(0);
 
       try {
@@ -526,13 +627,15 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         try {
           unlockTTSAudio();
 
-          let textToSpeak = effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || '';
+          let textToSpeak = effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || (activeCue ? localTranslatedMap[activeCue.id] : '') || '';
 
           // Check authentic cached target subtitles first
           if (!textToSpeak && activeCue?.text) {
             const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
             if (srtCues && srtCues.length > 0) {
-              const match = srtCues.find((c) => c.id === activeCue.id) || srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.5);
+              const match =
+                srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
+                srtCues.find((c) => c.id === activeCue.id);
               if (match && match.text) {
                 textToSpeak = match.text;
               }
@@ -564,8 +667,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
               : targetLangCode;
 
-            if (!isOriginalSpoken) {
-              setLocalTranslatedText(textToSpeak);
+            if (!isOriginalSpoken && activeCue?.id) {
+              setLocalTranslatedMap((prev) => ({ ...prev, [activeCue.id]: textToSpeak }));
             }
 
             setIsTTSSpeakingState(true);
@@ -1081,120 +1184,29 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {effectiveDisplayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
-                            {showSubtitleTimestamps && activeCue && (
-                              <button
-                                type="button"
-                                id="cue-time-section"
-                                data-testid="cue-time-section"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (activeCue) seekTo(activeCue.start);
-                                }}
-                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
-                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump to time)`}
-                              >
-                                <Clock className="w-3 h-3 text-neutral-400" />
-                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
-                              </button>
-                            )}
-                            {(targetLangCode === 'he' || isHebrewHighlighted) && (
-                              <span
-                                id="defaulted-hebrew-subtitles-badge"
-                                data-testid="defaulted-hebrew-subtitles-badge"
-                                className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/90 border border-amber-500/80 px-2 py-0.5 rounded shrink-0 shadow-sm animate-pulse"
-                                title="Defaulted Hebrew Subtitles"
-                              >
-                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                <span>עברית (Hebrew)</span>
-                              </span>
-                            )}
-                            <p
-                              id="active-translated-cue-text"
-                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
-                                targetLangCode === 'he' || isHebrewHighlighted
-                                  ? 'text-amber-300 font-bold bg-amber-950/50 px-2.5 py-0.5 rounded-lg border border-amber-500/70 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
-                                  : 'text-emerald-400'
-                              } ${
-                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
-                              }`}
-                            >
-                              <HighlightableText
-                                text={effectiveDisplayTranslatedText}
-                                isSpeaking={isTranslatedSpeaking}
-                                activeCharIndex={currentSpeakingCharIndex}
-                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
-                                lang={targetLangCode}
-                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className={targetLangCode === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'}
-                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
-                              />
-                            </p>
-                            <button
-                              type="button"
-                              id="speak-translated-cue-btn"
-                              data-testid="speak-translated-cue-btn"
-                              onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 px-1.5 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-300 hover:text-white border border-emerald-700/60 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] relative z-50"
-                              title="Speak translated text (TTS with word highlight)"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                              <span>Play</span>
-                            </button>
-                            <button
-                              type="button"
-                              id="quick-toggle-tts-btn"
-                              data-testid="quick-toggle-tts-btn"
-                              onClick={toggleAutoTTS}
-                              className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold relative z-50 ${
-                                autoTTSEnabled
-                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
-                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
-                              }`}
-                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
-                            >
-                              {autoTTSEnabled ? (
-                                <Volume2 className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <VolumeX className="w-3 h-3 text-neutral-400" />
-                              )}
-                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
-                            </button>
-                            {onOpenTargetLanguageModal && (
-                              <button
-                                type="button"
-                                id="quick-target-lang-overlay-btn"
-                                data-testid="quick-target-lang-overlay-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
-                                title="Quickly select or edit target languages for translation"
-                              >
-                                <Globe className="w-3 h-3 text-indigo-400" />
-                                <span>{targetLangCode}</span>
-                              </button>
-                            )}
-                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal?.();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 relative z-50"
-                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
-                              >
-                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
-                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <ParallelTranslationsOverlay
+                          displayedTargetLanguages={displayedTargetLanguages}
+                          activeCue={activeCue}
+                          primaryTargetLang={targetLangCode}
+                          effectiveDisplayTranslatedText={effectiveDisplayTranslatedText}
+                          displayTranslatedText={displayTranslatedText}
+                          translatedCueText={translatedCueText}
+                          parallelTranslations={parallelTranslations}
+                          isHebrewHighlighted={isHebrewHighlighted}
+                          isTTSSpeakingState={isTTSSpeakingState}
+                          activeTTSTarget={activeTTSTarget}
+                          activeTTSCharIndex={activeTTSCharIndex}
+                          isSyncSpeaking={isSyncSpeaking}
+                          syncTTSLang={syncTTSLang}
+                          syncTTSCharIndex={syncTTSCharIndex}
+                          autoTTSEnabled={autoTTSEnabled}
+                          toggleAutoTTS={toggleAutoTTS}
+                          onOpenTargetLanguageModal={onOpenTargetLanguageModal}
+                          onSpeak={(tgt, txt, e) => handleSpeakCue(tgt, txt, e)}
+                          showSubtitleTimestamps={showSubtitleTimestamps}
+                          seekTo={seekTo}
+                          settings={settings}
+                        />
                         <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
                           {showSubtitleTimestamps && activeCue && (
                             <button
@@ -1235,7 +1247,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             type="button"
                             id="speak-orig-cue-btn"
                             data-testid="speak-orig-cue-btn"
-                            onClick={(e) => handleSpeakCue('original', e)}
+                            onClick={(e) => handleSpeakCue('original', undefined, e)}
                             className="p-1 px-1.5 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 relative z-50"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
@@ -1285,143 +1297,36 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             type="button"
                             id="speak-orig-cue-btn"
                             data-testid="speak-orig-cue-btn"
-                            onClick={(e) => handleSpeakCue('original', e)}
+                            onClick={(e) => handleSpeakCue('original', undefined, e)}
                             className="p-1 px-1.5 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 relative z-50"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
                             <Volume2 className="w-3 h-3" />
                           </button>
-                          {onOpenTargetLanguageModal && (
-                            <button
-                              type="button"
-                              id="quick-target-lang-overlay-btn"
-                              data-testid="quick-target-lang-overlay-btn"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onOpenTargetLanguageModal();
-                              }}
-                              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
-                              title="Quickly select or edit target languages for translation"
-                            >
-                              <Globe className="w-3 h-3 text-indigo-400" />
-                              <span>{targetLangCode}</span>
-                            </button>
-                          )}
                         </div>
-                        {effectiveDisplayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
-                            {showSubtitleTimestamps && activeCue && (
-                              <button
-                                type="button"
-                                id="cue-time-section"
-                                data-testid="cue-time-section"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (activeCue) seekTo(activeCue.start);
-                                }}
-                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
-                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))} (Click to jump)`}
-                              >
-                                <Clock className="w-3 h-3 text-neutral-400" />
-                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
-                              </button>
-                            )}
-                            {(targetLangCode === 'he' || isHebrewHighlighted) && (
-                              <span
-                                id="defaulted-hebrew-subtitles-badge"
-                                data-testid="defaulted-hebrew-subtitles-badge"
-                                className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/90 border border-amber-500/80 px-2 py-0.5 rounded shrink-0 shadow-sm animate-pulse"
-                                title="Defaulted Hebrew Subtitles"
-                              >
-                                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                                <span>עברית (Hebrew)</span>
-                              </span>
-                            )}
-                            <p
-                              id="active-translated-cue-text"
-                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
-                                targetLangCode === 'he' || isHebrewHighlighted
-                                  ? 'text-amber-300 font-bold bg-amber-950/50 px-2.5 py-0.5 rounded-lg border border-amber-500/70 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
-                                  : 'text-emerald-400'
-                              } ${
-                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
-                              }`}
-                            >
-                              <HighlightableText
-                                text={effectiveDisplayTranslatedText}
-                                isSpeaking={isTranslatedSpeaking}
-                                activeCharIndex={currentSpeakingCharIndex}
-                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
-                                lang={targetLangCode}
-                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className={targetLangCode === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'}
-                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
-                              />
-                            </p>
-                            <button
-                              type="button"
-                              id="speak-translated-cue-btn"
-                              data-testid="speak-translated-cue-btn"
-                              onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 px-1.5 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] relative z-50"
-                              title="Speak translated text (TTS with word highlight)"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                              <span>Play</span>
-                            </button>
-                            <button
-                              type="button"
-                              id="quick-toggle-tts-btn"
-                              data-testid="quick-toggle-tts-btn"
-                              onClick={toggleAutoTTS}
-                              className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold relative z-50 ${
-                                autoTTSEnabled
-                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
-                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
-                              }`}
-                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
-                            >
-                              {autoTTSEnabled ? (
-                                <Volume2 className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <VolumeX className="w-3 h-3 text-neutral-400" />
-                              )}
-                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
-                            </button>
-                            {onOpenTargetLanguageModal && (
-                              <button
-                                type="button"
-                                id="quick-target-lang-overlay-btn"
-                                data-testid="quick-target-lang-overlay-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md relative z-50"
-                                title="Quickly select or edit target languages for translation"
-                              >
-                                <Globe className="w-3 h-3 text-indigo-400" />
-                                <span>{targetLangCode}</span>
-                              </button>
-                            )}
-                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal?.();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 relative z-50"
-                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
-                              >
-                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
-                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <ParallelTranslationsOverlay
+                          displayedTargetLanguages={displayedTargetLanguages}
+                          activeCue={activeCue}
+                          primaryTargetLang={targetLangCode}
+                          effectiveDisplayTranslatedText={effectiveDisplayTranslatedText}
+                          displayTranslatedText={displayTranslatedText}
+                          translatedCueText={translatedCueText}
+                          parallelTranslations={parallelTranslations}
+                          isHebrewHighlighted={isHebrewHighlighted}
+                          isTTSSpeakingState={isTTSSpeakingState}
+                          activeTTSTarget={activeTTSTarget}
+                          activeTTSCharIndex={activeTTSCharIndex}
+                          isSyncSpeaking={isSyncSpeaking}
+                          syncTTSLang={syncTTSLang}
+                          syncTTSCharIndex={syncTTSCharIndex}
+                          autoTTSEnabled={autoTTSEnabled}
+                          toggleAutoTTS={toggleAutoTTS}
+                          onOpenTargetLanguageModal={onOpenTargetLanguageModal}
+                          onSpeak={(tgt, txt, e) => handleSpeakCue(tgt, txt, e)}
+                          showSubtitleTimestamps={showSubtitleTimestamps}
+                          seekTo={seekTo}
+                          settings={settings}
+                        />
                       </>
                     )}
                   </>
@@ -1860,96 +1765,29 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   <>
                     {showTranslatedOnTop ? (
                       <>
-                        {effectiveDisplayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pb-1 border-b border-neutral-800/60 flex-wrap">
-                            {showSubtitleTimestamps && activeCue && (
-                              <span
-                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
-                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
-                              >
-                                <Clock className="w-3 h-3 text-neutral-400" />
-                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
-                              </span>
-                            )}
-                            <p
-                              id="active-translated-cue-text"
-                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
-                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
-                              }`}
-                            >
-                              <HighlightableText
-                                text={effectiveDisplayTranslatedText}
-                                isSpeaking={isTranslatedSpeaking}
-                                activeCharIndex={currentSpeakingCharIndex}
-                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
-                                lang={targetLangCode}
-                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className="text-emerald-400"
-                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
-                              />
-                            </p>
-                            <button
-                              type="button"
-                              id="speak-translated-cue-btn"
-                              data-testid="speak-translated-cue-btn"
-                              onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
-                              title="Speak translated text (TTS with word highlight)"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                              <span>Play</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={toggleAutoTTS}
-                              className={`p-1 px-1.5 rounded-md border transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold ${
-                                autoTTSEnabled
-                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
-                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
-                              }`}
-                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
-                            >
-                              {autoTTSEnabled ? (
-                                <Volume2 className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <VolumeX className="w-3 h-3 text-neutral-400" />
-                              )}
-                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
-                            </button>
-                            {onOpenTargetLanguageModal && (
-                              <button
-                                type="button"
-                                id="quick-target-lang-overlay-btn"
-                                data-testid="quick-target-lang-overlay-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
-                                title="Quickly select or edit target languages for translation"
-                              >
-                                <Globe className="w-3 h-3 text-indigo-400" />
-                                <span>{targetLangCode}</span>
-                              </button>
-                            )}
-                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal?.();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold transition pointer-events-auto shrink-0 flex items-center gap-1"
-                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
-                              >
-                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
-                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <ParallelTranslationsOverlay
+                          displayedTargetLanguages={displayedTargetLanguages}
+                          activeCue={activeCue}
+                          primaryTargetLang={targetLangCode}
+                          effectiveDisplayTranslatedText={effectiveDisplayTranslatedText}
+                          displayTranslatedText={displayTranslatedText}
+                          translatedCueText={translatedCueText}
+                          parallelTranslations={parallelTranslations}
+                          isHebrewHighlighted={isHebrewHighlighted}
+                          isTTSSpeakingState={isTTSSpeakingState}
+                          activeTTSTarget={activeTTSTarget}
+                          activeTTSCharIndex={activeTTSCharIndex}
+                          isSyncSpeaking={isSyncSpeaking}
+                          syncTTSLang={syncTTSLang}
+                          syncTTSCharIndex={syncTTSCharIndex}
+                          autoTTSEnabled={autoTTSEnabled}
+                          toggleAutoTTS={toggleAutoTTS}
+                          onOpenTargetLanguageModal={onOpenTargetLanguageModal}
+                          onSpeak={(tgt, txt, e) => handleSpeakCue(tgt, txt, e)}
+                          showSubtitleTimestamps={showSubtitleTimestamps}
+                          seekTo={seekTo}
+                          settings={settings}
+                        />
                         <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
                           {showSubtitleTimestamps && activeCue && (
                             <span
@@ -1983,7 +1821,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             type="button"
                             id="speak-orig-cue-btn"
                             data-testid="speak-orig-cue-btn"
-                            onClick={(e) => handleSpeakCue('original', e)}
+                            onClick={(e) => handleSpeakCue('original', undefined, e)}
                             className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
@@ -2024,7 +1862,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                           </p>
                           <button
                             type="button"
-                            onClick={(e) => handleSpeakCue('original', e)}
+                            onClick={(e) => handleSpeakCue('original', undefined, e)}
                             className="p-1 rounded-md bg-neutral-900/90 hover:bg-neutral-800 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0"
                             title="Speak original subtitle (TTS with word highlight)"
                           >
@@ -2047,94 +1885,29 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                             </button>
                           )}
                         </div>
-                        {effectiveDisplayTranslatedText && (
-                          <div className="flex items-center justify-center gap-2 pt-0.5 flex-wrap">
-                            {showSubtitleTimestamps && activeCue && (
-                              <span
-                                className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap"
-                                title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}`}
-                              >
-                                <Clock className="w-3 h-3 text-neutral-400" />
-                                <span>{formatTimestamp(activeCue.start)} - {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}</span>
-                              </span>
-                            )}
-                            <p
-                              id="active-translated-cue-text"
-                              dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                              data-rtl={isTranslatedRtl ? 'true' : 'false'}
-                              className={`text-emerald-400 text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
-                                isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'
-                              }`}
-                            >
-                              <HighlightableText
-                                text={effectiveDisplayTranslatedText}
-                                isSpeaking={isTranslatedSpeaking}
-                                activeCharIndex={currentSpeakingCharIndex}
-                                syncMode={settings?.ttsSyncMode || 'word_boundary'}
-                                lang={targetLangCode}
-                                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                                className="text-emerald-400"
-                                activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
-                              />
-                            </p>
-                            <button
-                              type="button"
-                              onClick={(e) => handleSpeakCue('translated', e)}
-                              className="p-1 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px]"
-                              title="Speak translated text (TTS with word highlight)"
-                            >
-                              <Volume2 className="w-3 h-3" />
-                              <span>Play</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={toggleAutoTTS}
-                              className={`p-1 px-1.5 rounded-md border transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold ${
-                                autoTTSEnabled
-                                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
-                                  : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
-                              }`}
-                              title={autoTTSEnabled ? 'Auto-TTS Narration is ON (click to disable)' : 'Auto-TTS Narration is OFF (click to turn ON)'}
-                            >
-                              {autoTTSEnabled ? (
-                                <Volume2 className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <VolumeX className="w-3 h-3 text-neutral-400" />
-                              )}
-                              <span>{autoTTSEnabled ? 'TTS: ON' : 'TTS: OFF'}</span>
-                            </button>
-                            {onOpenTargetLanguageModal && (
-                              <button
-                                type="button"
-                                id="quick-target-lang-overlay-btn"
-                                data-testid="quick-target-lang-overlay-btn"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 hover:text-white border border-indigo-700/60 transition pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] uppercase font-mono font-bold shadow-md active:scale-95"
-                                title="Quickly select or edit target languages for translation"
-                              >
-                                <Globe className="w-3 h-3 text-indigo-400" />
-                                <span>{targetLangCode}</span>
-                              </button>
-                            )}
-                            {isSyncSpeaking && syncTTSLang && !isSyncTargetLangSpeaking && !isSyncOriginalSpeaking && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onOpenTargetLanguageModal?.();
-                                }}
-                                className="p-1 px-1.5 rounded-md bg-amber-950/90 hover:bg-amber-900 text-amber-300 border border-amber-700/80 text-[10px] font-mono font-semibold transition pointer-events-auto shrink-0 flex items-center gap-1"
-                                title={`TTS is currently speaking ${syncTTSLang.toUpperCase()}. Click to switch active language.`}
-                              >
-                                <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" />
-                                <span>TTS: {syncTTSLang.toUpperCase()}</span>
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <ParallelTranslationsOverlay
+                          displayedTargetLanguages={displayedTargetLanguages}
+                          activeCue={activeCue}
+                          primaryTargetLang={targetLangCode}
+                          effectiveDisplayTranslatedText={effectiveDisplayTranslatedText}
+                          displayTranslatedText={displayTranslatedText}
+                          translatedCueText={translatedCueText}
+                          parallelTranslations={parallelTranslations}
+                          isHebrewHighlighted={isHebrewHighlighted}
+                          isTTSSpeakingState={isTTSSpeakingState}
+                          activeTTSTarget={activeTTSTarget}
+                          activeTTSCharIndex={activeTTSCharIndex}
+                          isSyncSpeaking={isSyncSpeaking}
+                          syncTTSLang={syncTTSLang}
+                          syncTTSCharIndex={syncTTSCharIndex}
+                          autoTTSEnabled={autoTTSEnabled}
+                          toggleAutoTTS={toggleAutoTTS}
+                          onOpenTargetLanguageModal={onOpenTargetLanguageModal}
+                          onSpeak={(tgt, txt, e) => handleSpeakCue(tgt, txt, e)}
+                          showSubtitleTimestamps={showSubtitleTimestamps}
+                          seekTo={seekTo}
+                          settings={settings}
+                        />
                       </>
                     )}
                   </>
@@ -2397,6 +2170,45 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             </button>
           </div>
         </div>
+
+        {/* Real-time TTS Input & Queue Debugger (default ON, toggleable in Settings) */}
+        {settings.showTtsDebugQueue !== false && (
+          <div className="mt-3">
+            <TTSQueueDebugger
+              activeCue={activeCue}
+              nextCue={(() => {
+                const cues = getCachedSubtitles(videoId) || [];
+                if (!activeCue || cues.length === 0) return null;
+                const idx = cues.findIndex(
+                  (c) => c.id === activeCue.id || Math.abs(c.start - activeCue.start) < 0.3
+                );
+                return idx >= 0 && idx + 1 < cues.length ? cues[idx + 1] : null;
+              })()}
+              targetLangCode={targetLangCode}
+              translatedText={displayTranslatedText}
+              nextTranslatedText={(() => {
+                const cues = getCachedSubtitles(videoId) || [];
+                if (!activeCue || cues.length === 0) return null;
+                const idx = cues.findIndex(
+                  (c) => c.id === activeCue.id || Math.abs(c.start - activeCue.start) < 0.3
+                );
+                const next = idx >= 0 && idx + 1 < cues.length ? cues[idx + 1] : null;
+                if (!next) return null;
+                const srtCues = getCachedTargetSubtitles(videoId, normTargetLang) || [];
+                const match = srtCues.find(
+                  (c) => c.id === next.id || Math.abs(c.start - next.start) < 0.5
+                );
+                return match?.text || SAMPLE_TRANSLATIONS[next.text]?.[normTargetLang] || null;
+              })()}
+              isSpeaking={isOriginalSpeaking || isTranslatedSpeaking || isTTSSpeakingState}
+              isSyncActive={isSyncActive}
+              autoTTSEnabled={autoTTSEnabled}
+              onToggleAutoTTS={toggleAutoTTS}
+              onTestSpeak={playCurrentCueTTS}
+              onOpenSettings={onOpenSettings}
+            />
+          </div>
+        )}
       </div>
     );
   }

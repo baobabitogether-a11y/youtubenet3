@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity,
   AlertTriangle,
@@ -8,13 +8,21 @@ import {
   Radio,
   Copy,
   Check,
+  Volume2,
 } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setNetworkInspectorOpen } from '../store/networkSlice';
 import { setInspectorOpen } from '../store/errorsSlice';
 import { logBuffer } from '../utils/logBuffer';
+import { subscribeTTSDebug } from '../lib/ttsEngine';
 
-export const FloatingDiagnosticDock: React.FC = () => {
+interface FloatingDiagnosticDockProps {
+  onOpenTTSInputs?: () => void;
+}
+
+export const FloatingDiagnosticDock: React.FC<FloatingDiagnosticDockProps> = ({
+  onOpenTTSInputs,
+}) => {
   const dispatch = useAppDispatch();
   const { requests } = useAppSelector((state) => state.network);
   const { errors } = useAppSelector((state) => state.errors);
@@ -22,6 +30,14 @@ export const FloatingDiagnosticDock: React.FC = () => {
 
   const [isMinimized, setIsMinimized] = useState<boolean>(false);
   const [copiedPrompt, setCopiedPrompt] = useState<boolean>(false);
+  const [ttsInputsCount, setTtsInputsCount] = useState<number>(0);
+
+  useEffect(() => {
+    const unsub = subscribeTTSDebug((state) => {
+      setTtsInputsCount(state.inputs.length);
+    });
+    return unsub;
+  }, []);
 
   const handleQuickCopyLogs = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -107,6 +123,24 @@ export const FloatingDiagnosticDock: React.FC = () => {
               </>
             )}
           </button>
+
+          {/* Dedicated TTS Inputs View Button */}
+          {onOpenTTSInputs && (
+            <button
+              id="open-tts-inputs-floating-button"
+              data-testid="open-tts-inputs-floating-button"
+              type="button"
+              onClick={onOpenTTSInputs}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-300 border border-emerald-800/60 transition active:scale-95 font-medium"
+              title="Inspect TTS Input Texts (Newer on Top)"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>TTS</span>
+              <span className="px-1.5 py-0.2 rounded-full bg-emerald-900/80 text-[10px] font-mono font-bold text-emerald-200">
+                {ttsInputsCount}
+              </span>
+            </button>
+          )}
 
           {/* Network Inspector Button (Requirement 2) */}
           <button

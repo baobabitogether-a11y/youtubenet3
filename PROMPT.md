@@ -3,18 +3,20 @@
 ## Latest User Prompt
 
 ```text
-compact design - by defualt collect all logs. add quick copy to logs clipboard button to quickly report app status. together with a user complain the prompt should supply all info for troubleshooting the complain.
+add another view which by default shows the tts input texts. use a list control to present the newer on top .etc
 ```
 
 ## Actionable Tasks
 
-- [x] Task 1: Collect all logs by default with 500-capacity ring buffer and automatic network request body 15-char previews (Completed -> see `CHANGELOG.md`).
-- [x] Task 2: Quick-copy logs buttons integrated in compact design (`#quick-copy-logs-btn` in VideoPlayer top bar, `#navbar-copy-logs-button` in Navbar, `#quick-copy-diagnostics-btn` in Floating Dock) (Completed -> see `CHANGELOG.md`).
-- [x] Task 3: Troubleshooting prompt generator bundling optional user complaint input, live app state, network activity table, chronological logs, and AI troubleshooting instructions (Completed -> see `CHANGELOG.md`).
-- [x] Task 4: Added user complaint input (`#user-complaint-input`) and prompt copy button (`#copy-troubleshooting-prompt-button`) in `ActivityLogModal.tsx` (Completed -> see `CHANGELOG.md`).
+- [x] Task 1: Extend `ttsEngine.ts` to log and broadcast a full historical feed of TTS input records (`TTSInputRecord[]`) with `ttsInputsFeed` array prepended (newer on top).
+- [x] Task 2: Implement dedicated `TTSInputTextsView.tsx` with a high-density, searchable, filterable list control featuring "Newer on Top" ordering, auto-scroll pinning, repeat tags, quick copy, and audio test replay.
+- [x] Task 3: Set `TTSInputTextsView` as the default active tab in `TTSQueueDebugger.tsx` (`#tts-queue-debugger`).
+- [x] Task 4: Create `TTSInputTextsModal.tsx` and integrate standalone launch triggers in `Navbar.tsx` (`#navbar-tts-inputs-button`) and `FloatingDiagnosticDock.tsx` (`#open-tts-inputs-floating-button`).
+- [x] Task 5: Verify build, linting, and typecheck across entire application suite.
 
 ## Future / Backlog Tasks
 
-- [ ] Future Task: Parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel (implement later).
+- [ ] Future Task: Advanced multi-language TTS sequence playback (playing each language one after another in auto-TTS mode if configured).
+
 
 

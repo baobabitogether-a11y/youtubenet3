@@ -13,6 +13,164 @@ let simulatedBoundaryTimer: NodeJS.Timeout | null = null;
 let nativeTTSResolvers: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
 let isTTSCancelledByUser = false;
 
+export interface TTSDebugPayload {
+  text: string;
+  lang: string;
+  rate: number;
+  voiceName?: string;
+  engine: 'android_native' | 'web_speech' | 'audio_stream';
+  status: 'idle' | 'speaking' | 'completed' | 'cancelled' | 'error';
+  charIndex: number;
+  totalChars: number;
+  timestamp: string;
+  timeMs: number;
+  repeatCount: number;
+  isRepeat: boolean;
+  error?: string;
+}
+
+export interface TTSDebugHistoryItem {
+  id: string;
+  text: string;
+  lang: string;
+  rate: number;
+  engine: string;
+  status: string;
+  timestamp: string;
+  durationMs?: number;
+  repeatCount: number;
+  isRepeat: boolean;
+}
+
+export interface TTSInputRecord {
+  id: string;
+  index: number;
+  text: string;
+  lang: string;
+  rate: number;
+  engine: 'android_native' | 'web_speech' | 'audio_stream';
+  status: 'speaking' | 'completed' | 'cancelled' | 'error';
+  timestamp: string;
+  timeMs: number;
+  durationMs?: number;
+  charIndex: number;
+  totalChars: number;
+  wordCount: number;
+  repeatCount: number;
+  isRepeat: boolean;
+  error?: string;
+}
+
+let lastSpokenTextNormalized: string | null = null;
+let currentConsecutiveRepeatCount: number = 0;
+let totalTTSInputCounter: number = 0;
+
+let currentTTSDebugInput: TTSDebugPayload | null = null;
+const ttsDebugHistory: TTSDebugHistoryItem[] = [];
+const ttsInputsFeed: TTSInputRecord[] = [];
+const ttsDebugListeners = new Set<
+  (info: {
+    current: TTSDebugPayload | null;
+    history: TTSDebugHistoryItem[];
+    inputs: TTSInputRecord[];
+  }) => void
+>();
+
+function notifyTTSDebugListeners() {
+  const data = {
+    current: currentTTSDebugInput ? { ...currentTTSDebugInput } : null,
+    history: [...ttsDebugHistory],
+    inputs: [...ttsInputsFeed],
+  };
+  ttsDebugListeners.forEach((fn) => {
+    try {
+      fn(data);
+    } catch {}
+  });
+}
+
+function updateTTSDebugCharIndex(charIndex: number) {
+  if (currentTTSDebugInput) {
+    currentTTSDebugInput.charIndex = charIndex;
+  }
+  if (ttsInputsFeed.length > 0 && ttsInputsFeed[0].status === 'speaking') {
+    ttsInputsFeed[0].charIndex = charIndex;
+  }
+  notifyTTSDebugListeners();
+}
+
+function completeTTSDebugState(status: 'completed' | 'cancelled' | 'error', errMsg?: string) {
+  if (currentTTSDebugInput) {
+    currentTTSDebugInput.status = status;
+    if (errMsg) currentTTSDebugInput.error = errMsg;
+    const duration = Date.now() - currentTTSDebugInput.timeMs;
+    ttsDebugHistory.unshift({
+      id: `tts_hist_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text: currentTTSDebugInput.text,
+      lang: currentTTSDebugInput.lang,
+      rate: currentTTSDebugInput.rate,
+      engine: currentTTSDebugInput.engine,
+      status,
+      timestamp: currentTTSDebugInput.timestamp,
+      durationMs: duration,
+      repeatCount: currentTTSDebugInput.repeatCount,
+      isRepeat: currentTTSDebugInput.isRepeat,
+    });
+    if (ttsDebugHistory.length > 50) ttsDebugHistory.pop();
+  }
+
+  if (ttsInputsFeed.length > 0 && ttsInputsFeed[0].status === 'speaking') {
+    ttsInputsFeed[0].status = status;
+    ttsInputsFeed[0].durationMs = Date.now() - ttsInputsFeed[0].timeMs;
+    if (errMsg) ttsInputsFeed[0].error = errMsg;
+  }
+
+  notifyTTSDebugListeners();
+}
+
+export function getTTSDebugInfo(): {
+  current: TTSDebugPayload | null;
+  history: TTSDebugHistoryItem[];
+  inputs: TTSInputRecord[];
+} {
+  return {
+    current: currentTTSDebugInput ? { ...currentTTSDebugInput } : null,
+    history: [...ttsDebugHistory],
+    inputs: [...ttsInputsFeed],
+  };
+}
+
+export function getTTSInputsFeed(): TTSInputRecord[] {
+  return [...ttsInputsFeed];
+}
+
+export function clearTTSInputsFeed(): void {
+  ttsInputsFeed.length = 0;
+  notifyTTSDebugListeners();
+}
+
+export function getTTSRepeatCount(): number {
+  return currentConsecutiveRepeatCount;
+}
+
+export function isTTSRepeatingSameText(): boolean {
+  return currentConsecutiveRepeatCount > 1;
+}
+
+export function subscribeTTSDebug(
+  fn: (info: {
+    current: TTSDebugPayload | null;
+    history: TTSDebugHistoryItem[];
+    inputs: TTSInputRecord[];
+  }) => void
+): () => void {
+  ttsDebugListeners.add(fn);
+  fn(getTTSDebugInfo());
+  return () => {
+    ttsDebugListeners.delete(fn);
+  };
+}
+
 /**
  * Unlocks browser audio playback and speech synthesis on user interaction.
  * Call this upon any click, tap, or play button interaction.
@@ -196,41 +354,107 @@ export async function speakText(
   isTTSCancelledByUser = false;
   unlockTTSAudio();
 
-  logTTS(`Speech requested: "${text.substring(0, 45)}..." [lang: ${cleanLang}, rate: ${cleanRate}x, engine: ${getTTSEngineType()}]`);
-  activeBoundaryCallback = onBoundary || null;
+  const normalizedText = text.trim().toLowerCase();
+  if (lastSpokenTextNormalized && lastSpokenTextNormalized === normalizedText) {
+    currentConsecutiveRepeatCount++;
+  } else {
+    lastSpokenTextNormalized = normalizedText;
+    currentConsecutiveRepeatCount = 1;
+  }
 
-  // 1. Android Native TTS Bridge
-  if (isAndroidNativeTTS() && window.AndroidNativeShell?.speak) {
-    return new Promise((resolve, reject) => {
-      try {
-        const utteranceId = `native_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        currentNativeUtteranceId = utteranceId;
-        nativeTTSResolvers.set(utteranceId, { resolve, reject });
+  const isRepeat = currentConsecutiveRepeatCount > 1;
 
-        if (onBoundary) {
-          startSimulatedBoundaryProgression(text, cleanRate, onBoundary);
-        }
+  logTTS(
+    `Speech requested: "${text.substring(0, 45)}..." [lang: ${cleanLang}, rate: ${cleanRate}x, engine: ${getTTSEngineType()}${
+      isRepeat ? `, REPEAT: x${currentConsecutiveRepeatCount}` : ''
+    }]`
+  );
 
-        const success = window.AndroidNativeShell!.speak(text, cleanLang, cleanRate, utteranceId);
-        if (!success) {
-          logWarn('TTS', 'Native TTS speak call returned false, falling back to Web Speech / Audio');
-          nativeTTSResolvers.delete(utteranceId);
-          currentNativeUtteranceId = null;
-          fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, onBoundary)
+  currentTTSDebugInput = {
+    text,
+    lang: cleanLang,
+    rate: cleanRate,
+    voiceName,
+    engine: getTTSEngineType(),
+    status: 'speaking',
+    charIndex: 0,
+    totalChars: text.length,
+    timestamp: new Date().toLocaleTimeString(),
+    timeMs: Date.now(),
+    repeatCount: currentConsecutiveRepeatCount,
+    isRepeat,
+  };
+
+  totalTTSInputCounter++;
+  const inputRecord: TTSInputRecord = {
+    id: `tts_in_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    index: totalTTSInputCounter,
+    text,
+    lang: cleanLang,
+    rate: cleanRate,
+    engine: getTTSEngineType(),
+    status: 'speaking',
+    timestamp: new Date().toLocaleTimeString(),
+    timeMs: Date.now(),
+    charIndex: 0,
+    totalChars: text.length,
+    wordCount: text.trim().split(/\s+/).filter(Boolean).length,
+    repeatCount: currentConsecutiveRepeatCount,
+    isRepeat,
+  };
+  ttsInputsFeed.unshift(inputRecord);
+  if (ttsInputsFeed.length > 200) {
+    ttsInputsFeed.pop();
+  }
+
+  notifyTTSDebugListeners();
+
+  const wrappedBoundary = (charIdx: number) => {
+    updateTTSDebugCharIndex(charIdx);
+    if (onBoundary) onBoundary(charIdx);
+  };
+  activeBoundaryCallback = wrappedBoundary;
+
+  try {
+    // 1. Android Native TTS Bridge
+    if (isAndroidNativeTTS() && window.AndroidNativeShell?.speak) {
+      await new Promise<void>((resolve, reject) => {
+        try {
+          const utteranceId = `native_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          currentNativeUtteranceId = utteranceId;
+          nativeTTSResolvers.set(utteranceId, { resolve, reject });
+
+          if (wrappedBoundary) {
+            startSimulatedBoundaryProgression(text, cleanRate, wrappedBoundary);
+          }
+
+          const success = window.AndroidNativeShell!.speak(text, cleanLang, cleanRate, utteranceId);
+          if (!success) {
+            logWarn('TTS', 'Native TTS speak call returned false, falling back to Web Speech / Audio');
+            nativeTTSResolvers.delete(utteranceId);
+            currentNativeUtteranceId = null;
+            fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary)
+              .then(resolve)
+              .catch(reject);
+          }
+        } catch (err) {
+          logWarn('TTS', `Native TTS error, falling back: ${err}`);
+          fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary)
             .then(resolve)
             .catch(reject);
         }
-      } catch (err) {
-        logWarn('TTS', `Native TTS error, falling back: ${err}`);
-        fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, onBoundary)
-          .then(resolve)
-          .catch(reject);
-      }
-    });
-  }
+      });
+      completeTTSDebugState('completed');
+      return;
+    }
 
-  // 2. Web Speech API with automatic Audio Stream fallback
-  return fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, onBoundary);
+    // 2. Web Speech API with automatic Audio Stream fallback
+    await fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary);
+    completeTTSDebugState('completed');
+  } catch (err: any) {
+    completeTTSDebugState('error', err?.message || String(err));
+    throw err;
+  }
 }
 
 interface WordTimingInfo {
@@ -747,6 +971,10 @@ export function stopTTS(): void {
   currentUtterance = null;
   if (typeof window !== 'undefined') {
     (window as any).__activeTTSUtterance = null;
+  }
+
+  if (currentTTSDebugInput && currentTTSDebugInput.status === 'speaking') {
+    completeTTSDebugState('cancelled');
   }
 
   if (currentNativeUtteranceId) {
