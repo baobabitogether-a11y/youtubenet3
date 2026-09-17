@@ -8,6 +8,26 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Compact Mode Hover Highlights, Multi-Language TTS:ON Sequence & Hebrew Subtitle Defaulting
+
+- **Compact Mode Button Hover Highlights & Z-Index Stacking**:
+  - Implemented crisp, high-visibility mouse hover highlights (`hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto`) across all compact mode buttons, pill badges, and scrubbers.
+  - Raised button containers and interactive overlays to prominent z-index levels (`z-30`, `z-40`, and `z-50`), strictly higher than the video background canvas and iframe, guaranteeing full clickability and preventing click intercept bugs.
+- **Defaulted Hebrew (`he`) Target Subtitles & Default Language**:
+  - Configured Hebrew (`he`) as the defaulted initial target language in both `App.tsx` and `SubtitlesTeacherPanel.tsx` (`DEFAULT_TARGET_LANGUAGES` Hebrew item set to `enabled: true`).
+  - Added dedicated visual indicator (`#defaulted-hebrew-subtitles-badge`) with pulse animation and Hebrew RTL support.
+- **Multi-Language TTS Play Sequence & Defaulted Hebrew Highlight on `TTS:ON`**:
+  - When the user enables `TTS:ON` (`#toggle-auto-tts-button`, `#quick-toggle-tts-btn`, `#control-auto-tts-button`), an automated speech sequence is triggered across languages (Italian `it` -> English `en` -> Hebrew `he`).
+  - Upon conclusion of the sequence, the defaulted Hebrew translation is immediately selected, focused, and prominently highlighted with an amber glow border and active badge.
+- **Comprehensive Button Clickability & Actions Audit**:
+  - Verified click handling and direct execution across all compact mode controls:
+    - Back/Close (`#back-close-button`), Logs (`#open-logs-view-btn`), Target language modal (`#open-target-language-btn`, `#quick-target-lang-overlay-btn`), Quick more languages (`#quick-more-languages-btn`, `#quick-enable-more-languages-btn`), TTS toggle (`#toggle-auto-tts-button`, `#quick-toggle-tts-btn`, `#control-auto-tts-button`), Subtitle position cycler (`#cycle-subtitle-position-btn`), Settings modal trigger (`#open-settings-button`), Play/Pause buttons (`#center-play-pause-button`, `#control-play-pause-button`), Mute/Unmute toggle (`#volume-toggle-button`), Caption CC toggle (`#caption-toggle-button`), Cue timestamp seek button (`#cue-time-section`), and scrubber (`#player-progress-bar`).
+- **Verification & Documentation**:
+  - Ran `npm run update:readme mostuf25563`.
+  - Zero TypeScript compile errors via `lint_applet` (`tsc --noEmit`).
+  - Clean full production build via `compile_applet` (`npm run build`).
+- **Status**: Completed & 100% Verified.
+
 ### Default Settings, Compact Mode Quick Controls & Subtitle Timestamps
 
 - **Default Settings Architecture (`src/utils/appSettings.ts`)**:

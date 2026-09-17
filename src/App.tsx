@@ -119,10 +119,10 @@ export default function App() {
   const [interceptedData, setInterceptedData] = useState<InterceptedCaptionData | null>(null);
   const [captionsEnabled, setCaptionsEnabled] = useState<boolean>(true);
 
-  // Target Language Selection per video (Requirement 2, default to 'it' or user learning target)
+  // Target Language Selection per video (Default to 'he' Hebrew subtitles or user learning target)
   const [isTargetLangModalOpen, setIsTargetLangModalOpen] = useState<boolean>(false);
   const [selectedTargetLang, setSelectedTargetLang] = useState<string>(() => {
-    return getVideoTargetLang(videoId) || 'it';
+    return getVideoTargetLang(videoId) || 'he';
   });
   const [activeCue, setActiveCue] = useState<CaptionCue | null>(null);
   const [translatedCueText, setTranslatedCueText] = useState<string | null>(null);
@@ -131,7 +131,7 @@ export default function App() {
   useEffect(() => {
     if (!videoId) return;
     const existing = getVideoTargetLang(videoId);
-    setSelectedTargetLang(existing || 'it');
+    setSelectedTargetLang(existing || 'he');
   }, [videoId]);
 
   // Background check for newer APK version
@@ -1105,6 +1105,7 @@ export default function App() {
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
+            onSelectTargetLanguage={handleUpdateTargetLang}
             subtitlePosition={settings.subtitlePosition}
             showTranslatedOnTop={settings.showTranslatedOnTop}
             alwaysShowKeyControls={settings.alwaysShowKeyControls}
@@ -1362,6 +1363,7 @@ export default function App() {
             activeCue={activeCue}
             translatedCueText={translatedCueText}
             targetLanguage={selectedTargetLang}
+            onSelectTargetLanguage={handleUpdateTargetLang}
             subtitlePosition={settings.subtitlePosition}
             showTranslatedOnTop={settings.showTranslatedOnTop}
             alwaysShowKeyControls={settings.alwaysShowKeyControls}

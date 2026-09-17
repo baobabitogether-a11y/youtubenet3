@@ -3,29 +3,16 @@
 ## Latest User Prompt
 
 ```text
-add to settings:
-- by default dont tts-play (only show the target translation) [complact mode display - add quick control to turn it on ]
-- by default use only 1 target language [complact mode display - add quick button to enable presentation of more languages ]
-- by default also show the subtitles's time section besides the subtitles
+remember by default we use only 1 target language.
+after enabling tts - it shouldn't change the list of target languages!
+-
+we dont deal yet with translation to multiple languages in parrallel.
 ```
 
-## Active TODOs & Verification
+## Actionable Tasks
 
-- [x] **Task 1 (Settings Architecture & Defaults)**:
-  - Add `autoPlayTTS: boolean` (default `false`) to `AppSettings` in `src/utils/appSettings.ts`.
-  - Add `singleTargetLanguageMode: boolean` (default `true`) to `AppSettings` in `src/utils/appSettings.ts`.
-  - Add `showSubtitleTimestamps: boolean` (default `true`) to `AppSettings` in `src/utils/appSettings.ts`.
-  - Ensure `DEFAULT_TARGET_LANGUAGES` in `src/components/SubtitlesTeacherPanel.tsx` has only 1 language enabled by default (`it`).
-- [x] **Task 2 (Settings UI in SettingsModal.tsx)**:
-  - Add toggle for Auto-play TTS Narration (`#toggle-autoplay-tts-setting`, default OFF: only show target translation).
-  - Add toggle for Single Target Language Focus (`#toggle-single-target-lang-mode`, default ON: 1 target language).
-  - Add toggle for Subtitle Time Section (`#toggle-show-subtitle-timestamps`, default ON: show time section besides subtitles).
-- [x] **Task 3 (Compact Mode & VideoPlayer Display)**:
-  - By default, do not TTS-play (only show target translation). Add quick control (`#quick-toggle-tts-btn` and `#toggle-auto-tts-button`) in compact mode display to turn it ON.
-  - By default, use only 1 target language. Add quick button (`#quick-enable-more-languages-btn` / `#quick-more-languages-btn`) in compact mode display to enable presentation of more languages. Present multi-language translation cues when enabled.
-  - By default, show the subtitle's time section besides the subtitles (`#cue-time-section`).
-- [x] **Task 4 (Verification & Quality Gates)**:
-  - Run `npm run update:readme` to verify documentation synchronization.
-  - Run `lint_applet` (`tsc --noEmit`) to verify zero TypeScript errors.
-  - Run `compile_applet` (`npm run build`) to verify clean production build.
-  - Move completed tasks to `CHANGELOG.md`.
+- [ ] Task 1: Enforce single target language by default (`singleTargetLanguageMode: true`, only 1 target language active/enabled).
+- [ ] Task 2: Ensure enabling TTS does NOT change the list of target languages or append extra languages to target languages.
+- [ ] Task 3: Remove parallel multi-language translation and multi-language presentation in parallel from compact mode / VideoPlayer / SubtitlesTeacherPanel.
+- [ ] Task 4: Ensure TTS speaks only for the single active target language (or source/active language as selected) and highlights that cue without modifying target languages.
+- [ ] Task 5: Verify zero TypeScript errors (`lint_applet`), build cleanly (`compile_applet`), run `npm run update:readme mostuf25563`, and document in `CHANGELOG.md`.

@@ -77,28 +77,20 @@ interface SubtitlesTeacherPanelProps {
 
 const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
   {
-    id: 'lang-it',
-    code: 'it',
-    name: 'Italian (Italiano)',
-    ttsRate: 1.0,
-    enabled: true,
-    color: '#10b981',
-  },
-  {
-    id: 'lang-ar',
-    code: 'ar',
-    name: 'Arabic (العربية)',
-    ttsRate: 1.0,
-    enabled: false,
-    color: '#14b8a6',
-  },
-  {
     id: 'lang-he',
     code: 'he',
     name: 'Hebrew (עברית)',
     ttsRate: 1.0,
-    enabled: false,
+    enabled: true,
     color: '#8b5cf6',
+  },
+  {
+    id: 'lang-it',
+    code: 'it',
+    name: 'Italian (Italiano)',
+    ttsRate: 1.0,
+    enabled: false,
+    color: '#10b981',
   },
   {
     id: 'lang-ru',
