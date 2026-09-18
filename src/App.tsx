@@ -227,10 +227,8 @@ export default function App() {
 
   // Synchronize translated text for active cue in real time
   useEffect(() => {
-    // Immediately clear previous translation on cue change to prevent stale cues from lingering or being spoken
-    setTranslatedCueText(null);
-
     if (!activeCue?.text) {
+      setTranslatedCueText((prev) => (prev === null ? prev : null));
       return;
     }
     const targetLang = selectedTargetLang || 'he';
@@ -244,18 +242,24 @@ export default function App() {
         srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
         srtCues.find((c) => c.id === activeCue.id);
       if (match && match.text) {
-        setTranslatedCueText(match.text);
+        setTranslatedCueText((prev) => (prev === match.text ? prev : match.text));
         return;
       }
     }
 
+    setTranslatedCueText((prev) => (prev === null ? prev : null));
+
     let isSubscribed = true;
     translateText(activeCue.text, 'auto', targetLang)
       .then((t) => {
-        if (isSubscribed && t) setTranslatedCueText(t);
+        if (isSubscribed && t) {
+          setTranslatedCueText((prev) => (prev === t ? prev : t));
+        }
       })
       .catch(() => {
-        if (isSubscribed) setTranslatedCueText(null);
+        if (isSubscribed) {
+          setTranslatedCueText((prev) => (prev === null ? prev : null));
+        }
       });
     return () => {
       isSubscribed = false;
@@ -278,6 +282,28 @@ export default function App() {
     currentTTSLang: null,
     activeCharIndex: null,
   });
+
+  const handleSyncSpeakingChange = useCallback(
+    (isSpeaking: boolean, text: string | null, lang: string | null, charIdx: number | null) => {
+      setSyncTTSState((prev) => {
+        if (
+          prev.isSpeaking === isSpeaking &&
+          prev.currentTTSText === text &&
+          prev.currentTTSLang === lang &&
+          prev.activeCharIndex === charIdx
+        ) {
+          return prev;
+        }
+        return {
+          isSpeaking,
+          currentTTSText: text,
+          currentTTSLang: lang,
+          activeCharIndex: charIdx,
+        };
+      });
+    },
+    []
+  );
 
   // Shared Link feedback state (complaint if not youtube link, or success)
   const [sharedLinkComplaint, setSharedLinkComplaint] = useState<string | null>(null);
@@ -462,6 +488,20 @@ export default function App() {
   useEffect(() => {
     if (!videoId) return;
 
+    // For demo video, immediately load authentic multi-lingual SRT fixtures
+    if (videoId === 'FcRzAdI8R9U') {
+      const srt = FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
+      if (srt && srt.length > 0) {
+        setCustomCues(srt);
+        saveCachedSubtitles('FcRzAdI8R9U', srt, {
+          title: 'YouTube Language Learning Demo Video (Authentic Multi-lingual SRT)',
+          originalUrl: DEFAULT_VIDEO_URL,
+        });
+        setFetchError(null);
+        return;
+      }
+    }
+
     // Check dedicated subtitle cache
     const cached = getCachedSubtitles(videoId);
     if (cached && cached.length > 0) {
@@ -488,7 +528,7 @@ export default function App() {
         setInterceptedData(null);
       }
     }
-  }, [videoId]);
+  }, [videoId, library]);
 
   // Handler to process any shared link (via URL param, native Android intent, or Share dialog)
   const handleProcessSharedLink = useCallback((rawLink: string) => {
@@ -1078,8 +1118,8 @@ export default function App() {
 
   const activeCues = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
 
-  // Performance & Display Mode: Default Compact View (fast, tap-to-show controls, no scrolling)
-  if (settings.compactView ?? true) {
+  // Performance & Display Mode: Compact View when enabled by user (fast, tap-to-show controls, no scrolling)
+  if (Boolean(settings.compactView)) {
     return (
       <div
         id="compact-view-container"
@@ -1583,14 +1623,7 @@ export default function App() {
               setActiveCue(cue);
             }}
             onSyncStateChange={setIsSyncActive}
-            onSyncSpeakingChange={(isSpeaking, text, lang, charIdx) => {
-              setSyncTTSState({
-                isSpeaking,
-                currentTTSText: text,
-                currentTTSLang: lang,
-                activeCharIndex: charIdx,
-              });
-            }}
+            onSyncSpeakingChange={handleSyncSpeakingChange}
           />
         </div>
       </main>

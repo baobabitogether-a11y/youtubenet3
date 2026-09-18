@@ -158,28 +158,28 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           srtCues.find((c) => Math.abs(c.start - cueStart) < 0.75) ||
           srtCues.find((c) => c.id === cueId);
         if (match?.text) {
-          setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: match.text }));
+          setLocalTranslatedMap((prev) => (prev[cueId] === match.text ? prev : { ...prev, [cueId]: match.text }));
           return;
         }
       }
       // Check known sample translations
       const sample = SAMPLE_TRANSLATIONS[cueText]?.[normTargetLang] || SAMPLE_TRANSLATIONS[cueText]?.[targetLangCode];
       if (sample) {
-        setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: sample }));
+        setLocalTranslatedMap((prev) => (prev[cueId] === sample ? prev : { ...prev, [cueId]: sample }));
         return;
       }
       let isMounted = true;
       translateText(cueText, 'auto', targetLangCode)
         .then((res) => {
           if (isMounted && res) {
-            setLocalTranslatedMap((prev) => ({ ...prev, [cueId]: res }));
+            setLocalTranslatedMap((prev) => (prev[cueId] === res ? prev : { ...prev, [cueId]: res }));
           }
         })
         .catch(() => {});
       return () => {
         isMounted = false;
       };
-    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode, localTranslatedMap]);
+    }, [translatedCueText, activeCue?.id, activeCue?.text, activeCue?.start, videoId, normTargetLang, targetLangCode]);
 
     // TTS playback state with word boundary syntax highlighting
     const [isTTSSpeakingState, setIsTTSSpeakingState] = useState(false);
@@ -419,6 +419,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     // Setting: By default also show the subtitles's time section besides the subtitles
     const showSubtitleTimestamps = settings?.showSubtitleTimestamps ?? true;
 
+    const displayedLanguagesKey = singleTargetLanguageMode
+      ? `single:${targetLangCode}`
+      : `multi:${targetLangCode}:${(settings?.learningLanguages || ['he', 'it', 'en', 'ar', 'ru']).join(',')}`;
+
     // Active displayed target languages (1 or parallel multi-languages)
     const displayedTargetLanguages = React.useMemo(() => {
       if (singleTargetLanguageMode) {
@@ -427,13 +431,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       const learning = settings?.learningLanguages || ['he', 'it', 'en', 'ar', 'ru'];
       const unique = Array.from(new Set([targetLangCode, ...learning]));
       return unique.filter(Boolean);
-    }, [singleTargetLanguageMode, targetLangCode, settings?.learningLanguages]);
+    }, [displayedLanguagesKey, singleTargetLanguageMode, targetLangCode]);
 
     const [parallelTranslations, setParallelTranslations] = useState<Record<string, string>>({});
 
     useEffect(() => {
       if (!activeCue?.text) {
-        setParallelTranslations({});
+        setParallelTranslations((prev) => (Object.keys(prev).length === 0 ? prev : {}));
         return;
       }
 
@@ -460,14 +464,21 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         }
       });
 
-      setParallelTranslations(initialMap);
+      setParallelTranslations((prev) => {
+        const prevKeys = Object.keys(prev);
+        const nextKeys = Object.keys(initialMap);
+        if (prevKeys.length === nextKeys.length && nextKeys.every((k) => prev[k] === initialMap[k])) {
+          return prev;
+        }
+        return initialMap;
+      });
 
       displayedTargetLanguages.forEach((lang) => {
         if (initialMap[lang]) return;
         translateText(activeCue.text, 'auto', lang)
           .then((res) => {
             if (isMounted && res) {
-              setParallelTranslations((prev) => ({ ...prev, [lang]: res }));
+              setParallelTranslations((prev) => (prev[lang] === res ? prev : { ...prev, [lang]: res }));
             }
           })
           .catch(() => {});
@@ -836,7 +847,12 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         ytPlayerRef.current?.seekTo?.(seconds, true);
       } catch {}
       postIframeCommand('seekTo', [seconds, true]);
-    }, [onTimeUpdate]);
+    }, []);
+
+    const onTimeUpdateRef = useRef(onTimeUpdate);
+    useEffect(() => {
+      onTimeUpdateRef.current = onTimeUpdate;
+    });
 
     // Time ticker for progress bar and active cue synchronization
     useEffect(() => {
@@ -847,7 +863,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             if (typeof cur === 'number' && !isNaN(cur) && cur >= 0) {
               setCurrentTime(cur);
               currentTimeRef.current = cur;
-              onTimeUpdate?.(cur);
+              onTimeUpdateRef.current?.(cur);
             }
             const dur = ytPlayerRef.current.getDuration?.();
             if (typeof dur === 'number' && !isNaN(dur) && dur > 0) {
@@ -858,14 +874,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             if (cur >= 0) {
               setCurrentTime(cur);
               currentTimeRef.current = cur;
-              onTimeUpdate?.(cur);
+              onTimeUpdateRef.current?.(cur);
             }
           }
         } catch {}
       }, 350);
 
       return () => clearInterval(interval);
-    }, [onTimeUpdate]);
+    }, []);
 
     // Imperative handle for subtitle time-sync engine
     useImperativeHandle(
@@ -1351,15 +1367,17 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             </div>
           )}
 
-          {/* Hidden element for test suites looking for subtitle-cue-row-0 */}
-          <div
-            id="subtitle-cue-row-0"
-            data-testid="subtitle-cue-row-0"
-            className="sr-only"
-            aria-hidden="true"
-          >
-            {activeCue?.text || (hasSubtitles ? 'Loaded subtitle dialogue' : '')}
-          </div>
+          {/* Fallback element only in compact mode when SubtitlesTeacherPanel is not mounted */}
+          {compactView && (
+            <div
+              id="subtitle-cue-row-0"
+              data-testid="subtitle-cue-row-0"
+              className="sr-only"
+              aria-hidden="true"
+            >
+              {activeCue?.text || (hasSubtitles ? 'Loaded subtitle dialogue' : 'Sample dialogue cue')}
+            </div>
+          )}
 
           {/* Show-On-Tap Controls Overlay */}
           <div

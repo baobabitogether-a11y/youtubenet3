@@ -150,8 +150,8 @@ export const SUPPORTED_LANGUAGES_CATALOG: { code: string; name: string }[] = [
 ];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  // Compact Design: Enabled by default for high performance, tap-to-show controls, and clutter-free viewing; toggleable in Settings
-  compactView: true,
+  // Compact Design: Disabled by default for complete workstation layout (Navbar, LinkInputBar, Player, SubtitlesTeacherPanel); toggleable in Settings
+  compactView: false,
   showExpandedControls: true,
   showTeacherPanel: true,
   showLinkBar: true,

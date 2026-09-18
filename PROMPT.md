@@ -3,20 +3,15 @@
 ## Latest User Prompt
 
 ```text
-add another view which by default shows the tts input texts. use a list control to present the newer on top .etc
+fix all tests. later after pushing to github the github actions shell use the workflow ymls to update the relevant online websites (test result/demo/readme links)
 ```
 
 ## Actionable Tasks
 
-- [x] Task 1: Extend `ttsEngine.ts` to log and broadcast a full historical feed of TTS input records (`TTSInputRecord[]`) with `ttsInputsFeed` array prepended (newer on top).
-- [x] Task 2: Implement dedicated `TTSInputTextsView.tsx` with a high-density, searchable, filterable list control featuring "Newer on Top" ordering, auto-scroll pinning, repeat tags, quick copy, and audio test replay.
-- [x] Task 3: Set `TTSInputTextsView` as the default active tab in `TTSQueueDebugger.tsx` (`#tts-queue-debugger`).
-- [x] Task 4: Create `TTSInputTextsModal.tsx` and integrate standalone launch triggers in `Navbar.tsx` (`#navbar-tts-inputs-button`) and `FloatingDiagnosticDock.tsx` (`#open-tts-inputs-floating-button`).
-- [x] Task 5: Verify build, linting, and typecheck across entire application suite.
-
-## Future / Backlog Tasks
-
-- [ ] Future Task: Advanced multi-language TTS sequence playback (playing each language one after another in auto-TTS mode if configured).
-
-
+- [ ] Task 1: Inspect and run test suites (Playwright `e2e/web.spec.ts`, `e2e/emulation.spec.ts`, and Cypress specs) to identify all test failures or environment discrepancies.
+- [ ] Task 2: Fix any failing tests or test environment setup (ensuring web, emulation, and reporting scripts run cleanly and produce valid outputs).
+- [ ] Task 3: Ensure GitHub Actions workflow files (`.github/workflows/deploy-demo.yml`, `web.yml`, `emulation.yml`, `update-readme.yml`, `release-apk.yml`) correctly update online websites and links (GitHub Pages test runner portal, live app, demo, README, Mochawesome, Playwright traces, and Android emulator report).
+- [ ] Task 4: Update `COVERAGE.md` to reflect all passing test suites and coverage matrix.
+- [ ] Task 5: Verify zero compilation and linting errors (`lint_applet` and `compile_applet`).
+- [ ] Task 6: Move completed tasks to `CHANGELOG.md` and summarize for the user.
 

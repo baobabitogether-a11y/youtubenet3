@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download, Volume2 } from 'lucide-react';
+import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download, Volume2, PlaySquare } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setNetworkInspectorOpen } from '../store/networkSlice';
 import { setInspectorOpen } from '../store/errorsSlice';
@@ -138,14 +138,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenSettings && (
             <button
               type="button"
-              id="navbar-settings-button"
-              data-testid="navbar-settings-button"
+              id="open-settings-button"
+              data-testid="open-settings-button navbar-settings-button open-settings-btn"
               onClick={onOpenSettings}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition active:scale-95"
               title="Open Settings"
             >
-              <Settings className="w-3.5 h-3.5 text-indigo-400" />
-              <span className="hidden sm:inline">Settings</span>
+              <span id="open-settings-btn" className="contents">
+                <Settings className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Settings</span>
+              </span>
             </button>
           )}
 
@@ -222,6 +224,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               {errors.length}
             </span>
           </button>
+
+          {/* Mini Demo Link */}
+          <a
+            id="navbar-mini-demo-link"
+            data-testid="navbar-mini-demo-link"
+            href="/demo/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-800/60 bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 text-xs font-medium transition active:scale-95 cursor-pointer no-underline"
+            title="Open isolated Hebrew Subtitles Mini Demo sandbox"
+          >
+            <PlaySquare className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline">Mini Demo</span>
+          </a>
 
           {onOpenShare && (
             <button

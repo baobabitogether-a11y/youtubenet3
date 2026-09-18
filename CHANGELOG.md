@@ -8,6 +8,72 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Multi-Fork Management, README Sync Workflow, and Isolated Hebrew Mini Demo (`demo/`)
+
+- **Multi-Fork Repository Identity Synchronization**:
+  - Upgraded `scripts/update-readme.mjs` to dynamically parse and synchronize both repository owner and repository name across all markdown links, CI status badges, release APK downloads, raw curl scripts, and GitHub Pages URLs.
+  - Added support for standard GitHub Actions environment variables (`GITHUB_REPOSITORY`, `GITHUB_REPOSITORY_OWNER`) and CLI arguments (`node scripts/update-readme.mjs [owner] [repo]`).
+- **Automated GitHub Actions Workflow Recipe (`.github/workflows/update-readme.yml`)**:
+  - Created `.github/workflows/update-readme.yml` triggered on push to default branches (`main`, `master`) and `workflow_dispatch`.
+  - Automatically runs `node scripts/update-readme.mjs`, detects changes via `git diff --exit-code README.md`, and commits synchronized links directly to the branch under `github-actions[bot]`.
+- **Isolated Hebrew Subtitle Mini Demo (`/demo/`)**:
+  - Created a zero-dependency reference sandbox under `demo/` (`demo/index.html`, `demo/mini-demo.ts`, `demo/hebrewCues.ts`).
+  - Bundled the complete, authentic 1,578-cue Hebrew subtitle track (`he.srt`) for demonstration video `FcRzAdI8R9U`.
+  - Implemented pure video-to-subtitle time synchronization without Redux, multi-language matrices, TTS debuggers, or native bridge layers.
+  - Implemented high-contrast RTL Hebrew subtitle overlay with exact time-frame cues (`start` -> `end`), interactive cue table with smooth auto-scroll to active cue, and instant click-to-seek functionality.
+  - Configured multi-entry compilation in `vite.config.ts` (`dist/demo/index.html`) and updated `server.ts` to serve `/demo/` in both development and production modes.
+  - Integrated direct links to the Mini Demo in the main application `Navbar.tsx` (`#navbar-mini-demo-link`) and in the Cypress test runner portal (`cypress/runner-template.html` and `scripts/prepare-report.mjs`).
+- **AGENTS.md System Documentation Expansion**:
+  - Added **Section 10: Multi-Fork Management & Autonomous Repository Identity Synchronization** detailing URL replacement rules and the GitHub Actions automation recipe.
+  - Added **Section 11: Handling Repeated App Logic Issues via Isolated Mini Demo (`demo/`)** documenting the sandbox architecture and diagnostic verification workflows for coding agents.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Both `index.html`, `demo/index.html`, and `dist/server.cjs` compiled with 0 errors.
+
+### Infinite Re-render Loop Resolution ("Maximum update depth exceeded")
+
+- **Root Cause Analysis**:
+  - Identified circular state updates and unstable hook dependencies across `App.tsx`, `SubtitlesTeacherPanel.tsx`, and `VideoPlayer.tsx`.
+  - In `App.tsx`: The `onSyncSpeakingChange` inline prop was recreated on every render and continuously dispatched state updates to `setSyncTTSState` without equality checks, which caused continuous parent re-renders and re-triggered `SubtitlesTeacherPanel` effects.
+  - In `SubtitlesTeacherPanel.tsx`: `useEffect` hooks for `onSyncStateChange` and `onSyncSpeakingChange` directly depended on callback function references, while `selectedTargetLang` synchronization echoed `onSelectTargetLang` notifications back to parent in a feedback loop.
+  - In `VideoPlayer.tsx`: The active time interval (350ms) tore down and recreated whenever `onTimeUpdate` changed reference; `displayedTargetLanguages` computed a new array reference on every render, triggering `setParallelTranslations` which in turn re-rendered `VideoPlayer`; `localTranslatedMap` state updater lacked reference equality guards and was present in its own effect dependency array.
+- **Implemented Fixes & Protections**:
+  - **Memoized & Guarded `handleSyncSpeakingChange` (`App.tsx`)**:
+    - Created stable `useCallback` with empty dependencies.
+    - Inside `setSyncTTSState`, compared previous state properties (`isSpeaking`, `currentTTSText`, `currentTTSLang`, `activeCharIndex`) and returned `prev` when values were unchanged, preventing React from scheduling redundant re-renders.
+  - **Single-Pass Subtitle Sync & Cached Track Priority (`App.tsx`)**:
+    - Eliminated intermediate `setTranslatedCueText(null)` flash when an authentic cached SRT translation is available immediately, returning `prev` if text matches.
+  - **Callback Stabilization via Refs (`SubtitlesTeacherPanel.tsx`)**:
+    - Implemented `onSyncStateChangeRef` and `onSyncSpeakingChangeRef` so effects only fire upon actual primitive state transitions (`isSyncActive`, `isSpeaking`, `currentTTSText`, etc.).
+    - Added `notifyParent` guard to `handleSelectActiveTargetLang(code, notifyParent = true)` to prevent echoing target language updates back to parent when receiving `selectedTargetLang` prop changes.
+  - **Stabilized `VideoPlayer.tsx` Time Ticker & Translations Engine**:
+    - Switched `onTimeUpdate` to `onTimeUpdateRef` in `VideoPlayer.tsx`, ensuring the 350ms playback interval runs continuously without repeated teardown/rebuild cycles.
+    - Added stable string key `displayedLanguagesKey` to `displayedTargetLanguages` memoization.
+    - Added reference equality checks in `setParallelTranslations` and `setLocalTranslatedMap` returning `prev` when content is unchanged.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build` with Vite SPA & backend esbuild): Succeeded with 0 errors.
+
+### AGENTS.md Architecture, Artifact Hygiene, GitHub Actions CI/CD, & Simplification Blueprints
+
+- **Zero-Error Verification & Strict Quality Standard**:
+  - Validated zero TypeScript compilation errors via `tsc --noEmit`.
+  - Confirmed clean production bundle compilation for client SPA and Express backend via `vite build` and `esbuild`.
+- **Repository Artifact Hygiene & `.gitignore` Exclusions**:
+  - Removed all transient test artifacts, video recordings, and build debris from the repository (`playwright-report/`, `test-results/`, `cypress/reports/`, `android-emulator-report.html`, `dist/`).
+  - Strengthened `.gitignore` with comprehensive exclusions protecting the repository from tracking test media, reports, traces, Android debug APKs, Gradle caches, and build outputs.
+- **Continuous GitHub Pages Deployment via GitHub Actions (`web.yml`, `deploy-demo.yml`, `emulation.yml`)**:
+  - Configured `web.yml` with `contents: write`, `pages: write`, and automated deployment step to publish updated `./cypress/reports` (Playwright reports, Cypress Mochawesome suites, videos, screenshots) directly to `gh-pages` with `keep_files: true`.
+  - Documented pipeline interactions across web build deployment, live E2E testing, and Option C Android emulator verification.
+- **In-Depth Complicated Application Logic Analysis & Simplification Blueprints in `AGENTS.md`**:
+  - Added Section 9 documenting the root causes of complexity and concrete architectural refactoring blueprints for:
+    1. `VideoPlayer.tsx` & Auto-TTS Playback Loop State Coordination (`usePlayerPlaybackSync` finite state machine and sub-component decomposition).
+    2. Multi-tier Subtitle Acquisition & Native WebView Interception (Chain-of-Responsibility `ISubtitleProvider` pattern and isolated parsing pipeline).
+    3. Three-Tier Hardware/Web/Audio TTS Narration Engine & Cancellation (Adapter pattern `ITtsVoiceEngine` and tokenized `AbortController` cancellation).
+    4. Single vs Parallel Language Model Switching & Dynamic Track Alignment (Normalized 2D translation store `translations[cueId][lang]` and proximity window matching).
+- **Component Flow & UI Registry Updates**:
+  - Documented newly added diagnostic and multi-language components in `AGENTS.md` (`TTSQueueDebugger`, `TTSInputTextsView`, `TTSInputTextsModal`, `ParallelTranslationsOverlay`, `urlStateManager`).
+
 ### Dedicated TTS Input Texts List View (Newer on Top Default View)
 
 - **TTS Input Tracking Feed in Core Engine (`ttsEngine.ts`)**:
