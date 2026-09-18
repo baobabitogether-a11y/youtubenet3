@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="he" dir="ltr" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YouTube Subtitle Sync Mini Demo (Hebrew Isolated Reference)</title>
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <style>
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background-color: #0c0d10;
+        color: #f3f4f6;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        background: #13151b;
+        border-bottom: 1px solid #232733;
+        padding: 1rem 1.5rem;
+      }
+      .header-content {
+        max-width: 1400px;
+        margin: 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+      }
+      .badge-demo {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(14, 165, 233, 0.15);
+        color: #38bdf8;
+        border: 1px solid rgba(56, 189, 248, 0.3);
+        padding: 0.2rem 0.6rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .main-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        width: 100%;
+        padding: 1.25rem;
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 1.5rem;
+        flex: 1;
+      }
+      @media (max-width: 1024px) {
+        .main-container {
+          grid-template-columns: 1fr;
+        }
+      }
+      .card {
+        background: #13151c;
+        border: 1px solid #222634;
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      .player-wrapper {
+        position: relative;
+        width: 100%;
+        padding-top: 56.25%; /* 16:9 Aspect Ratio */
+        background: #000;
+      }
+      .player-wrapper iframe, .player-wrapper #yt-player-frame {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      .subtitle-overlay {
+        margin: 0.75rem 1rem;
+        padding: 0.85rem 1.25rem;
+        background: rgba(15, 23, 42, 0.95);
+        border: 1px solid #0284c7;
+        border-radius: 8px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+      }
+      .overlay-time {
+        font-family: monospace;
+        font-size: 0.75rem;
+        color: #38bdf8;
+        margin-bottom: 0.25rem;
+      }
+      .overlay-text {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #ffffff;
+        direction: rtl;
+        text-align: right;
+        line-height: 1.5;
+      }
+      .controls-bar {
+        padding: 0.75rem 1rem;
+        background: #181b24;
+        border-top: 1px solid #222634;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      button.btn {
+        background: #252a38;
+        color: #f3f4f6;
+        border: 1px solid #374151;
+        padding: 0.45rem 0.85rem;
+        border-radius: 6px;
+        font-size: 0.825rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      button.btn:hover {
+        background: #333a4d;
+        color: #fff;
+      }
+      button.btn-primary {
+        background: #0284c7;
+        border-color: #0369a1;
+        color: #fff;
+      }
+      button.btn-primary:hover {
+        background: #0369a1;
+      }
+      .status-pill {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: #0f1117;
+        border: 1px solid #222634;
+        padding: 0.3rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-family: monospace;
+        color: #94a3b8;
+      }
+      .status-pill strong {
+        color: #38bdf8;
+      }
+      .cues-header {
+        padding: 0.85rem 1rem;
+        background: #181b24;
+        border-bottom: 1px solid #222634;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+      }
+      .cues-scroll-container {
+        flex: 1;
+        overflow-y: auto;
+        max-height: 540px;
+      }
+      table.cues-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .cue-row {
+        cursor: pointer;
+        border-bottom: 1px solid #1e222e;
+        transition: background-color 0.15s ease;
+      }
+      .cue-row:hover {
+        background-color: #1a1e2b;
+      }
+      .cue-row.active-row {
+        background-color: rgba(2, 132, 199, 0.22) !important;
+        border-left: 4px solid #38bdf8;
+      }
+      .cue-row.active-row td {
+        color: #fff;
+        font-weight: 600;
+      }
+      .dir-rtl {
+        direction: rtl;
+        text-align: right;
+      }
+      .search-input {
+        background: #0c0d12;
+        border: 1px solid #2b3142;
+        color: #f3f4f6;
+        padding: 0.35rem 0.65rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        outline: none;
+        width: 180px;
+      }
+      .search-input:focus {
+        border-color: #38bdf8;
+      }
+      .info-box {
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        background: rgba(30, 41, 59, 0.4);
+        border: 1px solid #334155;
+        border-radius: 8px;
+        font-size: 0.775rem;
+        color: #94a3b8;
+        line-height: 1.5;
+      }
+      .info-box strong {
+        color: #f1f5f9;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-content">
+        <div>
+          <div style="display: flex; align-items: center; gap: 0.65rem; margin-bottom: 0.25rem;">
+            <h1 style="font-size: 1.15rem; font-weight: 700;">YouTube Subtitle Sync Mini Demo</h1>
+            <span class="badge-demo">Isolated Reference Sandbox</span>
+          </div>
+          <p style="font-size: 0.8rem; color: #94a3b8;">
+            Zero-dependency time-synchronization verification harness &bull; Video: <code>FcRzAdI8R9U</code> &bull; Single Track: Hebrew (<code>he</code>)
+          </p>
+        </div>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <a href="/" style="font-size: 0.8rem; color: #38bdf8; text-decoration: none; padding: 0.4rem 0.75rem; border: 1px solid #0369a1; border-radius: 6px; background: rgba(2, 132, 199, 0.1);">
+            &larr; Return to Full App
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main class="main-container">
+      <!-- Left Column: Video Player & Subtitle Overlay -->
+      <section class="card">
+        <div class="player-wrapper">
+          <div id="yt-player-frame"></div>
+        </div>
+
+        <!-- Active Synchronized Subtitle Overlay -->
+        <div id="subtitle-overlay" class="subtitle-overlay">
+          <div id="overlay-time" class="overlay-time">00:00:00.120 ➔ 00:00:05.879 (5.76s)</div>
+          <div id="overlay-text" class="overlay-text">טוען כתוביות בעברית...</div>
+        </div>
+
+        <!-- Quick Playback & Cue Controls -->
+        <div class="controls-bar">
+          <button id="play-pause-btn" class="btn btn-primary">▶ Play</button>
+          <button id="rewind-5s-btn" class="btn">⏪ -5s</button>
+          <button id="forward-5s-btn" class="btn">⏩ +5s</button>
+          <button id="replay-cue-btn" class="btn">🔁 Replay Cue</button>
+          <button id="prev-cue-btn" class="btn">⏮ Prev</button>
+          <button id="next-cue-btn" class="btn">⏭ Next</button>
+
+          <div style="margin-left: auto; display: flex; gap: 0.5rem;">
+            <div class="status-pill">Time: <strong id="current-time-display">00:00.000</strong></div>
+            <div class="status-pill">Cue: <strong id="active-cue-id">#1</strong></div>
+          </div>
+        </div>
+
+        <!-- Architectural Explainer -->
+        <div style="padding: 1rem;">
+          <div class="info-box">
+            <strong>🎯 Purpose of the Mini Demo Reference:</strong>
+            This mini app demonstrates direct 1:1 time synchronization between the YouTube IFrame player and the authentic Hebrew subtitle track (<code>he.srt</code>) without Redux slices, TTS queue debuggers, multi-language matrices, or native WebView interception layers. Use this isolated page to verify time precision, boundary triggers, and seeking accuracy without architectural noise.
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Synchronized Subtitle Cue List -->
+      <section class="card">
+        <div class="cues-header">
+          <div style="display: flex; align-items: center; gap: 0.5rem;">
+            <h2 style="font-size: 0.95rem; font-weight: 600;">Hebrew Subtitles Cue Table</h2>
+            <span id="cues-count" style="font-size: 0.75rem; color: #94a3b8; background: #0c0d12; padding: 0.15rem 0.5rem; border-radius: 4px;">1578 Cues</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 0.6rem;">
+            <input id="cue-search-input" type="text" class="search-input" placeholder="Search Hebrew text..." />
+            <label style="font-size: 0.75rem; color: #94a3b8; display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">
+              <input id="autoscroll-toggle" type="checkbox" checked />
+              Auto-scroll
+            </label>
+          </div>
+        </div>
+
+        <div id="cues-container" class="cues-scroll-container">
+          <table class="cues-table">
+            <thead>
+              <tr style="background: #101218; font-size: 0.725rem; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; text-align: left; position: sticky; top: 0; z-index: 10;">
+                <th style="padding: 0.5rem 0.75rem; width: 4rem; text-align: center;">Cue</th>
+                <th style="padding: 0.5rem 0.75rem; width: 11rem;">Time Frame</th>
+                <th style="padding: 0.5rem 1rem; text-align: right; direction: rtl;">Hebrew Text (עברית)</th>
+                <th style="padding: 0.5rem 0.75rem; width: 4rem; text-align: center;">Seek</th>
+              </tr>
+            </thead>
+            <tbody id="cues-tbody">
+              <!-- Populated dynamically by mini-demo.ts -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/demo/mini-demo.ts"></script>
+  </body>
+</html>

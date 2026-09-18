@@ -435,13 +435,21 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     externalTranslations: tableTranslations,
   });
 
-  useEffect(() => {
-    onSyncStateChange?.(isSyncActive);
-  }, [isSyncActive, onSyncStateChange]);
+  const onSyncStateChangeRef = useRef(onSyncStateChange);
+  const onSyncSpeakingChangeRef = useRef(onSyncSpeakingChange);
 
   useEffect(() => {
-    onSyncSpeakingChange?.(isSpeaking, currentTTSText, currentTTSLang, activeCharIndex);
-  }, [isSpeaking, currentTTSText, currentTTSLang, activeCharIndex, onSyncSpeakingChange]);
+    onSyncStateChangeRef.current = onSyncStateChange;
+    onSyncSpeakingChangeRef.current = onSyncSpeakingChange;
+  });
+
+  useEffect(() => {
+    onSyncStateChangeRef.current?.(isSyncActive);
+  }, [isSyncActive]);
+
+  useEffect(() => {
+    onSyncSpeakingChangeRef.current?.(isSpeaking, currentTTSText, currentTTSLang, activeCharIndex);
+  }, [isSpeaking, currentTTSText, currentTTSLang, activeCharIndex]);
 
   // Calculate effective active index from sync engine or passed activeCue
   const effectiveActiveIndex = useMemo(() => {
@@ -630,7 +638,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     return '';
   };
 
-  const handleSelectActiveTargetLang = (code: string) => {
+  const handleSelectActiveTargetLang = (code: string, notifyParent = true) => {
     setActiveTargetLang(code);
     const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
 
@@ -656,7 +664,9 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     }
     setTargetLanguages(updatedLangs);
     persistCurrentVideoSettings(updatedLangs, playOrder, code);
-    onSelectTargetLang?.(code);
+    if (notifyParent) {
+      onSelectTargetLang?.(code);
+    }
 
     logInfo('Translation', `Target language switched to ${code}. Fetching native timedtext translation (tlang=${code})...`);
     dispatch(
@@ -708,9 +718,9 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   // Synchronize when selectedTargetLang prop from parent updates
   useEffect(() => {
     if (selectedTargetLang && selectedTargetLang !== activeTargetLang) {
-      handleSelectActiveTargetLang(selectedTargetLang);
+      handleSelectActiveTargetLang(selectedTargetLang, false);
     }
-  }, [selectedTargetLang]);
+  }, [selectedTargetLang, activeTargetLang]);
 
   const toggleLanguage = (id: string) => {
     const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;

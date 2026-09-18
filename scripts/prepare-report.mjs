@@ -112,6 +112,17 @@ if (fs.existsSync(distDir)) {
   console.log('Copied built web application to cypress/reports/app');
 }
 
+// 4c. Copy built mini demo into cypress/reports/demo
+const distDemoDir = path.join(distDir, 'demo');
+const demoDestDir = path.join(reportsDir, 'demo');
+if (fs.existsSync(distDemoDir)) {
+  fs.cpSync(distDemoDir, demoDestDir, { recursive: true });
+  console.log('Copied built mini demo to cypress/reports/demo');
+} else if (fs.existsSync(path.join(rootDir, 'demo'))) {
+  fs.cpSync(path.join(rootDir, 'demo'), demoDestDir, { recursive: true });
+  console.log('Copied root demo to cypress/reports/demo');
+}
+
 // 5. Generate Standalone Mochawesome HTML if not already created by reporter
 const mochawesomeHtmlPath = path.join(reportsDir, 'mochawesome.html');
 if (!fs.existsSync(mochawesomeHtmlPath)) {

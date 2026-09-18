@@ -99,10 +99,11 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
 
   return (
     <div
-      id="activity-log-modal"
-      data-testid="activity-log-modal"
+      id="activity-logs-modal"
+      data-testid="activity-logs-modal activity-log-modal"
       className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-fadeIn"
     >
+      <span id="activity-log-modal" className="contents" />
       <div className="bg-neutral-900 border border-neutral-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="p-4 sm:px-6 border-b border-neutral-800 flex items-center justify-between gap-4 bg-neutral-900/90">
@@ -130,8 +131,8 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
 
           <div className="flex items-center gap-2">
             <button
-              id="copy-all-logs-button"
-              data-testid="copy-all-logs-button"
+              id="copy-all-logs-btn"
+              data-testid="copy-all-logs-btn copy-all-logs-button"
               onClick={handleCopyAll}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                 copied
@@ -140,17 +141,19 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
               }`}
               title="Copy entire log stream to clipboard"
             >
-              {copied ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Copied ({entries.length})</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-neutral-400" />
-                  <span>Copy All Logs</span>
-                </>
-              )}
+              <span id="copy-all-logs-button" className="contents">
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Copied ({entries.length})</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-neutral-400" />
+                    <span>Copy All Logs</span>
+                  </>
+                )}
+              </span>
             </button>
 
             <button
@@ -163,12 +166,15 @@ export function ActivityLogModal({ isOpen, onClose }: ActivityLogModalProps) {
             </button>
 
             <button
-              id="close-activity-log-modal-button"
+              id="close-logs-modal-btn"
+              data-testid="close-logs-modal-btn close-activity-log-modal-button"
               onClick={onClose}
               className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-neutral-200 border border-neutral-700"
               title="Close log modal"
             >
-              <X className="w-4 h-4" />
+              <span id="close-activity-log-modal-button" className="contents">
+                <X className="w-4 h-4" />
+              </span>
             </button>
           </div>
         </div>
