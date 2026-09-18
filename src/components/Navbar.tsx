@@ -244,19 +244,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Mini Demo Link */}
-          <a
+          {/* SRT Tracks / Demo Fixtures */}
+          <button
+            type="button"
             id="navbar-mini-demo-link"
             data-testid="navbar-mini-demo-link"
-            href="/demo/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-800/60 bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 text-xs font-medium transition active:scale-95 cursor-pointer no-underline"
-            title="Open isolated Hebrew Subtitles Mini Demo sandbox"
+            onClick={onOpenArtifacts}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-sky-800/60 bg-sky-950/40 hover:bg-sky-900/60 text-sky-300 text-xs font-medium transition active:scale-95 cursor-pointer"
+            title="Browse cached authentic SRT subtitle tracks"
           >
             <PlaySquare className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline">Mini Demo</span>
-          </a>
+            <span className="hidden sm:inline">SRT Tracks</span>
+          </button>
 
           {onOpenShare && (
             <button

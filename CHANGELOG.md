@@ -8,6 +8,27 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Web Companion Demo Showcase, Direct SRT Synchronization & Modern Glassmorphic Workstation
+
+- **Platform Separation & Web Companion Demo**:
+  - Differentiated between Android Native Shell (`android-shell/`) and Web Companion Demo (landing page).
+  - Configured `compactView` to default to `false` in web environments so the landing page opens directly into the dual-view workstation (Video Player + Subtitles Teacher Panel).
+  - Added the **Web Demo Showcase Bar** (`#web-demo-showcase-bar`) highlighting authentic multi-lingual artifacts (1,578 cues in `ru`, `he`, `it`, `en`, `ar` for video `FcRzAdI8R9U`), 1-click default demo reset (`#demo-load-default-video-btn`), and cached `.srt` browser access (`#demo-open-artifacts-btn`).
+  - Suppressed native APK update banners and installer dialogs in browser/web environments, cleanly branding the web experience as the Interactive Web Companion.
+- **Direct SRT Speech Flow Bar & Zero-Queue Subtitle Synchronization**:
+  - Deprecated and removed artificial speech queues and `TTSQueueDebugger` (`"don't use queue, you have SRT subtitles"`).
+  - Eliminated the naive cue-start pause loop in `VideoPlayer.tsx`.
+  - Implemented the authentic sentence-by-sentence dual-language learning loop in `useSyncEngine.ts`: video plays foreign dialogue for cue duration -> video automatically pauses -> hardware/WebSpeech TTS speaks target translation -> video automatically resumes next cue.
+  - Enforced strict mutual exclusion: video is paused during speech narration and TTS is silenced before video playback begins.
+  - Built the **Direct SRT Speech Flow Bar** beneath the video player with live state badges (Speaking vs Playing Video Dialogue vs Ready), 1-click language switchers (`he`, `it`, `en`, `ar`, `ru`), sentence sync toggle, loop toggle, and prev/next cue steppers.
+- **Accurate Subtitle Selection & Word-Boundary Visual Highlighting**:
+  - Re-engineered `handlePlayerTimeUpdate` and the interval playback ticker to accurately select subtitle cues with a 0.15s grace period and smooth 1.0s gap retention, completely eliminating stuck cues during gaps and seeks.
+  - Updated `HighlightableText.tsx` and `src/index.css` to render high-contrast amber glowing highlights (`data-testid="active-tts-word-highlight"`) synchronized with speech cadence.
+- **Documentation & Architecture Updates**:
+  - Updated `AGENTS.md` Sections 1, 3, 5, and 11 to document the Direct SRT architecture, Web Demo Showcase Bar, and platform separation rules.
+  - Created `DEPRECATED.md` documenting the retired `/demo/` sandbox, deprecated `TTSQueueDebugger`, and legacy cue-start pause loops.
+  - Replaced dead `/demo/` link in `Navbar.tsx` with the interactive `#navbar-mini-demo-link` SRT Tracks trigger.
+
 ### Fix Dev Server Startup (Decouple Server Imports from SRT Loader)
 
 - **Root Cause**: `server.ts` imported `src/utils/youtube.ts`, which imported `DEFAULT_VIDEO_ID` and `DEFAULT_VIDEO_URL` from `src/config/appConfig.ts`. `appConfig.ts` imported `FCRZADI8R9U_LANGUAGE_SRT_TRACKS` from `defaultSubtitles.ts`, which imported `test/fixtures/languages/srtStrings.ts` (containing static raw `.srt` imports). When `tsx server.ts` started the dev server, Node's runtime ESM module loader attempted to load `.srt` files and threw `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".srt"`.

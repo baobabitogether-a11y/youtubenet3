@@ -212,12 +212,14 @@ const SETTINGS_STORAGE_KEY = STORAGE_KEYS.SETTINGS_STORAGE_KEY;
 
 export function loadAppSettings(): AppSettings {
   if (typeof window === 'undefined') return DEFAULT_APP_SETTINGS;
+  const isAndroid = isAndroidAppEnvironment();
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
         ...DEFAULT_APP_SETTINGS,
+        compactView: parsed.compactView !== undefined ? parsed.compactView : isAndroid,
         ...parsed,
         methods: {
           ...DEFAULT_APP_SETTINGS.methods,
@@ -228,7 +230,10 @@ export function loadAppSettings(): AppSettings {
   } catch (err) {
     console.warn('[AppSettings] Failed to load stored settings:', err);
   }
-  return DEFAULT_APP_SETTINGS;
+  return {
+    ...DEFAULT_APP_SETTINGS,
+    compactView: isAndroid,
+  };
 }
 
 export function saveAppSettings(settings: AppSettings): void {
