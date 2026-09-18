@@ -8,6 +8,39 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Resolution of Inactive TTS Speech Synthesis and Coordinated Speech Flow Execution
+
+- **Non-Destructive Video Pause (`VideoPlayer.tsx`)**:
+  - Removed destructive `stopTTS()` call from `useImperativeHandle -> pause()`. Pausing or buffering the video player must never prematurely abort active or upcoming speech synthesis narration.
+  - Ensured `unlockTTSAudio()` is invoked during initial user gesture interactions (clicking Play, Speak SRT Cue, or starting Sync Engine) so browser `AudioContext` and `speechSynthesis` permissions are activated without autoplay blocks.
+- **Audio Unlocking & Safety Fallbacks (`useSyncEngine.ts`)**:
+  - Integrated `unlockTTSAudio()` into `playSegmentTTS`, `startFromSegment`, and `speakDirectText`.
+  - Added language fallback safety in `playSegmentTTS` ensuring that if active target languages filter to empty, the engine defaults to the primary target language rather than silently dropping narration.
+  - Guaranteed `textToSpeak` fallback to `cue.text` if on-demand translation is temporarily blank.
+  - Added safety timeout guards (`maxWaitMs`) to the segment waiting loop so that video loading delays or iframe buffering never lock the sync loop indefinitely.
+- **Coordinated Auto-TTS Narration & Direct Speech Flow**:
+  - Restored the coordinated pause-and-resume loop in `VideoPlayer.tsx` ticker for smooth sentence-by-sentence foreign language listening with synchronized word highlighting.
+  - Enabled "Speak SRT Cue" manual trigger to gracefully target active cue or initial subtitle cue (`cachedCues[0]`), ensuring instant speech testing even before video start time.
+  - Verified full clean build and type-checking via `compile_applet` and `lint_applet`.
+
+### Video Playback & TTS-Play Synchronization Alignment with Reference Architecture (base44.json)
+
+- **Sync Loop Redesign (`useSyncEngine.ts`)**:
+  - Refactored `useSyncEngine.ts` to strictly implement the reference `startFromSegment` loop pattern from `base44.json`.
+  - Replaced secondary abstractions with a direct sequential `while` loop that orchestrates segment playback and TTS narration based on `playOrder` (`video_first` or `tts_first`).
+  - Implemented mutual exclusion: video is strictly paused while TTS speaks (`speakText`), and TTS stops immediately when the loop or segment is canceled or paused.
+  - Added native Screen Wake Lock integration (`requestWakeLock` / `releaseWakeLock`) in `src/lib/ttsEngine.ts` and `src/hooks/useSyncEngine.ts` to keep the screen active during long continuous playback sessions.
+  - Implemented `handleYTStateChange(state)` to seamlessly latch into the sync engine when YouTube playback begins, auto-detecting the segment corresponding to the current video playback position (`findSegmentAtTime`).
+  - Implemented `handleTimeUpdate(time)` to track the active segment index without causing desynchronization during TTS speech.
+  - Added `goToSegment`, `togglePlayPause`, and segment navigation methods (`goNext`, `goPrev`, `nextCue`, `prevCue`).
+- **Video Player Cleanup & Rogue Interval Removal (`VideoPlayer.tsx`)**:
+  - Removed the rogue secondary Auto-TTS loop from the 250ms/350ms time ticker in `VideoPlayer.tsx`, eliminating duplicate speech triggers, fighting timers, and desync.
+  - Added `onStateChange` and `onTogglePlayPause` props to `VideoPlayer` and wired YouTube's native `onStateChange` event to notify the sync engine.
+  - Updated `togglePlayPause` in `VideoPlayer` to delegate to `syncEngine.togglePlayPause` when active, ensuring immediate stop of TTS and clean video pausing.
+- **Top-Level Orchestration Wiring (`App.tsx`)**:
+  - Connected `syncEngine.handleYTStateChange` and `syncEngine.togglePlayPause` to both Compact View and Expanded View `<VideoPlayer>` instances.
+  - Forwarded `handlePlayerTimeUpdate` into `syncEngine.handleTimeUpdate(t)` for accurate, non-conflicting cue tracking.
+
 ### React State Update Error Fix, TTS Speech Synthesis Pipeline Enhancement, and Default Compact Mode Verification
 
 - **React State Reconciliation & Cross-Component Update Error Resolution**:

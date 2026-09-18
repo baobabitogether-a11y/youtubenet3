@@ -454,6 +454,7 @@ export default function App() {
 
   const handlePlayerTimeUpdate = useCallback((t: number) => {
     if (!activeCues || activeCues.length === 0) return;
+    syncEngine.handleTimeUpdate(t);
     const match = activeCues.find((c) => t >= c.start - 0.1 && t <= (c.start + (c.duration || 2.5)) + 0.15);
     setActiveCue((prev) => {
       if (match) {
@@ -1332,14 +1333,8 @@ export default function App() {
             }}
             compactView={true}
             isSyncActive={syncEngine.isSyncActive}
-            onToggleSync={() => {
-              if (syncEngine.isSyncActive) {
-                syncEngine.pauseSync();
-              } else {
-                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
-                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
-              }
-            }}
+            onToggleSync={syncEngine.togglePlayPause}
+            onStateChange={syncEngine.handleYTStateChange}
             isLoopingCue={syncEngine.isLoopingCue}
             onToggleLoopCue={syncEngine.toggleLoopCue}
             onNextCue={syncEngine.nextCue}
@@ -1701,14 +1696,8 @@ export default function App() {
             captionsEnabled={captionsEnabled}
             compactView={false}
             isSyncActive={syncEngine.isSyncActive}
-            onToggleSync={() => {
-              if (syncEngine.isSyncActive) {
-                syncEngine.pauseSync();
-              } else {
-                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
-                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
-              }
-            }}
+            onToggleSync={syncEngine.togglePlayPause}
+            onStateChange={syncEngine.handleYTStateChange}
             isLoopingCue={syncEngine.isLoopingCue}
             onToggleLoopCue={syncEngine.toggleLoopCue}
             onNextCue={syncEngine.nextCue}

@@ -423,6 +423,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     observedUrl: observedTimedTextUrl,
     videoId,
     externalTranslations: tableTranslations,
+    enabled: !syncEngineProp,
   });
 
   const activeSync = syncEngineProp || internalSyncEngine;

@@ -1,6 +1,13 @@
 import { useState, useRef, useCallback, useEffect, type RefObject } from 'react';
 import { CaptionCue, TargetLanguage, SyncPlayOrder, YouTubePlayerHandle } from '../types';
-import { speakText, stopTTS, isTTSSpeaking, getTTSEngineType, unlockTTSAudio } from '../lib/ttsEngine';
+import {
+  speakText,
+  stopTTS,
+  unlockTTSAudio,
+  getTTSEngineType,
+  requestWakeLock,
+  releaseWakeLock,
+} from '../lib/ttsEngine';
 import {
   translateText,
   translateOnDemandCues,
@@ -14,6 +21,14 @@ import {
   hasCachedSrtForVideoAndLanguage,
 } from '../../test/fixtures/defaultSubtitles';
 
+export function findSegmentAtTime(segments: CaptionCue[], timeSec: number): number {
+  if (!segments || segments.length === 0) return -1;
+  return segments.findIndex((seg) => {
+    const end = seg.start + (seg.duration || 2.5);
+    return timeSec >= seg.start && timeSec < end;
+  });
+}
+
 interface UseSyncEngineProps {
   cues: CaptionCue[];
   sourceLang?: string;
@@ -23,6 +38,7 @@ interface UseSyncEngineProps {
   observedUrl?: string | null;
   videoId?: string;
   externalTranslations?: Record<string, Record<string, string>>;
+  enabled?: boolean;
 }
 
 export function useSyncEngine({
@@ -34,6 +50,7 @@ export function useSyncEngine({
   observedUrl,
   videoId,
   externalTranslations,
+  enabled = true,
 }: UseSyncEngineProps) {
   const [activeCueIndex, setActiveCueIndex] = useState<number>(-1);
   const [isSyncActive, setIsSyncActive] = useState<boolean>(false);
@@ -42,8 +59,10 @@ export function useSyncEngine({
   const [currentTTSText, setCurrentTTSText] = useState<string | null>(null);
   const [activeCharIndex, setActiveCharIndex] = useState<number | null>(null);
   const [isLoopingCue, setIsLoopingCue] = useState<boolean>(false);
+
   const isLoopingCueRef = useRef<boolean>(false);
   isLoopingCueRef.current = isLoopingCue;
+
   const toggleLoopCue = useCallback(() => {
     setIsLoopingCue((prev) => {
       const next = !prev;
@@ -51,6 +70,7 @@ export function useSyncEngine({
       return next;
     });
   }, []);
+
   const [translations, setTranslations] = useState<Record<string, Record<string, string>>>(() => {
     const vId = videoId || 'FcRzAdI8R9U';
     const initialMap: Record<string, Record<string, string>> = {};
@@ -70,7 +90,9 @@ export function useSyncEngine({
   });
 
   const abortRef = useRef<boolean>(false);
-  const isLoopRunningRef = useRef<boolean>(false);
+  const isActiveRef = useRef<boolean>(false);
+  const isPlayingTTS = useRef<boolean>(false);
+
   const translationsRef = useRef(translations);
   translationsRef.current = translations;
 
@@ -85,10 +107,11 @@ export function useSyncEngine({
     return () => {
       abortRef.current = true;
       stopTTS();
+      releaseWakeLock();
     };
   }, []);
 
-  // When target languages or settings change, stop any active TTS speech so new settings take effect immediately
+  // When target languages or settings change, stop any active TTS speech
   useEffect(() => {
     languagesRef.current = languages;
     if (isSpeaking) {
@@ -100,16 +123,16 @@ export function useSyncEngine({
     }
   }, [languages]);
 
-  // Step 2.3 & 4.4: On-demand fallback translation for next X=4 records ONLY when playback reaches a cue
+  // On-demand fallback translation for next cues
   useEffect(() => {
-    if (!cues || cues.length === 0 || activeCueIndex < 0) return;
+    if (!enabled || !cues || cues.length === 0 || activeCueIndex < 0) return;
     const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
     const enabledLangs = isSingleLang
       ? languages.filter((l) => l.enabled).slice(0, 1)
       : languages.filter((l) => l.enabled);
+
     enabledLangs.forEach(async (lang) => {
       try {
-        // Collect existing valid translations so we never overwrite them
         const existingLangTrans: Record<string, string> = {};
         cues.forEach((c) => {
           const fromCurrent = translationsRef.current[c.id]?.[lang.code];
@@ -137,7 +160,6 @@ export function useSyncEngine({
             Object.entries(nextTranslations).forEach(([cId, text]) => {
               const cue = cues.find((c) => c.id === cId);
               const isOrig = cue && text.trim().toLowerCase() === cue.text.trim().toLowerCase();
-              // CRITICAL: NEVER overwrite with the original sentence or blank string!
               if (text && (!isOrig || lang.code === sourceLang)) {
                 const currentVal = updated[cId]?.[lang.code];
                 const currentIsOrig = cue && currentVal && currentVal.trim().toLowerCase() === cue.text.trim().toLowerCase();
@@ -154,7 +176,7 @@ export function useSyncEngine({
         console.warn(`[SyncEngine] On-demand translation error for ${lang.code}:`, err);
       }
     });
-  }, [activeCueIndex, cues, languages, sourceLang]);
+  }, [activeCueIndex, cues, languages, sourceLang, enabled]);
 
   /**
    * Helper to retrieve or fetch translation for a cue
@@ -166,7 +188,7 @@ export function useSyncEngine({
       if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
       const vId = videoId || 'FcRzAdI8R9U';
 
-      // 1. Check external and local component translations for this specific cue ID first
+      // 1. Check external and local component translations
       const fromExt = externalTranslationsRef.current?.[cueId]?.[cleanLang] || externalTranslationsRef.current?.[cueId]?.[targetLangCode];
       if (fromExt && fromExt.trim().toLowerCase() !== cue.text.trim().toLowerCase()) {
         return fromExt;
@@ -177,7 +199,7 @@ export function useSyncEngine({
         return fromRef;
       }
 
-      // 2. Check local authentic SRT fixture by timestamp proximity first, then cue ID
+      // 2. Check local authentic SRT fixture
       if (hasCachedSrtForVideoAndLanguage(vId, cleanLang)) {
         const srtCues = getCachedSrtForVideoAndLanguage(vId, cleanLang);
         if (srtCues && srtCues.length > 0) {
@@ -207,225 +229,210 @@ export function useSyncEngine({
   );
 
   /**
-   * Plays TTS for all enabled languages for a given cue in the exact configured sequence
-   * Enforces strict mutual exclusion: YouTube video MUST remain paused while TTS speaks
+   * Play TTS for the active segment using reference implementation pattern
    */
-  const playCueTTSSequence = useCallback(
-    async (cue: CaptionCue, enabledLangs: TargetLanguage[]): Promise<boolean> => {
-      // RULE: Never play both tts-play and youtube playback together!
+  const playSegmentTTS = useCallback(
+    async (segIndex: number) => {
+      if (abortRef.current) return;
       unlockTTSAudio();
-      playerRef.current?.pause();
-      await new Promise((r) => setTimeout(r, 120));
+      isPlayingTTS.current = true;
+      setIsSpeaking(true);
 
       const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
-      const langsToPlay = isSingleLang ? enabledLangs.slice(0, 1) : enabledLangs;
+      let activeLangs = languagesRef.current.filter((l) => l.enabled);
+      if (activeLangs.length === 0 && languagesRef.current.length > 0) {
+        activeLangs = [languagesRef.current[0]];
+      }
+      const enabledLangs = isSingleLang ? activeLangs.slice(0, 1) : activeLangs;
 
-      for (const lang of langsToPlay) {
-        if (abortRef.current) return false;
-
-        // Check if language is still enabled in latest settings
-        const isStillEnabled = languagesRef.current.some((l) => l.code === lang.code && l.enabled);
-        if (!isStillEnabled) continue;
-        const currentLangConfig = languagesRef.current.find((l) => l.code === lang.code) || lang;
-
-        const textToSpeak = await getCueTranslation(cue, lang.code);
-        if (abortRef.current) return false;
-        if (!textToSpeak) continue;
-
-        // Firmly ensure video player is paused before speaking each language
-        playerRef.current?.pause();
-
-        setCurrentTTSLang(lang.code);
-        setCurrentTTSText(textToSpeak);
-        setActiveCharIndex(0);
-        setIsSpeaking(true);
-
-        try {
-          await speakText(textToSpeak, lang.code, currentLangConfig.ttsRate, currentLangConfig.voice, (charIdx) => {
-            setActiveCharIndex(charIdx);
-          });
-        } catch (err) {
-          console.warn(`TTS failed for lang ${lang.code}:`, err);
-        }
-
-        if (abortRef.current) {
-          stopTTS();
-          setIsSpeaking(false);
-          setActiveCharIndex(null);
-          setCurrentTTSLang(null);
-          setCurrentTTSText(null);
-          return false;
-        }
-
-        // Slight pause between language narrations
-        await new Promise((r) => setTimeout(r, 220));
+      const cue = cues[segIndex];
+      if (!cue) {
+        isPlayingTTS.current = false;
+        setIsSpeaking(false);
+        return;
       }
 
-      stopTTS();
-      setIsSpeaking(false);
-      setActiveCharIndex(null);
-      setCurrentTTSLang(null);
-      setCurrentTTSText(null);
-      return true;
-    },
-    [getCueTranslation, playerRef]
-  );
+      for (const lang of enabledLangs) {
+        if (abortRef.current) break;
+        setCurrentTTSLang(lang.code);
 
-  /**
-   * Waits until YouTube video plays the duration of the current cue
-   * Enforces strict mutual exclusion: TTS MUST be completely silenced before video plays
-   */
-  const playVideoCueSegment = useCallback(
-    (cue: CaptionCue): Promise<void> => {
-      return new Promise((resolve) => {
-        // RULE: Never play both tts-play and youtube playback together!
-        stopTTS();
-        setIsSpeaking(false);
-        setCurrentTTSLang(null);
-        setCurrentTTSText(null);
+        let textToSpeak = await getCueTranslation(cue, lang.code);
+        if (abortRef.current) break;
+        if (!textToSpeak) textToSpeak = cue.text;
+        if (!textToSpeak) continue;
 
-        const player = playerRef.current;
-        if (!player) {
-          resolve();
-          return;
+        setCurrentTTSText(textToSpeak);
+        setActiveCharIndex(0);
+
+        logTTS(`[SyncEngine] TTS [${lang.code}] seg ${segIndex}: "${textToSpeak.slice(0, 60)}..."`);
+
+        try {
+          await speakText(textToSpeak, lang.code, lang.ttsRate, lang.voice, (charIdx) => {
+            setActiveCharIndex(charIdx);
+          });
+        } catch (err: any) {
+          console.warn(`TTS failed for ${lang.code}:`, err);
         }
 
-        const start = Math.max(0, cue.start);
-        const targetEnd = start + Math.max(1.0, cue.duration || 2.5);
+        if (abortRef.current) break;
+      }
 
-        player.seekTo(start);
-        player.play();
-
-        const startTime = Date.now();
-        const durationSec = Math.max(1.0, cue.duration || 2.5);
-
-        const checkInterval = setInterval(() => {
-          if (abortRef.current) {
-            clearInterval(checkInterval);
-            player.pause();
-            resolve();
-            return;
-          }
-
-          const currentTime = player.getCurrentTime();
-          const elapsed = (Date.now() - startTime) / 1000;
-
-          // Allow at least 400ms for player to seek and begin playback before boundary checks
-          if (elapsed >= 0.4) {
-            if (currentTime >= targetEnd - 0.1 || elapsed >= durationSec + 1.2) {
-              clearInterval(checkInterval);
-              player.pause();
-              resolve();
-            }
-          }
-        }, 80);
-      });
+      isPlayingTTS.current = false;
+      setIsSpeaking(false);
+      setCurrentTTSLang(null);
+      setCurrentTTSText(null);
+      setActiveCharIndex(null);
     },
-    [playerRef]
+    [cues, getCueTranslation]
   );
 
   /**
-   * Master execution loop
-   * Strictly enforces sequential playOrder ('video_first' vs 'tts_first')
-   * and guarantees TTS and YouTube playback NEVER play simultaneously.
+   * Start synchronization loop from a specific segment (reference startFromSegment)
    */
-  const startSync = useCallback(
-    async (startIndex?: number) => {
-      if (!cues || cues.length === 0) return;
+  const startFromSegment = useCallback(
+    async (segIndex: number = 0) => {
+      if (!cues?.length) {
+        console.warn('Cannot start: no cues loaded');
+        return;
+      }
 
-      // Abort any existing loop, stop TTS and pause video
+      unlockTTSAudio();
       abortRef.current = true;
       stopTTS();
       playerRef.current?.pause();
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 200));
 
       abortRef.current = false;
-      isLoopRunningRef.current = true;
+      isActiveRef.current = true;
       setIsSyncActive(true);
+      requestWakeLock();
+      logSync('SyncLoop', `▶ Started from segment ${segIndex}`);
 
-      let idx = startIndex !== undefined ? startIndex : activeCueIndex >= 0 ? activeCueIndex : 0;
-      if (idx < 0 || idx >= cues.length) idx = 0;
-
-      const enabledLangs = languages.filter((l) => l.enabled);
+      let idx = segIndex >= 0 && segIndex < cues.length ? segIndex : 0;
 
       while (idx < cues.length && !abortRef.current) {
-        const cue = cues[idx];
+        const seg = cues[idx];
+        const segEnd = seg.start + (seg.duration || 2.5);
+        const cueDurationSec = seg.duration && seg.duration > 0 ? seg.duration : Math.max(1.5, segEnd - seg.start);
+        const maxWaitMs = Math.max(2500, Math.min(30000, (cueDurationSec + 3.0) * 1000));
         setActiveCueIndex(idx);
-        logSync('SyncLoop', `Block ${idx + 1}/${cues.length} [${playOrder}] starting: "${cue.text.substring(0, 35)}..."`);
 
-        // Dynamically get the current enabled languages on every single block iteration
+        // Background prefetch translations for upcoming cues
         const isSingleLang = loadAppSettings().singleTargetLanguageMode ?? true;
         const currentEnabledLangs = isSingleLang
           ? languagesRef.current.filter((l) => l.enabled).slice(0, 1)
           : languagesRef.current.filter((l) => l.enabled);
-
-        // Background prefetch translations for upcoming cues
         if (currentEnabledLangs.length > 0) {
           currentEnabledLangs.forEach((l) => {
             prefetchCueTranslations(cues, idx, 4, sourceLang, l.code);
           });
         }
 
-        if (playOrder === 'video_first') {
-          // 1. Play video segment (TTS is silent)
-          logSync('SyncLoop', `[Block ${idx + 1}] Step 1: Playing video segment (${cue.start.toFixed(1)}s - ${(cue.start + cue.duration).toFixed(1)}s)`);
-          await playVideoCueSegment(cue);
+        if (playOrder === 'tts_first') {
+          // TTS first, then video
+          logSync('SyncLoop', `Seg ${idx}: TTS first`);
+          await playSegmentTTS(idx);
           if (abortRef.current) break;
 
-          // Firmly ensure video is paused and wait a brief moment before TTS
+          playerRef.current?.seekTo(seg.start);
+          playerRef.current?.play();
+
+          await new Promise<void>((resolve) => {
+            const startTime = Date.now();
+            const check = setInterval(() => {
+              if (abortRef.current) {
+                clearInterval(check);
+                resolve();
+                return;
+              }
+              const t = playerRef.current?.getCurrentTime?.() || 0;
+              const elapsed = Date.now() - startTime;
+              if (t >= segEnd - 0.15 || elapsed >= maxWaitMs) {
+                clearInterval(check);
+                resolve();
+              }
+            }, 100);
+          });
+          if (abortRef.current) break;
           playerRef.current?.pause();
-          await new Promise((r) => setTimeout(r, 150));
-          if (abortRef.current) break;
-
-          // 2. TTS-play translations in sequence (Video is paused)
-          if (currentEnabledLangs.length > 0) {
-            logSync('SyncLoop', `[Block ${idx + 1}] Step 2: Playing sequential TTS translations`);
-            const completed = await playCueTTSSequence(cue, currentEnabledLangs);
-            if (!completed || abortRef.current) break;
-          }
         } else {
-          // 1. TTS first: translate and narrate (Video MUST remain paused)
-          logSync('SyncLoop', `[Block ${idx + 1}] Step 1: Playing sequential TTS translations (Video paused)`);
+          // Video first (default)
+          playerRef.current?.seekTo(seg.start);
+          playerRef.current?.play();
+
+          await new Promise<void>((resolve) => {
+            const startTime = Date.now();
+            const check = setInterval(() => {
+              if (abortRef.current) {
+                clearInterval(check);
+                resolve();
+                return;
+              }
+              const t = playerRef.current?.getCurrentTime?.() || 0;
+              const elapsed = Date.now() - startTime;
+              if (t >= segEnd - 0.15 || elapsed >= maxWaitMs) {
+                clearInterval(check);
+                resolve();
+              }
+            }, 100);
+          });
+          if (abortRef.current) break;
           playerRef.current?.pause();
-          await new Promise((r) => setTimeout(r, 120));
+
+          logSync('SyncLoop', `Seg ${idx}: video done, TTS starting`);
+          await playSegmentTTS(idx);
           if (abortRef.current) break;
-
-          if (currentEnabledLangs.length > 0) {
-            const completed = await playCueTTSSequence(cue, currentEnabledLangs);
-            if (!completed || abortRef.current) break;
-          }
-
-          // Firmly ensure TTS is stopped and wait before starting video
-          stopTTS();
-          await new Promise((r) => setTimeout(r, 150));
-          if (abortRef.current) break;
-
-          // 2. Play video segment (TTS is silent)
-          logSync('SyncLoop', `[Block ${idx + 1}] Step 2: Playing video segment (${cue.start.toFixed(1)}s - ${(cue.start + cue.duration).toFixed(1)}s)`);
-          await playVideoCueSegment(cue);
-          if (abortRef.current) break;
-
-          // Firmly pause video after segment completes
-          playerRef.current?.pause();
         }
 
-        logSync('SyncLoop', `[Block ${idx + 1}] Finished block cleanly. Transitioning to next...`);
-        // Small inter-cue delay
-        await new Promise((r) => setTimeout(r, 200));
-        if (!isLoopingCueRef.current) {
+        if (isLoopingCueRef.current) {
+          // Loop current cue
+        } else {
           idx++;
         }
       }
 
-      isLoopRunningRef.current = false;
+      if (!abortRef.current) {
+        logSync('SyncLoop', '⏹ Playback complete');
+      }
+      isActiveRef.current = false;
       setIsSyncActive(false);
-      stopTTS();
-      setIsSpeaking(false);
-      setCurrentTTSLang(null);
-      setCurrentTTSText(null);
-      playerRef.current?.pause();
+      releaseWakeLock();
     },
-    [cues, activeCueIndex, languages, playOrder, playVideoCueSegment, playCueTTSSequence, sourceLang, playerRef]
+    [cues, playerRef, playSegmentTTS, playOrder, sourceLang]
+  );
+
+  /**
+   * Handle YouTube state change events from iframe (reference handleYTStateChange)
+   */
+  const handleYTStateChange = useCallback(
+    (state: number) => {
+      // state 1 = PLAYING
+      if (state === 1 && !isActiveRef.current && !isPlayingTTS.current && cues?.length && playerRef.current) {
+        const time = playerRef.current?.getCurrentTime?.() || 0;
+        let idx = findSegmentAtTime(cues, time);
+        if (idx < 0) {
+          idx = cues.findIndex((s) => s.start >= time);
+          if (idx < 0) idx = 0;
+        }
+        startFromSegment(idx);
+      }
+    },
+    [cues, playerRef, startFromSegment]
+  );
+
+  /**
+   * Handle video time update events (reference handleTimeUpdate)
+   * Only updates active cue when sync loop is NOT running to prevent desync during TTS
+   */
+  const handleTimeUpdate = useCallback(
+    (time: number) => {
+      if (isActiveRef.current || isPlayingTTS.current || !cues?.length) return;
+      const idx = findSegmentAtTime(cues, time);
+      if (idx >= 0 && idx !== activeCueIndex) {
+        setActiveCueIndex(idx);
+      }
+    },
+    [cues, activeCueIndex]
   );
 
   /**
@@ -433,66 +440,62 @@ export function useSyncEngine({
    */
   const pauseSync = useCallback(() => {
     abortRef.current = true;
-    isLoopRunningRef.current = false;
     stopTTS();
+    playerRef.current?.pause();
+    isActiveRef.current = false;
     setIsSyncActive(false);
     setIsSpeaking(false);
     setCurrentTTSLang(null);
     setCurrentTTSText(null);
-    playerRef.current?.pause();
+    setActiveCharIndex(null);
+    releaseWakeLock();
   }, [playerRef]);
 
-  // Bidirectional sync: when video is playing without sync loop, update activeCueIndex based on player time
-  useEffect(() => {
-    if (isSyncActive || !cues || cues.length === 0) return;
-    const interval = setInterval(() => {
-      try {
-        const t = playerRef.current?.getCurrentTime?.();
-        if (typeof t === 'number' && !isNaN(t) && t >= 0) {
-          const matchIndex = cues.findIndex(
-            (c) => t >= c.start && t <= c.start + (c.duration || 2.5)
-          );
-          if (matchIndex !== -1) {
-            setActiveCueIndex((prev) => (prev === matchIndex ? prev : matchIndex));
-          }
-        }
-      } catch {}
-    }, 250);
-    return () => clearInterval(interval);
-  }, [cues, isSyncActive, playerRef]);
+  /**
+   * Toggle between play and pause for the sync engine (reference togglePlayPause)
+   */
+  const togglePlayPause = useCallback(() => {
+    if (isActiveRef.current) {
+      pauseSync();
+      logSync('SyncLoop', '⏸ Stopped');
+    } else {
+      startFromSegment(activeCueIndex >= 0 ? activeCueIndex : 0);
+    }
+  }, [activeCueIndex, startFromSegment, pauseSync]);
 
   /**
-   * Jump to a specific cue
+   * Go to specific segment / cue (reference goToSegment)
    */
-  const jumpToCue = useCallback(
-    (index: number) => {
-      if (index < 0 || index >= cues.length) return;
-      setActiveCueIndex(index);
-      if (isSyncActive) {
-        startSync(index);
+  const goToSegment = useCallback(
+    (idx: number) => {
+      if (!cues || idx < 0 || idx >= cues.length) return;
+      setActiveCueIndex(idx);
+      if (isActiveRef.current) {
+        startFromSegment(idx);
       } else {
-        const cue = cues[index];
-        stopTTS();
-        playerRef.current?.seekTo(cue.start);
-        playerRef.current?.play();
+        playerRef.current?.seekTo(cues[idx].start);
       }
     },
-    [cues, isSyncActive, startSync, playerRef]
+    [cues, startFromSegment, playerRef]
   );
 
-  const nextCue = useCallback(() => {
-    const nextIdx = Math.min((activeCueIndex >= 0 ? activeCueIndex : 0) + 1, cues.length - 1);
-    jumpToCue(nextIdx);
-  }, [activeCueIndex, cues.length, jumpToCue]);
+  const jumpToCue = goToSegment;
 
-  const prevCue = useCallback(() => {
-    const prevIdx = Math.max((activeCueIndex >= 0 ? activeCueIndex : 0) - 1, 0);
-    jumpToCue(prevIdx);
-  }, [activeCueIndex, jumpToCue]);
+  const goNext = useCallback(() => {
+    const next = Math.min((activeCueIndex >= 0 ? activeCueIndex : 0) + 1, cues.length - 1);
+    goToSegment(next);
+  }, [activeCueIndex, cues.length, goToSegment]);
+
+  const goPrev = useCallback(() => {
+    const prev = Math.max((activeCueIndex >= 0 ? activeCueIndex : 0) - 1, 0);
+    goToSegment(prev);
+  }, [activeCueIndex, goToSegment]);
+
+  const nextCue = goNext;
+  const prevCue = goPrev;
 
   /**
    * Test-play TTS for a single target language without launching the video loop
-   * Firmly pauses video first
    */
   const testSpeakLang = useCallback(
     async (cue: CaptionCue, lang: TargetLanguage, customText?: string) => {
@@ -540,6 +543,7 @@ export function useSyncEngine({
   const speakDirectText = useCallback(
     async (text: string, langCode: string = 'en', rate: number = 1.0, voice?: string) => {
       if (!text) return;
+      unlockTTSAudio();
 
       if (isSpeaking && currentTTSText === text) {
         stopTTS();
@@ -588,15 +592,22 @@ export function useSyncEngine({
     activeCharIndex,
     translations,
     ttsEngineType: getTTSEngineType(),
-    startSync,
+    startSync: startFromSegment,
+    startFromSegment,
     pauseSync,
+    togglePlayPause,
     isLoopingCue,
     toggleLoopCue,
     jumpToCue,
+    goToSegment,
     nextCue,
+    goNext,
     prevCue,
+    goPrev,
     testSpeakLang,
     speakDirectText,
     getCueTranslation,
+    handleYTStateChange,
+    handleTimeUpdate,
   };
 }
