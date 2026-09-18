@@ -8,6 +8,44 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Ensure Subtitle Artifacts Load & Display from Local .SRT Fixtures for Demo Video (FcRzAdI8R9U)
+
+- **Local SRT Fixtures Ingestion**:
+  - Bound the client-side raw asset loading for `test/fixtures/languages/*.srt` (`ar.srt`, `en.srt`, `he.srt`, `it.srt`, `ru.srt`) in `srtStrings.ts` with direct raw string resolution.
+  - Ensured `FCRZADI8R9U_LANGUAGE_SRT_TRACKS` in `defaultSubtitles.ts` populates authentic 1,578-segment subtitle tracks for Russian (`ru`), Hebrew (`he`/`il`/`iw`), English (`en`), Italian (`it`), and Arabic (`ar`).
+  - Ensured `getCachedSrtForVideoAndLanguage` and `getAllCachedLanguageCodesForVideo` correctly resolve subtitle tracks for the default demonstration video (`FcRzAdI8R9U`) and empty/fallback IDs.
+- **Subtitle Artifacts Modal (`SubtitleArtifactsModal.tsx`)**:
+  - Verified the Artifacts Browser correctly renders all 1,578 cues in the Dual Subtitle Matrix, Raw `.SRT` format viewer, and structured JSON tab upon clicking the "Artifacts" button.
+  - Verified language tab switching (`ru`, `he`, `en`, `it`, `ar`), in-modal search filtering, cue text-to-speech audio pronunciation, and one-click `.srt` download.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+  - Dev server restarted and verified healthy on port 3000.
+
+### Fix Dev Server Startup Crash (Node ESM Unknown File Extension on .srt)
+
+- **Root Cause**: `test/fixtures/languages/srtStrings.ts` included static ESM imports with Vite queries (`import arSrt from './ar.srt?raw'`). When `tsx server.ts` started the dev server, Node's runtime ESM loader attempted to resolve `.srt` files and crashed with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".srt"`.
+- **Resolution**: Refactored `srtStrings.ts` to use Vite's transform-time `import.meta.glob('./*.srt', { query: '?raw', eager: true, import: 'default' })` on the client bundle, combined with safe dynamic Node filesystem access when running under Node/tsx.
+- **Verification**: Verified dev server boots cleanly on port 3000, responds with HTTP 200 on `/api/health` and `/`, and passes both `lint_applet` and `compile_applet`.
+
+### Fix React Hook Order Violation in SubtitleArtifactsModal
+
+- **Root Cause**: `SubtitleArtifactsModal.tsx` contained an early return `if (!isOpen) return null;` placed before a `useMemo` hook (`filteredCues`). When `isOpen` transitioned from `false` to `true`, the number of hooks called changed, violating React's Rules of Hooks.
+- **Resolution**: Moved all hook invocations to the top level of the component and repositioned `if (!isOpen) return null;` after all hooks and handlers, immediately prior to rendering JSX.
+- **Verification**: Verified with `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+
+### Landing Page Demo Subtitle Synchronization & Platform-Scoped Fallback Message
+
+- **Subtitle Visibility on Landing Page Demo**:
+  - Resolved cue synchronization on initial demo load (`FcRzAdI8R9U`) by adding an `activeCue` synchronization effect upon subtitle track load.
+  - Aligned expanded and compact overlay container IDs (`#video-subtitles-overlay`), z-indexing (`z-30`/`z-40`), and pointer events across both viewing modes.
+- **Platform-Scoped Fallback Message**:
+  - Scoped the message `"Turn captions ON to detect dialogue"` exclusively to the native Android platform (`isAndroidAppEnvironment()`).
+  - In web environments, the fallback message displays `"Captions active • Spoken dialogue will appear here"` when captions are enabled without active dialogue.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
 ### Caption Icon Subtitle Auto-Detection Scoped to Android Native Platform
 
 - **Android Native Platform Scoping for Caption Auto-Detection**:

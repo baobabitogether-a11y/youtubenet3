@@ -78,8 +78,6 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
     }
   }, [activeTargetLang, isOpen]);
 
-  if (!isOpen) return null;
-
   const currentTrackDef =
     AVAILABLE_TRACKS.find((t) => t.code === selectedTrackCode) ||
     AVAILABLE_TRACKS.find((t) => t.code === normalizeLanguageCode(selectedTrackCode)) ||
@@ -151,6 +149,8 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
   const handleSpeakCue = (text: string, lang: string) => {
     speakText(text, lang, 1.0);
   };
+
+  if (!isOpen) return null;
 
   return (
     <div

@@ -569,6 +569,17 @@ export default function App() {
     }
   }, [videoId, library]);
 
+  // Keep activeCue in sync whenever customCues changes
+  useEffect(() => {
+    if (customCues && customCues.length > 0) {
+      setActiveCue((prev) => {
+        if (!prev) return customCues[0];
+        const exists = customCues.some((c) => c.id === prev.id);
+        return exists ? prev : customCues[0];
+      });
+    }
+  }, [customCues]);
+
   // Handler to process any shared link (via URL param, native Android intent, or Share dialog)
   const handleProcessSharedLink = useCallback((rawLink: string) => {
     setSharedLinkComplaint(null);
@@ -1415,6 +1426,7 @@ export default function App() {
           selectedTargetLang={selectedTargetLang}
           onUpdateSettings={handleUpdateSettings}
           onSelectTargetLanguage={handleUpdateTargetLang}
+          onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
         />
       </div>
     );
@@ -1807,6 +1819,7 @@ export default function App() {
         selectedTargetLang={selectedTargetLang}
         onUpdateSettings={handleUpdateSettings}
         onSelectTargetLanguage={handleUpdateTargetLang}
+        onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
       />
     </div>
   );

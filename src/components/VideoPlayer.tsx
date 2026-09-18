@@ -229,6 +229,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       : activeTTSCharIndex;
 
     const [copiedPrompt, setCopiedPrompt] = useState(false);
+    const isAndroidApp = isAndroidAppEnvironment();
 
     const handleQuickCopyLogs = async (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -256,7 +257,6 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       onToggleCaptions?.(nextState);
 
       // Auto-detect subtitles once the caption icon is set to ON - scoped strictly to Android native app
-      const isAndroidApp = isAndroidAppEnvironment();
       if (nextState && !hasSubtitles && onFetchSubtitles && isAndroidApp) {
         onFetchSubtitles();
       }
@@ -1364,7 +1364,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     data-testid="active-subtitle-cue-text"
                     className="text-neutral-400 text-xs"
                   >
-                    Turn captions ON to detect dialogue
+                    {isAndroidApp ? 'Turn captions ON to detect dialogue' : 'Captions active • Spoken dialogue will appear here'}
                   </p>
                 )}
               </div>
@@ -1790,10 +1790,25 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           {/* Expanded Mode Subtitle Overlay */}
           {isCaptionsActive && (
             <div
-              id="video-subtitles-overlay-expanded"
-              className="absolute left-4 right-4 bottom-4 z-20 flex flex-col items-center pointer-events-none"
+              id="video-subtitles-overlay"
+              data-testid="video-subtitles-overlay"
+              className={`absolute left-4 right-4 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${
+                subtitlePosition === 'top'
+                  ? 'top-4 sm:top-6'
+                  : subtitlePosition === 'above'
+                  ? 'top-2 sm:top-4'
+                  : subtitlePosition === 'under'
+                  ? 'bottom-2 sm:bottom-4'
+                  : 'bottom-4 sm:bottom-6'
+              }`}
             >
-              <div className="max-w-2xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1.5 animate-fadeIn">
+              <div
+                className={`max-w-2xl px-4 py-2 rounded-xl bg-black/90 backdrop-blur-md shadow-2xl text-center space-y-1.5 animate-fadeIn pointer-events-auto relative z-40 transition-all duration-200 ${
+                  targetLangCode === 'he' || isHebrewHighlighted
+                    ? 'border-2 border-amber-500/90 ring-2 ring-amber-400/40 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
+                    : 'border border-neutral-800/80'
+                }`}
+              >
                 {isFetchingSubtitles ? (
                   <div className="flex items-center justify-center gap-2 text-amber-300 text-xs py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1963,7 +1978,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     data-testid="active-subtitle-cue-text"
                     className="text-neutral-400 text-xs"
                   >
-                    Turn captions ON to detect dialogue
+                    {isAndroidApp ? 'Turn captions ON to detect dialogue' : 'Captions active • Spoken dialogue will appear here'}
                   </p>
                 )}
               </div>
