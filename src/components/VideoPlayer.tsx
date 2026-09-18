@@ -382,24 +382,22 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const toggleAutoTTS = (e?: React.MouseEvent) => {
       e?.stopPropagation();
       unlockTTSAudio();
-      setAutoTTSEnabled((prev) => {
-        const next = !prev;
-        try {
-          localStorage.setItem('yt_auto_tts_enabled', String(next));
-        } catch {}
-        if (onUpdateSettings && settings) {
-          onUpdateSettings({ ...settings, autoPlayTTS: next });
+      const next = !autoTTSEnabled;
+      setAutoTTSEnabled(next);
+      try {
+        localStorage.setItem('yt_auto_tts_enabled', String(next));
+      } catch {}
+      if (onUpdateSettings && settings) {
+        onUpdateSettings({ ...settings, autoPlayTTS: next });
+      }
+      if (!next) {
+        if (isTTSSpeakingState) {
+          stopTTS();
+          setIsTTSSpeakingState(false);
+          setActiveTTSTarget(null);
+          setActiveTTSCharIndex(null);
         }
-        if (!next) {
-          if (isTTSSpeakingState) {
-            stopTTS();
-            setIsTTSSpeakingState(false);
-            setActiveTTSTarget(null);
-            setActiveTTSCharIndex(null);
-          }
-        }
-        return next;
-      });
+      }
     };
 
     // Parallel / Single Target Language Mode
@@ -657,13 +655,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
         togglePlayPause();
         return;
       }
-      setShowControls((prev) => {
-        const next = !prev;
-        if (next && isPlayingRef.current) {
-          resetHideControlsTimer();
-        }
-        return next;
-      });
+      const next = !showControls;
+      setShowControls(next);
+      if (next && isPlayingRef.current) {
+        resetHideControlsTimer();
+      }
     };
 
     const postIframeCommand = (command: string, args: any[] = []) => {

@@ -8,6 +8,20 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### React State Update Error Fix, TTS Speech Synthesis Pipeline Enhancement, and Default Compact Mode Verification
+
+- **React State Reconciliation & Cross-Component Update Error Resolution**:
+  - Eliminated the `Cannot update a component (ParallelTranslationsOverlay) while rendering a different component (ForwardRef)` error by decoupling debug subscription callbacks from the render phase.
+  - Wrapped `setTtsDebugPayload` inside `ParallelTranslationsOverlay.tsx` with asynchronous `setTimeout(..., 0)` scheduling.
+  - Updated `subscribeTTSDebug` and `notifyTTSDebugListeners` in `src/lib/ttsEngine.ts` to dispatch events via `queueMicrotask`, preventing synchronous state updates during component mounting or reconciliation.
+  - Refactored `toggleAutoTTS` and `handleTapVideoArea` in `src/components/VideoPlayer.tsx` to remove side effects (`onUpdateSettings`, `resetHideControlsTimer`, and secondary state setters) from inside state updater functions.
+- **TTS Speech Engine Playback Fix**:
+  - Resolved the issue preventing TTS audio playback by expanding voice matching in `WebSpeechEngineAdapter` (`src/lib/ttsEngine.ts`) to handle language variants and ISO aliases (including Hebrew `he`/`iw`/`he-IL`/`iw-IL`).
+  - Removed premature adapter rejection when a local voice object was not matched from `getVoices()`, allowing `window.speechSynthesis.speak(utterance)` to execute with the specified `utterance.lang`.
+  - Unconditionally called `speechSynthesis.cancel()` in `WebSpeechEngineAdapter.stop()` to ensure stuck or hung speech synthesis queues in Chromium browsers are cleared.
+- **Default Compact Mode Experience**:
+  - Verified and ensured default activation of `compactView: true` across application configuration (`DEFAULT_APP_SETTINGS`, `loadAppSettings`, and `src/App.tsx`), delivering the responsive, zero-scroll video immersion layout by default.
+
 ### TTS Narration Fix, Dual Query Compatibility, and Default Compact Mode
 
 - **TTS Engine Parameter Compatibility & Silent Failure Recovery**:

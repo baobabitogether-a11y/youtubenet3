@@ -103,10 +103,19 @@ function notifyTTSDebugListeners() {
     history: [...ttsDebugHistory],
     inputs: [...ttsInputsFeed],
   };
-  ttsDebugListeners.forEach((fn) => {
-    try {
-      fn(data);
-    } catch {}
+  const defer = (cb: () => void) => {
+    if (typeof queueMicrotask === 'function') {
+      queueMicrotask(cb);
+    } else {
+      setTimeout(cb, 0);
+    }
+  };
+  defer(() => {
+    ttsDebugListeners.forEach((fn) => {
+      try {
+        fn(data);
+      } catch {}
+    });
   });
 }
 
@@ -182,7 +191,24 @@ export function subscribeTTSDebug(
   }) => void
 ): () => void {
   ttsDebugListeners.add(fn);
-  fn(getTTSDebugInfo());
+  const initialData = getTTSDebugInfo();
+  if (typeof queueMicrotask === 'function') {
+    queueMicrotask(() => {
+      if (ttsDebugListeners.has(fn)) {
+        try {
+          fn(initialData);
+        } catch {}
+      }
+    });
+  } else {
+    setTimeout(() => {
+      if (ttsDebugListeners.has(fn)) {
+        try {
+          fn(initialData);
+        } catch {}
+      }
+    }, 0);
+  }
   return () => {
     ttsDebugListeners.delete(fn);
   };
@@ -431,18 +457,18 @@ class WebSpeechEngineAdapter implements ITtsEngineAdapter {
           if (found) utterance.voice = found;
         }
         if (!utterance.voice && voices.length > 0) {
-          const exact = voices.find((v) => v.lang.toLowerCase() === request.lang.toLowerCase());
-          const prefix = voices.find((v) => v.lang.toLowerCase().startsWith(request.lang.toLowerCase().split('-')[0]));
+          const normLang = request.lang.toLowerCase();
+          const baseLang = normLang.split(/[-_]/)[0];
+          const exact = voices.find((v) => v.lang.toLowerCase() === normLang);
+          const prefix = voices.find((v) => {
+            const vLang = v.lang.toLowerCase();
+            return (
+              vLang.startsWith(baseLang) ||
+              ((baseLang === 'he' || baseLang === 'iw') && (vLang.startsWith('he') || vLang.startsWith('iw')))
+            );
+          });
           if (exact) utterance.voice = exact;
           else if (prefix) utterance.voice = prefix;
-        }
-
-        // If voices are loaded in the browser but no voice matches the requested language,
-        // Web Speech will either silently drop or mispronounce. Fall back to neural audio stream.
-        if (voices.length > 0 && !utterance.voice) {
-          logWarn('TTS', `[Web Speech] No voice found for language "${request.lang}" (${voices.length} voices installed). Falling back to Audio Stream.`);
-          resolve({ completed: false, error: `No voice available for language ${request.lang}` });
-          return;
         }
 
         let hasRealBoundary = false;
@@ -538,9 +564,7 @@ class WebSpeechEngineAdapter implements ITtsEngineAdapter {
   stop(): void {
     if (typeof window !== 'undefined' && window.speechSynthesis) {
       try {
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-          window.speechSynthesis.cancel();
-        }
+        window.speechSynthesis.cancel();
       } catch {}
     }
     this.currentUtterance = null;

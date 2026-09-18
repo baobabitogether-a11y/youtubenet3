@@ -124,10 +124,18 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
   const [ttsDebugPayload, setTtsDebugPayload] = useState<TTSDebugPayload | null>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeTTSDebug((payload) => {
-      setTtsDebugPayload(payload);
+    let isMounted = true;
+    const unsubscribe = subscribeTTSDebug((info) => {
+      setTimeout(() => {
+        if (isMounted) {
+          setTtsDebugPayload(info?.current || null);
+        }
+      }, 0);
     });
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   if (!activeCue) return null;
