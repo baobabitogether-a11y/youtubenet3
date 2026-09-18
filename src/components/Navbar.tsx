@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download, Volume2, PlaySquare } from 'lucide-react';
+import { Youtube, Subtitles, Share2, Activity, AlertTriangle, Settings, Terminal, Copy, Check, Smartphone, Download, Volume2, PlaySquare, FileText } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../store';
 import { setNetworkInspectorOpen } from '../store/networkSlice';
 import { setInspectorOpen } from '../store/errorsSlice';
@@ -14,6 +14,7 @@ interface NavbarProps {
   onOpenSettings?: () => void;
   onOpenLogs?: () => void;
   onOpenTTSInputs?: () => void;
+  onOpenArtifacts?: () => void;
   onOpenApkUpdate?: () => void;
   hasApkUpdate?: boolean;
   latestApkVersion?: string;
@@ -27,6 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onOpenLogs,
   onOpenTTSInputs,
+  onOpenArtifacts,
   onOpenApkUpdate,
   hasApkUpdate = false,
   latestApkVersion,
@@ -130,6 +132,23 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden sm:inline">TTS Inputs</span>
               <span className="px-1.5 py-0.2 rounded-full bg-neutral-900 text-[10px] font-mono font-bold text-neutral-300">
                 {ttsInputsCount}
+              </span>
+            </button>
+          )}
+
+          {/* Subtitle Artifacts Browser */}
+          {onOpenArtifacts && (
+            <button
+              type="button"
+              id="navbar-artifacts-button"
+              data-testid="navbar-artifacts-button open-artifacts-btn"
+              onClick={onOpenArtifacts}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-800/70 bg-indigo-950/50 hover:bg-indigo-900/70 text-indigo-300 text-xs font-medium transition active:scale-95"
+              title="Browse Subtitle Artifacts (.SRT tracks, raw segments, dual-matrix)"
+            >
+              <span id="open-artifacts-btn" className="contents">
+                <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline">Artifacts</span>
               </span>
             </button>
           )}

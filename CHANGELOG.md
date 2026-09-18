@@ -8,6 +8,56 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Default Compact Design, Subtitle Artifacts Browser, and Comprehensive Button Verification Suites
+
+- **Default Compact View Design (`compactView: true`)**:
+  - Updated `DEFAULT_APP_SETTINGS` in `src/utils/appSettings.ts` to set `compactView: true` by default.
+  - Ensured the initial load lands in a clean, zero-scroll compact layout with high-visibility quick controls docked neatly around the video player.
+  - Maintained full toggleability via `SettingsModal.tsx` and quick view switchers so users can alternate between Compact View and Expanded Teacher Workspace seamlessly.
+- **Subtitle Artifacts Browser (`SubtitleArtifactsModal.tsx`)**:
+  - Created `src/components/SubtitleArtifactsModal.tsx` allowing instant browsing of subtitle tracks for the demonstration video (`FcRzAdI8R9U`) across source and target languages (`ru`, `he`, `it`, `en`, `ar`).
+  - Implemented multi-track switching tabs with RTL support, raw `.SRT` viewing with copy-to-clipboard and `.srt` file download, formatted subtitle cue tables with instant search filtering, single-cue TTS playback, and click-to-seek video player synchronization.
+  - Linked the Artifacts Browser across key entry points: Navbar (`#navbar-artifacts-btn`), compact and expanded VideoPlayer quick controls (`#open-artifacts-view-btn`), and SubtitlesTeacherPanel (`#browse-all-artifacts-btn`).
+- **Comprehensive Button Action & Modal E2E Test Suites**:
+  - Added **WEB CRITICAL TEST 12**: Verifies full button action suite across Navbar modal triggers (Library, Share, Artifacts, Settings, Logs), Quick Controls, and Subtitle Position Dropdowns.
+  - Added **WEB CRITICAL TEST 13**: Verifies the Subtitle Artifacts Browser across track tab switching, Raw `.SRT` vs Formatted cues toggling, search input filtering, and modal lifecycle.
+  - Added **WEB CRITICAL TEST 14**: Verifies App Settings & Exact Status Export/Import (Export JSON, Copy snapshot to clipboard, Import Paste dialog, and Reset defaults).
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### AGENTS.md Guidelines Synchronization, Settings Import/Export, Hello Prompt Skills & Web Platform Specifics
+
+- **AGENTS.md & PROMPT.md Synchronization**:
+  - Updated Section 1 (`Documentation File System`) to establish that `PROMPT.md` (and alias `PROMPTS.md`) contains active TODOs and prompt accomplishments, where completed items must be archived to `CHANGELOG.md` upon completion.
+  - Added **Section 12: Prompt Skills & Conversational Protocols: Remind Basic Prompt Skills on Hello**, defining the conversational protocol for introducing the core capabilities of the platform upon receiving a user greeting ("hello", "hi").
+  - Added **Section 13: App Settings & Exact Status Import/Export Architecture**, detailing the full JSON schema (`AppStateSnapshot`), per-video preferences, and import/export lifecycle.
+  - Updated Section 5 and added **Section 14: Platform Specifics & Web vs Native APK Presentation Rules**, documenting the rule to disable showing native APK details/intrusive banners on the web platform.
+- **App Settings & Exact Status Import/Export Implementation**:
+  - Created `exportFullAppState` and `importFullAppState` helper utilities in `src/utils/appSettings.ts` exporting complete configuration snapshots including `AppSettings`, per-video target language/TTS rate mappings, and runtime platform status.
+  - Integrated interactive UI controls in `SettingsModal.tsx` allowing users to **Export JSON**, **Copy Snapshot** to clipboard, **Import File** (`.json`), or **Paste JSON** with immediate state update and validation.
+- **Web vs Android Platform Specifics UI Handling**:
+  - Updated `SettingsModal.tsx` to detect `isAndroidNative` and clearly display "Web Companion Demo" / "Android App Only" on web browsers to avoid misleading native installation prompts on pure web clients.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### Default Landing Page Subtitle Presentation & Auto-TTS Narration
+
+- **Default Subtitle Presentation on Landing Page**:
+  - Initialized `activeCue` immediately with the first cue of authentic demonstration video tracks (`FcRzAdI8R9U`) on app mount, preventing latency or empty subtitle states on initial render.
+  - Initialized `translatedCueText` immediately for the primary target language (`he` - Hebrew or user target languages) using authentic local subtitle fixtures (`FCRZADI8R9U_LANGUAGE_SRT_TRACKS.he`).
+  - Configured `captionsEnabled` to default to `true`, ensuring synchronized dual-language subtitle overlays (`VideoPlayer`) and the interactive `SubtitlesTeacherPanel` are immediately displayed upon landing.
+- **Default Auto-TTS Narration (`autoPlayTTS: true`)**:
+  - Updated `DEFAULT_APP_SETTINGS` in `src/utils/appSettings.ts` to set `autoPlayTTS: true` by default.
+  - Updated `VideoPlayer.tsx` to default `autoTTSEnabled` to `settings?.autoPlayTTS ?? true`, enabling synchronized speech narration and word-boundary text highlighting out-of-the-box.
+  - Updated `TTSQueueDebugger.tsx` default prop to `autoTTSEnabled = true`.
+  - Updated `SettingsModal.tsx` documentation and settings toggle to describe Auto-TTS as ON by default.
+  - Maintained full support for manual user override, pause controls, and URL parameter override (`?tts=0` / `?tts=1`).
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build` with Vite SPA & backend esbuild): Succeeded with 0 errors.
+
 ### Multi-Fork Management, README Sync Workflow, and Isolated Hebrew Mini Demo (`demo/`)
 
 - **Multi-Fork Repository Identity Synchronization**:

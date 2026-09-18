@@ -60,6 +60,7 @@ interface SubtitlesTeacherPanelProps {
   playerRef: React.RefObject<YouTubePlayerHandle | null>;
   onLoadCues?: (cues: CaptionCue[]) => void;
   onOpenLibrary?: () => void;
+  onOpenArtifacts?: () => void;
   onFetchSubtitles?: () => void;
   isFetchingSubtitles?: boolean;
   fetchError?: string | null;
@@ -149,6 +150,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   playerRef,
   onLoadCues,
   onOpenLibrary,
+  onOpenArtifacts,
   onFetchSubtitles,
   isFetchingSubtitles = false,
   fetchError = null,
@@ -1424,6 +1426,20 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                       </button>
                     );
                   })}
+
+                  {onOpenArtifacts && (
+                    <button
+                      type="button"
+                      id="browse-all-artifacts-btn"
+                      data-testid="browse-all-artifacts-btn"
+                      onClick={onOpenArtifacts}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition bg-indigo-950/80 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 shadow-sm"
+                      title="Open full Subtitle Artifacts Browser (.SRT files, raw cues, download)"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Browse All Artifacts</span>
+                    </button>
+                  )}
                 </div>
               </div>
 

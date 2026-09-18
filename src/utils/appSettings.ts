@@ -23,7 +23,7 @@ export interface AppSettings {
   subtitlePosition: SubtitlePosition;
   showTranslatedOnTop: boolean;
 
-  // TTS Auto-Play & Narration: By default do NOT TTS-play (only show the target translation)
+  // TTS Auto-Play & Narration: By default enable TTS narration (plays synchronized TTS and highlights text)
   autoPlayTTS: boolean;
 
   // Target Language Presentation: By default use only 1 target language
@@ -150,8 +150,8 @@ export const SUPPORTED_LANGUAGES_CATALOG: { code: string; name: string }[] = [
 ];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  // Compact Design: Disabled by default for complete workstation layout (Navbar, LinkInputBar, Player, SubtitlesTeacherPanel); toggleable in Settings
-  compactView: false,
+  // Compact Design: Enabled by default for streamlined, zero-scroll video immersion (toggleable in Settings)
+  compactView: true,
   showExpandedControls: true,
   showTeacherPanel: true,
   showLinkBar: true,
@@ -163,8 +163,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   subtitlePosition: 'top',
   showTranslatedOnTop: true,
 
-  // By default do NOT TTS-play (only show the target translation)
-  autoPlayTTS: false,
+  // By default enable TTS narration (plays synchronized TTS and highlights text)
+  autoPlayTTS: true,
 
   // By default use only 1 target language
   singleTargetLanguageMode: true,
@@ -327,6 +327,104 @@ export function setSingleTargetLanguageMode(singleMode: boolean): void {
     ...current,
     singleTargetLanguageMode: singleMode,
   });
+}
+
+// ----------------------------------------------------------------------------
+// Full App Settings & Status Snapshot Export / Import
+// ----------------------------------------------------------------------------
+export interface AppStateSnapshot {
+  exportedAt: string;
+  version: string;
+  settings: AppSettings;
+  activeTargetLang?: string;
+  videoSettings?: Record<string, VideoSpecificSettings>;
+  status?: {
+    platform: 'android_native' | 'web';
+    userAgent?: string;
+    timestamp?: number;
+  };
+}
+
+export function exportFullAppState(extraStatus?: Record<string, any>): string {
+  const currentSettings = loadAppSettings();
+  const allVideoSettings: Record<string, VideoSpecificSettings> = {};
+
+  if (typeof window !== 'undefined') {
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(VIDEO_SETTINGS_KEY_PREFIX)) {
+          const videoId = key.replace(VIDEO_SETTINGS_KEY_PREFIX, '');
+          const val = loadVideoSettings(videoId);
+          if (val) allVideoSettings[videoId] = val;
+        }
+      }
+    } catch {
+      // Ignore storage enumeration errors
+    }
+  }
+
+  const isNative = typeof window !== 'undefined' && !!(window as any).AndroidNativeShell;
+
+  const snapshot: AppStateSnapshot = {
+    exportedAt: new Date().toISOString(),
+    version: '1.0.13',
+    settings: currentSettings,
+    videoSettings: allVideoSettings,
+    status: {
+      platform: isNative ? 'android_native' : 'web',
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
+      timestamp: Date.now(),
+      ...extraStatus,
+    },
+  };
+
+  return JSON.stringify(snapshot, null, 2);
+}
+
+export function importFullAppState(jsonString: string): {
+  success: boolean;
+  settings?: AppSettings;
+  error?: string;
+} {
+  try {
+    const parsed = JSON.parse(jsonString);
+    if (!parsed || typeof parsed !== 'object') {
+      return { success: false, error: 'Invalid JSON format: expected object' };
+    }
+
+    // Validate settings object
+    const newSettings: AppSettings = {
+      ...DEFAULT_APP_SETTINGS,
+      ...(parsed.settings || (parsed.methods ? parsed : {})),
+      methods: {
+        ...DEFAULT_APP_SETTINGS.methods,
+        ...((parsed.settings?.methods || parsed.methods) || {}),
+      },
+    };
+
+    saveAppSettings(newSettings);
+
+    // If videoSettings are provided, persist each
+    if (parsed.videoSettings && typeof parsed.videoSettings === 'object' && typeof window !== 'undefined') {
+      try {
+        Object.entries(parsed.videoSettings).forEach(([videoId, vSettings]) => {
+          if (videoId && typeof vSettings === 'object') {
+            localStorage.setItem(
+              `${VIDEO_SETTINGS_KEY_PREFIX}${videoId}`,
+              JSON.stringify(vSettings)
+            );
+          }
+        });
+      } catch (e) {
+        console.warn('[AppSettings] Failed restoring video settings:', e);
+      }
+    }
+
+    return { success: true, settings: newSettings };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'Failed to parse JSON string' };
+  }
 }
 
 

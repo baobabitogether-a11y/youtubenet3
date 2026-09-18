@@ -62,6 +62,7 @@ import { checkAndPerformUrlCacheReset, getAppStateFromUrl, syncAppStateToUrl } f
 import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../test/fixtures/defaultSubtitles';
 import { SelectTargetLanguageModal } from './components/SelectTargetLanguageModal';
 import { TTSInputTextsModal } from './components/TTSInputTextsModal';
+import { SubtitleArtifactsModal } from './components/SubtitleArtifactsModal';
 import { translateText } from './lib/translateService';
 import { DEFAULT_LIBRARY_ITEMS } from './config/appConfig';
 
@@ -132,10 +133,17 @@ export default function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [isLogsModalOpen, setIsLogsModalOpen] = useState<boolean>(false);
   const [isTTSInputsModalOpen, setIsTTSInputsModalOpen] = useState<boolean>(false);
+  const [isArtifactsModalOpen, setIsArtifactsModalOpen] = useState<boolean>(false);
   const [isApkUpdateModalOpen, setIsApkUpdateModalOpen] = useState<boolean>(false);
   const [hasApkUpdate, setHasApkUpdate] = useState<boolean>(false);
   const [latestApkTag, setLatestApkTag] = useState<string | undefined>(undefined);
-  const [settings, setSettings] = useState<AppSettings>(() => loadAppSettings());
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const loaded = loadAppSettings();
+    if (initialUrlState.autoTTS !== undefined) {
+      return { ...loaded, autoPlayTTS: initialUrlState.autoTTS };
+    }
+    return loaded;
+  });
   const [interceptedData, setInterceptedData] = useState<InterceptedCaptionData | null>(null);
   const [captionsEnabled, setCaptionsEnabled] = useState<boolean>(() => initialUrlState.captionsEnabled ?? true);
 
@@ -145,8 +153,62 @@ export default function App() {
     if (initialUrlState.targetLang) return initialUrlState.targetLang;
     return getVideoTargetLang(videoId) || 'he';
   });
-  const [activeCue, setActiveCue] = useState<CaptionCue | null>(null);
-  const [translatedCueText, setTranslatedCueText] = useState<string | null>(null);
+
+  // Restore cached subtitles for active video on initialization
+  const [customCues, setCustomCues] = useState<CaptionCue[] | null>(() => {
+    if (videoId === 'FcRzAdI8R9U') {
+      const srt = FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
+      if (srt && srt.length >= 500) {
+        return srt;
+      }
+    }
+    if (typeof window !== 'undefined') {
+      // 1. Try dedicated persistent subtitle cache
+      const cached = getCachedSubtitles(videoId);
+      if (cached && cached.length > 0) {
+        return cached;
+      }
+    }
+    if (videoId === 'FcRzAdI8R9U') {
+      return FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru || null;
+    }
+    if (videoId === 'jNQXAC9IVRw') {
+      return DEFAULT_LIBRARY_ITEMS[1]?.cues || null;
+    }
+    return null;
+  });
+
+  const [activeCue, setActiveCue] = useState<CaptionCue | null>(() => {
+    const defaultList = videoId === 'FcRzAdI8R9U'
+      ? FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru
+      : (typeof window !== 'undefined' ? getCachedSubtitles(videoId) : null);
+    if (defaultList && defaultList.length > 0) {
+      if (startTime && startTime > 0) {
+        const match = defaultList.find((c) => startTime >= c.start && startTime <= c.start + (c.duration || 2.5));
+        if (match) return match;
+      }
+      return defaultList[0];
+    }
+    return null;
+  });
+
+  const [translatedCueText, setTranslatedCueText] = useState<string | null>(() => {
+    const targetLang = initialUrlState.targetLang || (typeof window !== 'undefined' ? getVideoTargetLang(videoId) : null) || 'he';
+    let cleanLang = targetLang.toLowerCase().split(/[-_]/)[0];
+    if (cleanLang === 'iw' || cleanLang === 'il') cleanLang = 'he';
+    const srtCues = getCachedTargetSubtitles(videoId, cleanLang);
+    if (srtCues && srtCues.length > 0) {
+      const defaultList = videoId === 'FcRzAdI8R9U' ? FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru : null;
+      const firstCue = defaultList ? defaultList[0] : null;
+      if (firstCue) {
+        const match =
+          srtCues.find((c) => Math.abs(c.start - firstCue.start) < 0.75) ||
+          srtCues.find((c) => c.id === firstCue.id);
+        if (match && match.text) return match.text;
+      }
+    }
+    return null;
+  });
 
   // Synchronize target language on video change
   useEffect(() => {
@@ -200,30 +262,6 @@ export default function App() {
       })
     );
   }, []);
-
-  // Restore cached subtitles for active video on initialization
-  const [customCues, setCustomCues] = useState<CaptionCue[] | null>(() => {
-    if (videoId === 'FcRzAdI8R9U') {
-      const srt = FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru;
-      if (srt && srt.length >= 500) {
-        return srt;
-      }
-    }
-    if (typeof window !== 'undefined') {
-      // 1. Try dedicated persistent subtitle cache
-      const cached = getCachedSubtitles(videoId);
-      if (cached && cached.length > 0) {
-        return cached;
-      }
-    }
-    if (videoId === 'FcRzAdI8R9U') {
-      return FCRZADI8R9U_LANGUAGE_SRT_TRACKS.ru || null;
-    }
-    if (videoId === 'jNQXAC9IVRw') {
-      return DEFAULT_LIBRARY_ITEMS[1]?.cues || null;
-    }
-    return null;
-  });
 
   // Synchronize translated text for active cue in real time
   useEffect(() => {
@@ -1287,6 +1325,7 @@ export default function App() {
             onOpenApkUpdate={() => setIsApkUpdateModalOpen(true)}
             onOpenNetworkInspector={() => dispatch(setNetworkInspectorOpen(true))}
             onOpenShare={() => setIsShareModalOpen(true)}
+            onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
           />
         </div>
 
@@ -1301,6 +1340,20 @@ export default function App() {
             handleUpdateVideoSettings(videoId, {
               ttsRates: { [langCode]: rate },
             });
+          }}
+        />
+
+        {/* Subtitle Artifacts Browser Modal */}
+        <SubtitleArtifactsModal
+          isOpen={isArtifactsModalOpen}
+          onClose={() => setIsArtifactsModalOpen(false)}
+          videoId={videoId}
+          activeTargetLang={selectedTargetLang}
+          onSelectLanguage={handleUpdateTargetLang}
+          onSeek={(seconds) => {
+            try {
+              playerRef.current?.seekTo?.(seconds);
+            } catch {}
           }}
         />
 
@@ -1361,6 +1414,7 @@ export default function App() {
         onOpenLibrary={() => setIsLibraryOpen(true)}
         libraryCount={library.length}
         onOpenShare={() => setIsShareModalOpen(true)}
+        onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
         onOpenSettings={() => {
           try {
             playerRef.current?.pauseVideo?.();
@@ -1561,6 +1615,7 @@ export default function App() {
             alwaysShowKeyControls={settings.alwaysShowKeyControls}
             onChangeSubtitlePosition={(pos) => handleUpdateSettings({ ...settings, subtitlePosition: pos })}
             onOpenTargetLanguageModal={() => setIsTargetLangModalOpen(true)}
+            onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
             onOpenLogs={() => setIsLogsModalOpen(true)}
             onOpenSettings={() => {
               try {
@@ -1615,6 +1670,7 @@ export default function App() {
               });
             }}
             onOpenLibrary={() => setIsLibraryOpen(true)}
+            onOpenArtifacts={() => setIsArtifactsModalOpen(true)}
             onFetchSubtitles={() => handleFetchSubtitles(videoId, false)}
             isFetchingSubtitles={isFetchingSubtitles}
             fetchError={fetchError}
@@ -1648,6 +1704,20 @@ export default function App() {
           handleUpdateVideoSettings(videoId, {
             ttsRates: { [langCode]: rate },
           });
+        }}
+      />
+
+      {/* Subtitle Artifacts Browser Modal */}
+      <SubtitleArtifactsModal
+        isOpen={isArtifactsModalOpen}
+        onClose={() => setIsArtifactsModalOpen(false)}
+        videoId={videoId}
+        activeTargetLang={selectedTargetLang}
+        onSelectLanguage={handleUpdateTargetLang}
+        onSeek={(seconds) => {
+          try {
+            playerRef.current?.seekTo?.(seconds);
+          } catch {}
         }}
       />
 

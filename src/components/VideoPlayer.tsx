@@ -25,6 +25,7 @@ import {
   Activity,
   Download,
   Link2,
+  FileText,
   X,
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, formatTypeName, parseYouTubeUrl } from '../utils/youtube';
@@ -84,6 +85,7 @@ interface VideoPlayerProps {
   onOpenApkUpdate?: () => void;
   onOpenNetworkInspector?: () => void;
   onOpenShare?: () => void;
+  onOpenArtifacts?: () => void;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -106,6 +108,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       targetLanguage = null,
       onSelectTargetLanguage,
       onOpenTargetLanguageModal,
+      onOpenArtifacts,
       onOpenLogs,
       onOpenSettings,
       onBackOrClose,
@@ -272,14 +275,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const [showControls, setShowControls] = useState(true);
     const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Auto-TTS Narration State (default OFF: by default don't tts-play, only show the target translation)
+    // Auto-TTS Narration State (default ON: presents subtitles and enables TTS narration)
     const [autoTTSEnabled, setAutoTTSEnabled] = useState<boolean>(() => {
-      if (typeof window === 'undefined') return settings?.autoPlayTTS ?? false;
+      if (typeof window === 'undefined') return settings?.autoPlayTTS ?? true;
       try {
         const val = localStorage.getItem('yt_auto_tts_enabled');
-        return val !== null ? val === 'true' : (settings?.autoPlayTTS ?? false);
+        return val !== null ? val === 'true' : (settings?.autoPlayTTS ?? true);
       } catch {
-        return settings?.autoPlayTTS ?? false;
+        return settings?.autoPlayTTS ?? true;
       }
     });
 
@@ -1542,6 +1545,22 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   </button>
                 )}
 
+                {/* 2b. Quick Bringup: Subtitle Artifacts Browser */}
+                {onOpenArtifacts && (
+                  <button
+                    id="open-artifacts-view-btn"
+                    data-testid="open-artifacts-view-btn"
+                    type="button"
+                    onClick={onOpenArtifacts}
+                    aria-label="Browse Subtitle Artifacts"
+                    className="min-h-[44px] px-3 rounded-xl bg-indigo-950/90 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
+                    title="Quick Bringup: Browse Subtitle Artifacts (.SRT tracks, raw cues)"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    <span className="hidden sm:inline">Artifacts</span>
+                  </button>
+                )}
+
                 {/* 3. Quick Control: Auto-TTS Narration Toggle */}
                 <button
                   id="toggle-auto-tts-button"
@@ -2095,6 +2114,21 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               >
                 <Globe className="w-3.5 h-3.5 text-indigo-400" />
                 <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+              </button>
+            )}
+
+            {/* Quick Bringup 2b: Subtitle Artifacts Browser */}
+            {onOpenArtifacts && (
+              <button
+                id="open-artifacts-view-btn-expanded"
+                data-testid="open-artifacts-view-btn-expanded"
+                type="button"
+                onClick={onOpenArtifacts}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition active:scale-95"
+                title="Quick Bringup: Browse Subtitle Artifacts (.SRT tracks, raw cues)"
+              >
+                <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Artifacts</span>
               </button>
             )}
 

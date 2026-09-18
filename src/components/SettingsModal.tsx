@@ -1,5 +1,10 @@
-import React from 'react';
-import { AppSettings, SUPPORTED_LANGUAGES_CATALOG } from '../utils/appSettings';
+import React, { useState, useRef } from 'react';
+import {
+  AppSettings,
+  SUPPORTED_LANGUAGES_CATALOG,
+  exportFullAppState,
+  importFullAppState,
+} from '../utils/appSettings';
 import {
   X,
   Settings,
@@ -14,6 +19,10 @@ import {
   Cpu,
   Smartphone,
   Download,
+  Upload,
+  Copy,
+  FileJson,
+  FileText,
   ExternalLink,
   Eye,
   Plus,
@@ -40,7 +49,16 @@ export function SettingsModal({
   onResetSettings,
   onOpenApkUpdate,
 }: SettingsModalProps) {
+  const [importExportStatus, setImportExportStatus] = useState<string | null>(null);
+  const [importExportError, setImportExportError] = useState<string | null>(null);
+  const [pasteModalOpen, setPasteModalOpen] = useState<boolean>(false);
+  const [pastedJson, setPastedJson] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   if (!isOpen) return null;
+
+  const isAndroidNative =
+    typeof window !== 'undefined' && !!(window as any).AndroidNativeShell;
 
   const toggleMethod = (key: keyof AppSettings['methods']) => {
     onUpdateSettings({
@@ -50,6 +68,78 @@ export function SettingsModal({
         [key]: !settings.methods[key],
       },
     });
+  };
+
+  const handleExportJsonDownload = () => {
+    try {
+      const jsonStr = exportFullAppState();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `yt-viewer-settings-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setImportExportStatus('Settings and status exported to JSON file!');
+      setImportExportError(null);
+      setTimeout(() => setImportExportStatus(null), 4000);
+    } catch (err: any) {
+      setImportExportError(`Export failed: ${err?.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleExportClipboard = async () => {
+    try {
+      const jsonStr = exportFullAppState();
+      await navigator.clipboard.writeText(jsonStr);
+      setImportExportStatus('Settings snapshot copied to clipboard!');
+      setImportExportError(null);
+      setTimeout(() => setImportExportStatus(null), 4000);
+    } catch {
+      // Fallback
+      setImportExportStatus('Snapshot ready. Use download if clipboard is blocked.');
+    }
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        const res = importFullAppState(content);
+        if (res.success && res.settings) {
+          onUpdateSettings(res.settings);
+          setImportExportStatus('Settings & status restored successfully!');
+          setImportExportError(null);
+          setTimeout(() => setImportExportStatus(null), 4000);
+        } else {
+          setImportExportError(res.error || 'Failed to import settings');
+        }
+      }
+    };
+    reader.readAsText(file);
+    // Reset file input value
+    e.target.value = '';
+  };
+
+  const handleApplyPastedJson = () => {
+    if (!pastedJson.trim()) return;
+    const res = importFullAppState(pastedJson);
+    if (res.success && res.settings) {
+      onUpdateSettings(res.settings);
+      setImportExportStatus('Settings & status imported from JSON successfully!');
+      setImportExportError(null);
+      setPasteModalOpen(false);
+      setPastedJson('');
+      setTimeout(() => setImportExportStatus(null), 4000);
+    } else {
+      setImportExportError(res.error || 'Invalid JSON format');
+    }
   };
 
   return (
@@ -378,7 +468,7 @@ export function SettingsModal({
                     <span>Auto-play TTS Speech (Dialogue Narration)</span>
                   </div>
                   <div className="text-xs text-neutral-400 mt-0.5">
-                    By default OFF: only shows the target translation visually without playing TTS speech audio. In compact mode, you can quickly turn it on via the overlay quick control.
+                    By default ON: automatically narrates dialogue with synchronized TTS speech and text highlighting. Can be paused or toggled off anytime.
                   </div>
                 </div>
                 <input
@@ -746,6 +836,124 @@ export function SettingsModal({
             </div>
           </div>
 
+          {/* Section: Import / Export App Settings & Exact Status */}
+          <div className="space-y-3 pt-2 border-t border-neutral-800/80">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-400 flex items-center gap-2">
+                <FileJson className="w-4 h-4 text-indigo-400" />
+                <span>Import &amp; Export App Settings &amp; Status</span>
+              </h3>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-neutral-800 text-indigo-300 font-mono">
+                JSON Snapshot
+              </span>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+              <div className="text-xs text-neutral-400 leading-relaxed">
+                Export and share your complete application configuration, per-video target language preferences, and runtime status snapshot, or restore previous settings across devices.
+              </div>
+
+              {importExportStatus && (
+                <div className="p-2.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 text-xs flex items-center gap-2">
+                  <Check className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{importExportStatus}</span>
+                </div>
+              )}
+
+              {importExportError && (
+                <div className="p-2.5 rounded-lg bg-red-950/80 border border-red-500/50 text-red-300 text-xs flex items-center gap-2">
+                  <X className="w-4 h-4 shrink-0 text-red-400" />
+                  <span>{importExportError}</span>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  id="export-settings-json-btn"
+                  onClick={handleExportJsonDownload}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-medium transition"
+                  title="Download full settings & status snapshot as JSON"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Export JSON</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="copy-settings-json-btn"
+                  onClick={handleExportClipboard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-medium transition"
+                  title="Copy JSON snapshot to clipboard"
+                >
+                  <Copy className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Copy Snapshot</span>
+                </button>
+
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept=".json,application/json"
+                  className="hidden"
+                />
+
+                <button
+                  type="button"
+                  id="import-settings-file-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-950/70 hover:bg-indigo-900/80 text-indigo-200 border border-indigo-700/60 text-xs font-medium transition"
+                  title="Import settings snapshot from a JSON file"
+                >
+                  <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Import File</span>
+                </button>
+
+                <button
+                  type="button"
+                  id="import-settings-paste-btn"
+                  onClick={() => setPasteModalOpen(!pasteModalOpen)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 text-xs font-medium transition"
+                  title="Paste JSON string directly"
+                >
+                  <FileText className="w-3.5 h-3.5 text-neutral-400" />
+                  <span>Paste JSON</span>
+                </button>
+              </div>
+
+              {pasteModalOpen && (
+                <div className="pt-2 space-y-2 border-t border-neutral-800 animate-fadeIn">
+                  <textarea
+                    rows={4}
+                    value={pastedJson}
+                    onChange={(e) => setPastedJson(e.target.value)}
+                    placeholder='Paste JSON settings object here (e.g. {"settings": {...}})...'
+                    className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-xs text-neutral-200 font-mono focus:outline-none focus:border-indigo-500"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPasteModalOpen(false);
+                        setPastedJson('');
+                      }}
+                      className="px-2.5 py-1 rounded-md text-xs text-neutral-400 hover:text-neutral-200 bg-neutral-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleApplyPastedJson}
+                      className="px-3 py-1 rounded-md text-xs font-medium bg-indigo-600 hover:bg-indigo-500 text-white"
+                    >
+                      Apply JSON
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Section 4: Android Shell APK & App Updates */}
           <div className="space-y-3 pt-2 border-t border-neutral-800/80">
             <div className="flex items-center justify-between">
@@ -754,7 +962,7 @@ export function SettingsModal({
                 <span>Android Shell APK &amp; App Updates</span>
               </h3>
               <span className="text-[11px] px-2 py-0.5 rounded bg-neutral-800 text-emerald-300 font-mono font-bold">
-                Installed: v1.0.13
+                {isAndroidNative ? 'Native Shell: v1.0.13' : 'Web Companion Demo'}
               </span>
             </div>
 
@@ -763,11 +971,13 @@ export function SettingsModal({
                 <div className="font-medium text-xs sm:text-sm text-neutral-200 flex items-center gap-2">
                   <span>YouTube-Viewer-debug.apk</span>
                   <span className="px-1.5 py-0.5 rounded bg-neutral-800 text-[10px] text-neutral-400 font-mono">
-                    GitHub Releases
+                    {isAndroidNative ? 'Installed APK' : 'Android App Only'}
                   </span>
                 </div>
                 <div className="text-xs text-neutral-400 mt-0.5">
-                  Check if a newer APK build is available and install directly via the in-app installer.
+                  {isAndroidNative
+                    ? 'Check if a newer APK build is available and install directly via the in-app installer.'
+                    : 'Web companion mode is active. APK updates and native installer apply to Android devices.'}
                 </div>
               </div>
 

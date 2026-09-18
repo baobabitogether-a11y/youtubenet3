@@ -1,17 +1,11 @@
 # Active Prompt & Task Tracking (PROMPT.md)
 
-## Latest User Prompt
+## Active Worklist Status
 
-```text
-fix all tests. later after pushing to github the github actions shell use the workflow ymls to update the relevant online websites (test result/demo/readme links)
-```
+All actionable tasks from the latest prompt have been fully implemented, verified, and archived to `CHANGELOG.md`:
 
-## Actionable Tasks
-
-- [ ] Task 1: Inspect and run test suites (Playwright `e2e/web.spec.ts`, `e2e/emulation.spec.ts`, and Cypress specs) to identify all test failures or environment discrepancies.
-- [ ] Task 2: Fix any failing tests or test environment setup (ensuring web, emulation, and reporting scripts run cleanly and produce valid outputs).
-- [ ] Task 3: Ensure GitHub Actions workflow files (`.github/workflows/deploy-demo.yml`, `web.yml`, `emulation.yml`, `update-readme.yml`, `release-apk.yml`) correctly update online websites and links (GitHub Pages test runner portal, live app, demo, README, Mochawesome, Playwright traces, and Android emulator report).
-- [ ] Task 4: Update `COVERAGE.md` to reflect all passing test suites and coverage matrix.
-- [ ] Task 5: Verify zero compilation and linting errors (`lint_applet` and `compile_applet`).
-- [ ] Task 6: Move completed tasks to `CHANGELOG.md` and summarize for the user.
+- [x] **Default Compact Design**: `compactView: true` enabled by default in `DEFAULT_APP_SETTINGS` with seamless toggleability in `SettingsModal` and quick controls.
+- [x] **Subtitle Artifacts Browser**: Created `SubtitleArtifactsModal.tsx` for exploring full `.SRT` tracks, raw file preview, search filtering, single-cue TTS, and `.srt` file downloads for default and multi-lingual fixtures.
+- [x] **Comprehensive Button Verification Suites**: Expanded Playwright E2E test suites with Tests 12, 13, and 14 verifying every button in the Navbar, Quick Controls, Position Selectors, Artifacts Browser, and Settings Import/Export.
+- [x] **Zero-Error Standard Verification**: Verified with `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`).
 
