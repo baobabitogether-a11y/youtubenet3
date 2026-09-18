@@ -36,7 +36,7 @@ export const DemoQuickFloatingDock: React.FC<DemoQuickFloatingDockProps> = ({
   const isDemoVideo = videoId === 'FcRzAdI8R9U' || !videoId;
   if (!isDemoVideo) return null;
 
-  const isCompact = settings.compactView ?? true;
+  const isCompact = settings.compactView ?? false;
   const isSingleMode = settings.singleTargetLanguageMode ?? true;
   const isHebrewOnly = isSingleMode && selectedTargetLang === 'he';
 

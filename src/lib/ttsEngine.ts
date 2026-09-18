@@ -935,3 +935,27 @@ export function isTTSSpeaking(): boolean {
   }
   return Boolean(window.speechSynthesis?.speaking);
 }
+
+let wakeLock: any = null;
+
+export async function requestWakeLock(): Promise<void> {
+  if (typeof navigator !== 'undefined' && 'wakeLock' in navigator) {
+    try {
+      wakeLock = await (navigator as any).wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => {
+        wakeLock = null;
+      });
+    } catch {
+      // Wake lock not available or denied
+    }
+  }
+}
+
+export function releaseWakeLock(): void {
+  if (wakeLock) {
+    try {
+      wakeLock.release();
+    } catch {}
+    wakeLock = null;
+  }
+}

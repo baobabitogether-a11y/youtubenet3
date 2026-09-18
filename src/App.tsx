@@ -143,7 +143,7 @@ export default function App() {
   const isAndroidApp = isAndroidAppEnvironment();
   const [settings, setSettings] = useState<AppSettings>(() => {
     const loaded = loadAppSettings();
-    let initialCompact = loaded.compactView ?? true;
+    let initialCompact = loaded.compactView ?? false;
     if (initialUrlState.mode) {
       initialCompact = initialUrlState.mode === 'compact';
     }
@@ -454,6 +454,7 @@ export default function App() {
 
   const handlePlayerTimeUpdate = useCallback((t: number) => {
     if (!activeCues || activeCues.length === 0) return;
+    syncEngine.handleTimeUpdate(t);
     const match = activeCues.find((c) => t >= c.start - 0.1 && t <= (c.start + (c.duration || 2.5)) + 0.15);
     setActiveCue((prev) => {
       if (match) {
@@ -1257,6 +1258,29 @@ export default function App() {
           </div>
         )}
 
+        {/* URL Cache Reset Indicator Toast */}
+        {cacheResetToast && (
+          <div
+            id="cache-reset-indicator"
+            data-testid="cache-reset-indicator"
+            className="absolute top-4 left-4 right-4 z-40 p-3.5 rounded-xl bg-amber-950/95 border border-amber-600/80 text-amber-200 text-xs flex items-center justify-between gap-3 animate-fadeIn shadow-2xl"
+          >
+            <div className="flex items-center gap-2.5">
+              <RefreshCw className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="font-medium">{cacheResetToast}</span>
+            </div>
+            <button
+              type="button"
+              id="dismiss-cache-reset-indicator"
+              onClick={() => setCacheResetToast(null)}
+              className="p-1 text-amber-400 hover:text-amber-200 transition"
+              title="Dismiss banner"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
         {/* Newer APK available banner only in Android app environment */}
         {hasApkUpdate && isAndroidApp && (
           <div
@@ -1332,14 +1356,8 @@ export default function App() {
             }}
             compactView={true}
             isSyncActive={syncEngine.isSyncActive}
-            onToggleSync={() => {
-              if (syncEngine.isSyncActive) {
-                syncEngine.pauseSync();
-              } else {
-                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
-                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
-              }
-            }}
+            onToggleSync={syncEngine.togglePlayPause}
+            onStateChange={syncEngine.handleYTStateChange}
             isLoopingCue={syncEngine.isLoopingCue}
             onToggleLoopCue={syncEngine.toggleLoopCue}
             onNextCue={syncEngine.nextCue}
@@ -1701,14 +1719,8 @@ export default function App() {
             captionsEnabled={captionsEnabled}
             compactView={false}
             isSyncActive={syncEngine.isSyncActive}
-            onToggleSync={() => {
-              if (syncEngine.isSyncActive) {
-                syncEngine.pauseSync();
-              } else {
-                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
-                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
-              }
-            }}
+            onToggleSync={syncEngine.togglePlayPause}
+            onStateChange={syncEngine.handleYTStateChange}
             isLoopingCue={syncEngine.isLoopingCue}
             onToggleLoopCue={syncEngine.toggleLoopCue}
             onNextCue={syncEngine.nextCue}

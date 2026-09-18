@@ -181,12 +181,14 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
           </div>
 
           <button
-            id="close-subtitle-artifacts-modal"
-            data-testid="close-subtitle-artifacts-modal"
+            id="close-artifacts-modal-btn"
+            data-testid="close-artifacts-modal-btn close-subtitle-artifacts-modal"
             onClick={onClose}
             className="p-2 rounded-xl text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition"
           >
-            <X className="w-5 h-5" />
+            <span id="close-subtitle-artifacts-modal" className="contents">
+              <X className="w-5 h-5" />
+            </span>
           </button>
         </div>
 
@@ -199,8 +201,8 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
               return (
                 <button
                   key={track.code}
-                  id={`artifacts-lang-tab-${track.code}`}
-                  data-testid={`artifacts-lang-tab-${track.code}`}
+                  id={`artifact-track-tab-${track.code}`}
+                  data-testid={`artifact-track-tab-${track.code} artifacts-lang-tab-${track.code}`}
                   onClick={() => setSelectedTrackCode(track.code)}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 transition border ${
                     isSelected
@@ -208,17 +210,19 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
                       : 'bg-neutral-900 text-neutral-400 border-neutral-800 hover:bg-neutral-800 hover:text-neutral-200'
                   }`}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full"
-                    style={{ backgroundColor: isSelected ? '#fff' : track.color }}
-                  />
-                  <span className="font-semibold">{track.name}</span>
-                  <span className="text-[10px] opacity-75">({track.nativeName})</span>
-                  {track.role === 'source' && (
-                    <span className="text-[9px] px-1 rounded bg-neutral-800 text-neutral-300 font-mono">
-                      SRC
-                    </span>
-                  )}
+                  <span id={`artifacts-lang-tab-${track.code}`} className="contents">
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: isSelected ? '#fff' : track.color }}
+                    />
+                    <span className="font-semibold">{track.name}</span>
+                    <span className="text-[10px] opacity-75">({track.nativeName})</span>
+                    {track.role === 'source' && (
+                      <span className="text-[9px] px-1 rounded bg-neutral-800 text-neutral-300 font-mono">
+                        SRC
+                      </span>
+                    )}
+                  </span>
                 </button>
               );
             })}
@@ -246,7 +250,8 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
           {/* Tabs */}
           <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800">
             <button
-              id="artifacts-tab-matrix-btn"
+              id="view-formatted-cues-btn"
+              data-testid="view-formatted-cues-btn artifacts-tab-matrix-btn"
               onClick={() => setActiveTab('matrix')}
               className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
                 activeTab === 'matrix'
@@ -254,11 +259,14 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Dual Subtitle Matrix</span>
+              <span id="artifacts-tab-matrix-btn" className="contents">
+                <Layers className="w-3.5 h-3.5" />
+                <span>Dual Subtitle Matrix</span>
+              </span>
             </button>
             <button
-              id="artifacts-tab-raw-srt-btn"
+              id="view-raw-srt-btn"
+              data-testid="view-raw-srt-btn artifacts-tab-raw-srt-btn"
               onClick={() => setActiveTab('raw_srt')}
               className={`px-3 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 transition ${
                 activeTab === 'raw_srt'
@@ -266,8 +274,10 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
             >
-              <FileText className="w-3.5 h-3.5" />
-              <span>Raw .SRT File</span>
+              <span id="artifacts-tab-raw-srt-btn" className="contents">
+                <FileText className="w-3.5 h-3.5" />
+                <span>Raw .SRT File</span>
+              </span>
             </button>
             <button
               id="artifacts-tab-json-btn"
@@ -416,9 +426,14 @@ export const SubtitleArtifactsModal: React.FC<SubtitleArtifactsModalProps> = ({
                 <span>SubRip Subtitle Format (.SRT)</span>
                 <span className="font-mono">{targetCues.length} cues</span>
               </div>
-              <pre className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 text-xs font-mono text-neutral-300 overflow-x-auto max-h-[50vh] overflow-y-auto leading-relaxed select-all">
-                {rawSrtContent}
-              </pre>
+              <textarea
+                id="raw-srt-textarea"
+                data-testid="raw-srt-textarea"
+                readOnly
+                value={rawSrtContent}
+                rows={16}
+                className="w-full p-4 rounded-xl bg-neutral-950 border border-neutral-800 text-xs font-mono text-neutral-300 overflow-x-auto max-h-[50vh] leading-relaxed resize-none focus:outline-none"
+              />
             </div>
           )}
 

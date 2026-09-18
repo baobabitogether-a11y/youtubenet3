@@ -150,8 +150,8 @@ export const SUPPORTED_LANGUAGES_CATALOG: { code: string; name: string }[] = [
 ];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
-  // Compact Design: Enabled by default for streamlined, zero-scroll video immersion (toggleable in Settings)
-  compactView: true,
+  // Web Companion defaults to Expanded Dual-View Workstation (per AGENTS.md Section 5)
+  compactView: false,
   showExpandedControls: true,
   showTeacherPanel: true,
   showLinkBar: true,
@@ -175,8 +175,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // TTS Play & Text Highlight Sync Mode (4 Alternatives, default: word_boundary)
   ttsSyncMode: 'word_boundary',
 
-  // Non-Native TTS Fallback: ENABLED by default for web / non-native fallback
-  allowNonNativeTTSFallback: true,
+  // Non-Native TTS Fallback: disabled by default (hardware/native preferred)
+  allowNonNativeTTSFallback: false,
 
   // Present TTS input and TTS queue by default for real-time debugging
   showTtsDebugQueue: true,
@@ -218,7 +218,7 @@ export function loadAppSettings(): AppSettings {
       const parsed = JSON.parse(raw);
       return {
         ...DEFAULT_APP_SETTINGS,
-        compactView: parsed.compactView !== undefined ? parsed.compactView : true,
+        compactView: parsed.compactView !== undefined ? parsed.compactView : false,
         ...parsed,
         methods: {
           ...DEFAULT_APP_SETTINGS.methods,
@@ -231,7 +231,7 @@ export function loadAppSettings(): AppSettings {
   }
   return {
     ...DEFAULT_APP_SETTINGS,
-    compactView: true,
+    compactView: false,
   };
 }
 

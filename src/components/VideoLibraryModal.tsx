@@ -76,7 +76,10 @@ export const VideoLibraryModal: React.FC<VideoLibraryModalProps> = ({
 
   return (
     <div
-      id="video-library-modal-backdrop"
+      id="video-library-modal"
+      data-testid="video-library-modal video-library-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
     >
@@ -106,11 +109,15 @@ export const VideoLibraryModal: React.FC<VideoLibraryModalProps> = ({
 
           <button
             type="button"
-            id="close-library-modal-button"
+            id="close-library-modal-btn"
+            data-testid="close-library-modal-btn close-library-modal-button"
+            aria-label="Close Library"
             onClick={onClose}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition"
           >
-            <X className="w-5 h-5" />
+            <span id="close-library-modal-button" className="contents">
+              <X className="w-5 h-5" />
+            </span>
           </button>
         </div>
 

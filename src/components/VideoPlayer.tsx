@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useImperativeHandle, forwardRef, useCallback, useMemo } from 'react';
 import {
   ExternalLink,
   Share2,
@@ -83,6 +83,8 @@ interface VideoPlayerProps {
   onToggleLoopCue?: () => void;
   onNextCue?: () => void;
   onPrevCue?: () => void;
+  onStateChange?: (state: number) => void;
+  onTogglePlayPause?: () => void;
   settings?: AppSettings;
   onUpdateSettings?: (newSettings: AppSettings) => void;
   onSelectVideo?: (videoId: string, rawUrl: string) => void;
@@ -117,6 +119,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       onOpenSettings,
       onBackOrClose,
       onTimeUpdate,
+      onStateChange,
+      onTogglePlayPause,
       alwaysShowKeyControls = true,
       subtitlePosition = 'top',
       showTranslatedOnTop = true,
@@ -153,6 +157,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     // Local state to guarantee translated text is always present per cue ID without cross-cue pollution
     const [localTranslatedMap, setLocalTranslatedMap] = useState<Record<string, string>>({});
+    const cachedCues = useMemo(() => getCachedSubtitles(videoId) || [], [videoId]);
 
     useEffect(() => {
       if (!activeCue?.text || !activeCue?.id) return;
@@ -312,7 +317,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     }, [targetLangCode]);
 
     // Single target language TTS playback: plays TTS only for the current target language and strictly what is presented on screen!
-    const playCurrentCueTTS = async () => {
+    const playCurrentCueTTS = async (cue?: CaptionCue) => {
       unlockTTSAudio();
       if (!isAutoTTSPausingRef.current) {
         setIsPlaying(false);
@@ -323,10 +328,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       } catch {}
       postIframeCommand('pauseVideo');
 
-      // CRITICAL: ONLY speak if there is an actual active cue presented!
-      // Do NOT speak phantom cues or cachedCues[0] if activeCue is null / not presented.
-      if (!activeCue?.text) return;
-      const targetCue = activeCue;
+      // CRITICAL: speak target cue (active cue, parameter cue, or fallback to first cached cue)
+      const targetCue = cue || activeCue || cachedCues[0];
+      if (!targetCue?.text) return;
 
       lastSpokenCueIdRef.current = targetCue.id;
       setIsTTSSpeakingState(true);
@@ -676,6 +680,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
     const togglePlayPause = (e?: React.MouseEvent) => {
       e?.stopPropagation();
+      unlockTTSAudio();
+      if (isSyncActive && onToggleSync) {
+        onToggleSync();
+        return;
+      }
       if (isPlaying || isAutoTTSPausingRef.current || isAutoTTSSpeakingRef.current) {
         isAutoTTSPausingRef.current = false;
         isAutoTTSSpeakingRef.current = false;
@@ -843,10 +852,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
             }
           }
         } catch {}
-      }, 350);
+      }, 250);
 
       return () => clearInterval(interval);
-    }, [seekTo]);
+    }, []);
 
     // Imperative handle for subtitle time-sync engine
     useImperativeHandle(
@@ -868,7 +877,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           isPlayingRef.current = false;
           setIsPlaying(false);
           setShowControls(true);
-          stopTTS();
+          // Crucial: do NOT call stopTTS() here so pausing video does not cancel active/pending TTS speech
           setIsTTSSpeakingState(false);
           try {
             ytPlayerRef.current?.pauseVideo?.();
@@ -953,6 +962,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               },
               onStateChange: (event: any) => {
                 const stateData = event.data;
+                try {
+                  onStateChange?.(stateData);
+                } catch {}
                 if (stateData === window.YT?.PlayerState?.ENDED) {
                   dispatch(setReduxPlayerState('ended'));
                   dispatch(
@@ -2376,10 +2388,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
 
             <button
               type="button"
-              onClick={() => playCurrentCueTTS()}
-              disabled={!activeCue}
+              onClick={() => playCurrentCueTTS(activeCue || cachedCues[0])}
+              disabled={!activeCue && cachedCues.length === 0}
               title="Test play TTS for current active SRT subtitle cue"
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 flex items-center gap-1.5 disabled:opacity-40"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
             >
               <Volume2 className="w-3.5 h-3.5 text-amber-400" />
               <span>Speak SRT Cue</span>
