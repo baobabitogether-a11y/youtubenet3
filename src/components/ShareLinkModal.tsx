@@ -109,7 +109,10 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
 
   return (
     <div
-      id="share-link-modal-backdrop"
+      id="share-link-modal"
+      data-testid="share-link-modal share-link-modal-backdrop"
+      role="dialog"
+      aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
       onClick={onClose}
     >
@@ -136,11 +139,15 @@ export const ShareLinkModal: React.FC<ShareLinkModalProps> = ({
 
           <button
             type="button"
-            id="close-share-modal-button"
+            id="close-share-modal-btn"
+            data-testid="close-share-modal-btn close-share-modal-button"
+            aria-label="Close Share"
             onClick={onClose}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition"
           >
-            <X className="w-5 h-5" />
+            <span id="close-share-modal-button" className="contents">
+              <X className="w-5 h-5" />
+            </span>
           </button>
         </div>
 

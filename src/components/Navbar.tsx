@@ -140,16 +140,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenArtifacts && (
             <button
               type="button"
-              id="navbar-artifacts-button"
-              data-testid="navbar-artifacts-button open-artifacts-btn"
+              id="navbar-artifacts-btn"
+              data-testid="navbar-artifacts-btn navbar-artifacts-button open-artifacts-btn"
               onClick={onOpenArtifacts}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-indigo-800/70 bg-indigo-950/50 hover:bg-indigo-900/70 text-indigo-300 text-xs font-medium transition active:scale-95"
               title="Browse Subtitle Artifacts (.SRT tracks, raw segments, dual-matrix)"
             >
-              <span id="open-artifacts-btn" className="contents">
-                <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Artifacts</span>
-              </span>
+              <FileText className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Artifacts</span>
             </button>
           )}
 
@@ -157,16 +155,14 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenSettings && (
             <button
               type="button"
-              id="open-settings-button"
-              data-testid="open-settings-button navbar-settings-button open-settings-btn"
+              id="navbar-settings-button"
+              data-testid="navbar-settings-button settings-btn open-settings-button open-settings-btn"
               onClick={onOpenSettings}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition active:scale-95"
               title="Open Settings"
             >
-              <span id="open-settings-btn" className="contents">
-                <Settings className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="hidden sm:inline">Settings</span>
-              </span>
+              <Settings className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Settings</span>
             </button>
           )}
 
@@ -260,8 +256,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenShare && (
             <button
               type="button"
-              id="navbar-share-link-button"
-              data-testid="navbar-share-link-button"
+              id="navbar-share-button"
+              data-testid="navbar-share-button open-share-btn navbar-share-link-button"
               onClick={onOpenShare}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-xs font-semibold transition active:scale-95 shadow-sm"
               title="Share a video link with the app"
@@ -275,6 +271,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               id="navbar-library-button"
+              data-testid="navbar-library-button open-library-btn"
               onClick={onOpenLibrary}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-700 bg-neutral-800/80 hover:bg-neutral-800 text-neutral-200 text-xs font-medium transition active:scale-95"
             >
