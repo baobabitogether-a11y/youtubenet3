@@ -6,11 +6,11 @@ Coding agents must understand and respect the role of each markdown documentatio
 
 | File | Purpose & Agent Directive |
 | :--- | :--- |
-| **`PROMPT.md`** | **Active Agent Worklist**: Contains ONLY the latest user prompt converted into actionable TODOs. Agents must read this file at the start of each task. **All completed tasks MUST be moved to `CHANGELOG.md`**. |
+| **`PROMPT.md`** / **`PROMPTS.md`** | **Active Agent Worklist & Accomplishments**: Contains ONLY the latest user prompt converted into actionable TODOs. Agents must update this file with active TODOs and immediate accomplishments. **Upon task completion, all completed tasks and accomplishments MUST be moved to `CHANGELOG.md`**, leaving `PROMPT.md` clean for subsequent tasks. |
 | **`CHANGELOG.md`** | **Historical Archive**: Not of interest to agents during active coding. Holds chronological records of completed tasks, previous prompts, implementation logs, and version milestones. |
 | **`README.md`** | **User Guide & Live Links**: Contains the single CLI command for installing the latest APK on Android devices via ADB, and direct links to GitHub Pages (live web-app demo, web E2E tests, and Android emulator E2E tests). To update `README.md` for a new repository owner, run `npm run update:readme [username]` or `node scripts/update-readme.mjs [username]`. |
 | **`COVERAGE.md`** | **Test Coverage Matrix**: Tracks E2E and unit test suites across Web Companion and Android Native Shell. Organizes tests into TODOs and DONE sections, moving items upon test passes and highlighting platform-unique tests. |
-| **`AGENTS.md`** | **Architecture, Guidelines & Guardrails**: System documentation containing the app's design goals, component flow, subtitle fetching orders, platform separation rules, and protected files. |
+| **`AGENTS.md`** | **Architecture, Guidelines & Guardrails**: System documentation containing the app's design goals, component flow, subtitle fetching orders, platform separation rules, prompt skills on hello greetings, settings import/export protocols, and protected files. |
 
 ---
 
@@ -152,11 +152,16 @@ The repository contains two operational facets, with explicit prioritization:
 - **Hardware TTS Acceleration**: Uses native Android `android.speech.tts.TextToSpeech` via `AndroidNativeShell.speak()`. This completely bypasses browser autoplay policies, maintains speech audio while the screen is locked, and supports offline voice packs.
 - **Full Network Access**: Because it operates inside Android's native `WebViewClient`, it can inspect and intercept all HTTPS requests (`youtube.com/api/timedtext`) that browsers strictly prohibit due to the Same-Origin Policy.
 - **OS Intent Integration**: Registers Android `ACTION_SEND` intent filter in `AndroidManifest.xml` to receive shared links directly from the native YouTube Android app.
+- **In-App APK Updates**: The native shell displays in-app APK update notifications and triggers download and installation flows through Android's package installer.
 
 ### 2. Scoped Web Companion — TEST DRIVER & DEMO ONLY
 - **Strict Scope**: The browser build exists solely to:
   1. Drive automated CI/CD test suites (Playwright and Cypress) in headless Linux runners.
   2. Host an interactive static demonstration on GitHub Pages.
+- **Platform Specifics — Disable Showing APK Details on Web Platform**:
+  - The Web Companion runtime runs inside standard desktop and mobile browsers where Android APKs cannot be natively installed.
+  - Therefore, **disable showing APK's details, native package installer info, and intrusive APK update banners on the web platform**.
+  - In web environments, UI elements (such as `SettingsModal` and banners) must cleanly indicate Web Companion Demo mode, avoiding deceptive native installation prompts while preserving essential navigation and test compatibility.
 - **Browser Constraints**: Standard web browsers enforce the Same-Origin Policy on cross-origin iframes; browser JavaScript *cannot* intercept YouTube timedtext network requests inside an iframe.
 - **Architecture Protection Rule**: **NEVER modify or dismantle the Android native bridge (`MainActivity.kt`, `AndroidNativeShell`, `types.ts`) in an attempt to make browser iframe interception work like native Android.** Web-specific fallbacks must remain isolated within `subtitleCache.ts`, `server.ts`, and test fixtures.
 
@@ -503,5 +508,59 @@ When diagnosing or verifying subtitle synchronization issues:
    - If `/demo/` reproduces the issue, the bug is mathematical (e.g. cue boundary rounding, YouTube IFrame player lag, or SRT time-frame parsing).
    - If `/demo/` functions perfectly, the bug in the main app is architectural (e.g. unmemoized React callbacks, Redux state thrashing, or circular TTS pause-and-resume loops).
 2. **Algorithm Prototyping**: Always prototype improvements to seek algorithms, boundary interpolation, or cue matching inside `demo/mini-demo.ts` before propagating them into the main application.
+
+---
+
+## 12. Prompt Skills & Conversational Protocols: Remind Basic Prompt Skills on Hello
+
+To ensure a helpful, guided developer and user interaction, the assistant must follow specific conversational skills:
+
+### A. Hello & Greeting Protocol ("Hello Prompt Skills Reminder")
+When the user sends a greeting or welcome query (e.g., `"hello"`, `"hi"`, `"hey"`, `"good morning"`):
+1. **Friendly, Objective Welcome**: Greet the user cordially and introduce the YouTube Subtitle & Speech Flow Viewer's core mission.
+2. **Proactive Prompt Skills Overview**: Remind the user of the core capabilities and sample prompts they can execute:
+   - **Video Ingestion**: Loading any YouTube video URL, Short, embed, or timestamped link.
+   - **Dual-Language Subtitles**: Presenting foreign transcripts and instant target translations side-by-side or overlaid on top of video.
+   - **Target Language Switching**: Switching across 80+ world languages instantly during active playback.
+   - **Speech Flow & Hardware TTS**: Sentence-by-sentence TTS narration with synchronized word-boundary highlights (`word_boundary` / `char_boundary`).
+   - **App Settings & Exact Status Export/Import**: Exporting and importing full JSON snapshots of application configuration, per-video preferences, and playback status.
+   - **Diagnostics & Network Logs**: Inspecting real-time network interception, Redux state machine transitions, and TTS input queues.
+3. **Structured Format**: Present these skills cleanly in concise bullet points with key terms bolded for effortless scanning.
+
+---
+
+## 13. App Settings & Exact Status Import/Export Architecture
+
+To enable complete reproducibility, session continuity across multiple devices, and offline backup, the application provides comprehensive import and export of application settings and runtime status:
+
+### A. State Snapshot Data Schema (`AppStateSnapshot`)
+The exported JSON file or clipboard snapshot encompasses:
+1. **Application Settings (`settings`)**:
+   - `compactView`, `showExpandedControls`, `showTeacherPanel`, `showLinkBar`.
+   - `subtitlePosition` (`top`, `above`, `under`, `bottom`), `showTranslatedOnTop`, `showSubtitleTimestamps`.
+   - `autoPlayTTS`, `ttsSyncMode`, `allowNonNativeTTSFallback`, `showTtsDebugQueue`.
+   - `learningLanguages`, `singleTargetLanguageMode`, `subtitlesPerPage`.
+   - Subtitle fetching method toggles (`methods`: native interception, direct tlang, server extraction, Google free fallback, local cache).
+2. **Per-Video Settings Dictionary (`videoSettings`)**:
+   - Maps every previously watched `videoId` to its selected `activeTargetLang`, custom `ttsRates` per language, and `playOrder`.
+3. **Runtime Platform Status (`status`)**:
+   - `platform` (`web` vs `android_native`), browser `userAgent`, export timestamp (`exportedAt`), and schema version (`v1.0.13`).
+
+### B. User Interface & Import Workflow
+- **Exporting**: Users can click **Export JSON** to download `yt-viewer-settings-<date>.json` or click **Copy Snapshot** for clipboard sharing.
+- **Importing**: Users can import via direct file picker upload or by pasting JSON strings directly into the paste dialog with instant syntax and structure validation.
+- **Automatic Persistence**: Imported settings are instantly saved to `localStorage` (`yt_app_settings_v1`, `yt_video_settings_*`) and dispatched into React state without requiring page reload.
+
+---
+
+## 14. Platform Specifics & Web vs Native APK Presentation Rules
+
+The codebase strictly distinguishes between the **Android Native Shell** and the **Web Companion**:
+
+1. **Web Platform Presentation Discipline**:
+   - **Disable Showing APK Details**: On the web platform, suppress intrusive APK version banners, native installer prompts, and ADB shell instructions in standard views.
+   - **Clarify Web Demo Context**: When viewing settings on the web, designate the APK section clearly as "Web Companion Demo" or "Android App Only", directing users to the dedicated APK install guides (`README.md` / `update.apk.sh`) rather than suggesting unavailable browser-native APK installations.
+2. **Android Native Shell Presentation**:
+   - When running inside the native Android WebView (`window.AndroidNativeShell` present), activate full native hardware TTS speech synthesis, in-app GitHub release update checks, native background downloads, and package installer intents.
 
 

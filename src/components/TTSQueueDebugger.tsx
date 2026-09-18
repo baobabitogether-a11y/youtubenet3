@@ -55,7 +55,7 @@ export const TTSQueueDebugger: React.FC<TTSQueueDebuggerProps> = ({
   nextTranslatedText,
   isSpeaking: externalSpeaking,
   isSyncActive = false,
-  autoTTSEnabled = false,
+  autoTTSEnabled = true,
   onToggleAutoTTS,
   onTestSpeak,
   onOpenSettings,

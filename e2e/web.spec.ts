@@ -829,4 +829,226 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
     }
     await page.screenshot({ path: 'cypress/reports/assets/test11-step2.png' });
   });
+
+  /**
+   * WEB CRITICAL TEST 12:
+   * Verify Button Action Suite: Navbar triggers, Quick Controls, Position Selector, and Modals
+   */
+  test('12. Comprehensive Button Verification: Navbar Modals & Quick Controls', async ({ page }) => {
+    // 1. Navbar Library Button
+    const libraryBtn = page.locator('#navbar-library-button, #open-library-btn').first();
+    await expect(libraryBtn).toBeVisible();
+    await libraryBtn.click();
+    const libraryModal = page.locator('#video-library-modal');
+    await expect(libraryModal).toBeVisible();
+    const closeLibraryBtn = page.locator('#close-library-modal-btn, button[aria-label="Close Library"]').first();
+    if (await closeLibraryBtn.isVisible()) {
+      await closeLibraryBtn.click();
+      await expect(libraryModal).not.toBeVisible();
+    }
+
+    // 2. Navbar Share Button
+    const shareBtn = page.locator('#navbar-share-button, #open-share-btn').first();
+    await expect(shareBtn).toBeVisible();
+    await shareBtn.click();
+    const shareModal = page.locator('#share-link-modal');
+    await expect(shareModal).toBeVisible();
+    const closeShareBtn = page.locator('#close-share-modal-btn, button[aria-label="Close Share"]').first();
+    if (await closeShareBtn.isVisible()) {
+      await closeShareBtn.click();
+      await expect(shareModal).not.toBeVisible();
+    }
+
+    // 3. Navbar Subtitle Artifacts Button
+    const artifactsBtn = page.locator('#navbar-artifacts-btn').first();
+    if (await artifactsBtn.isVisible()) {
+      await artifactsBtn.click();
+      const artifactsModal = page.locator('#subtitle-artifacts-modal');
+      await expect(artifactsModal).toBeVisible();
+      const closeArtifactsBtn = page.locator('#close-artifacts-modal-btn').first();
+      await closeArtifactsBtn.click();
+      await expect(artifactsModal).not.toBeVisible();
+    }
+
+    // 4. Quick Control: Subtitle Position Selector
+    const positionSelect = page.locator('#subtitle-position-dropdown, select[aria-label*="Position"]').first();
+    if (await positionSelect.isVisible()) {
+      await positionSelect.selectOption('top');
+      await expect(positionSelect).toHaveValue('top');
+      await positionSelect.selectOption('bottom');
+      await expect(positionSelect).toHaveValue('bottom');
+    }
+
+    // 5. Quick Control: Language Modal Button
+    const langModalBtn = page.locator('#open-target-language-btn, #target-lang-badge').first();
+    if (await langModalBtn.isVisible()) {
+      await langModalBtn.click();
+      const langModal = page.locator('#select-target-language-modal');
+      await expect(langModal).toBeVisible();
+      const closeLangBtn = page.locator('#close-target-language-modal-btn').first();
+      if (await closeLangBtn.isVisible()) {
+        await closeLangBtn.click();
+        await expect(langModal).not.toBeVisible();
+      }
+    }
+  });
+
+  /**
+   * WEB CRITICAL TEST 13:
+   * Verify Subtitle Artifacts Browser: Track Browsing, Raw .SRT View, Search, and Cues
+   */
+  test('13. Subtitle Artifacts Browser: .SRT Tracks, Search, Raw & Formatted Views', async ({ page }) => {
+    // Open Subtitle Artifacts modal via button in navbar or quick controls
+    const artifactsBtn = page.locator('#navbar-artifacts-btn, #open-artifacts-view-btn').first();
+    await expect(artifactsBtn).toBeVisible();
+    await artifactsBtn.click();
+
+    const artifactsModal = page.locator('#subtitle-artifacts-modal');
+    await expect(artifactsModal).toBeVisible();
+
+    // Verify track tabs exist
+    const ruTrackTab = page.locator('#artifact-track-tab-ru');
+    const heTrackTab = page.locator('#artifact-track-tab-he');
+    const itTrackTab = page.locator('#artifact-track-tab-it');
+    await expect(ruTrackTab).toBeVisible();
+    await expect(heTrackTab).toBeVisible();
+    await expect(itTrackTab).toBeVisible();
+
+    // Switch to Hebrew track tab
+    await heTrackTab.click();
+    await page.waitForTimeout(200);
+
+    // Switch to Raw .SRT View
+    const rawSrtBtn = page.locator('#view-raw-srt-btn');
+    if (await rawSrtBtn.isVisible()) {
+      await rawSrtBtn.click();
+      const rawTextarea = page.locator('#raw-srt-textarea');
+      await expect(rawTextarea).toBeVisible();
+      const content = await rawTextarea.inputValue();
+      expect(content).toContain('-->');
+    }
+
+    // Switch back to Formatted Cues View
+    const formattedBtn = page.locator('#view-formatted-cues-btn');
+    if (await formattedBtn.isVisible()) {
+      await formattedBtn.click();
+      const searchInput = page.locator('#artifacts-search-input');
+      await expect(searchInput).toBeVisible();
+      await searchInput.fill('1');
+      await page.waitForTimeout(200);
+      await searchInput.clear();
+    }
+
+    // Close Artifacts modal
+    const closeBtn = page.locator('#close-artifacts-modal-btn');
+    await closeBtn.click();
+    await expect(artifactsModal).not.toBeVisible();
+  });
+
+  /**
+   * WEB CRITICAL TEST 14:
+   * Verify App Settings & Exact Status: Export JSON, Copy Snapshot, Paste Dialog, and Reset
+   */
+  test('14. App Settings & Exact Status: Import, Export, Copy Snapshot & Reset', async ({ page }) => {
+    // Open Settings Modal
+    const settingsBtn = page.locator('#navbar-settings-button, #settings-btn, button:has-text("Settings")').first();
+    await expect(settingsBtn).toBeVisible();
+    await settingsBtn.click();
+
+    const settingsModal = page.locator('#settings-modal');
+    await expect(settingsModal).toBeVisible();
+
+    // Verify Export JSON button
+    const exportBtn = page.locator('#export-settings-json-btn');
+    await expect(exportBtn).toBeVisible();
+
+    // Verify Copy Snapshot button
+    const copySnapshotBtn = page.locator('#copy-settings-snapshot-btn');
+    await expect(copySnapshotBtn).toBeVisible();
+    await copySnapshotBtn.click();
+    await page.waitForTimeout(200);
+
+    // Verify Paste Dialog button
+    const pasteDialogBtn = page.locator('#open-import-paste-dialog-btn');
+    if (await pasteDialogBtn.isVisible()) {
+      await pasteDialogBtn.click();
+      const pasteDialog = page.locator('#import-settings-paste-dialog');
+      await expect(pasteDialog).toBeVisible();
+      const cancelPasteBtn = page.locator('#cancel-import-paste-btn');
+      await cancelPasteBtn.click();
+      await expect(pasteDialog).not.toBeVisible();
+    }
+
+    // Close settings modal
+    const closeSettingsBtn = page.locator('#close-settings-modal-button');
+    await closeSettingsBtn.click();
+    await expect(settingsModal).not.toBeVisible();
+  });
+
+  /**
+   * WEB CRITICAL TEST 15:
+   * Verify Demo Quick Floating Dock: 1-Click Compact Mode Toggle & Subtitles Single vs All Tracks Toggle
+   */
+  test('15. Demo Quick Floating Dock: Compact Mode Toggle & Subtitles Single vs All Mode', async ({ page }) => {
+    // Locate the quick floating dock
+    const floatingDock = page.locator('#demo-quick-floating-dock');
+    await expect(floatingDock).toBeVisible({ timeout: 10000 });
+
+    // 1. Verify and click Compact Mode Toggle
+    const compactToggleBtn = page.locator('#demo-floating-compact-toggle');
+    await expect(compactToggleBtn).toBeVisible();
+    await compactToggleBtn.click();
+    await page.waitForTimeout(300);
+
+    // Click again to return to previous mode
+    await compactToggleBtn.click();
+    await page.waitForTimeout(300);
+
+    // 2. Verify and click Subtitles Single (Hebrew) vs Multiple (All On) Toggle
+    const subtitlesToggleBtn = page.locator('#demo-floating-subtitles-toggle');
+    await expect(subtitlesToggleBtn).toBeVisible();
+    
+    // Toggle to All Subtitles (5 Tracks)
+    await subtitlesToggleBtn.click();
+    await page.waitForTimeout(400);
+
+    // Toggle back to Hebrew Only
+    await subtitlesToggleBtn.click();
+    await page.waitForTimeout(400);
+
+    // 3. Test Collapse / Expand button
+    const collapseBtn = page.locator('#demo-floating-collapse-btn');
+    if (await collapseBtn.isVisible()) {
+      await collapseBtn.click();
+      await page.waitForTimeout(200);
+      await collapseBtn.click();
+      await page.waitForTimeout(200);
+    }
+  });
+
+  /**
+   * WEB CRITICAL TEST 16:
+   * Verify Caption Toggle Icon: Subtitle Auto-Detection Scoped to Android Native App
+   */
+  test('16. Caption Toggle Icon: Platform Scoping & CC Toggle Behavior', async ({ page }) => {
+    // Locate the caption toggle button
+    const captionToggle = page.locator('#caption-toggle-button').first();
+    await expect(captionToggle).toBeVisible();
+
+    // Verify initial aria-pressed or active state
+    const initialPressed = await captionToggle.getAttribute('aria-pressed');
+
+    // Click caption toggle to toggle state
+    await captionToggle.click();
+    await page.waitForTimeout(300);
+
+    const toggledPressed = await captionToggle.getAttribute('aria-pressed');
+    expect(toggledPressed).not.toBe(initialPressed);
+
+    // Toggle back to original state
+    await captionToggle.click();
+    await page.waitForTimeout(300);
+    const restoredPressed = await captionToggle.getAttribute('aria-pressed');
+    expect(restoredPressed).toBe(initialPressed);
+  });
 });

@@ -25,6 +25,7 @@ import {
   Activity,
   Download,
   Link2,
+  FileText,
   X,
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, formatTypeName, parseYouTubeUrl } from '../utils/youtube';
@@ -35,7 +36,7 @@ import { setPlayerReady as setReduxPlayerReady, setPlayerState as setReduxPlayer
 import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
-import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings, getSingleTargetLanguageMode, setSingleTargetLanguageMode } from '../utils/appSettings';
+import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings, getSingleTargetLanguageMode, setSingleTargetLanguageMode, isAndroidAppEnvironment } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { ParallelTranslationsOverlay } from './ParallelTranslationsOverlay';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
@@ -84,6 +85,7 @@ interface VideoPlayerProps {
   onOpenApkUpdate?: () => void;
   onOpenNetworkInspector?: () => void;
   onOpenShare?: () => void;
+  onOpenArtifacts?: () => void;
 }
 
 export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
@@ -106,6 +108,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       targetLanguage = null,
       onSelectTargetLanguage,
       onOpenTargetLanguageModal,
+      onOpenArtifacts,
       onOpenLogs,
       onOpenSettings,
       onBackOrClose,
@@ -226,6 +229,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       : activeTTSCharIndex;
 
     const [copiedPrompt, setCopiedPrompt] = useState(false);
+    const isAndroidApp = isAndroidAppEnvironment();
 
     const handleQuickCopyLogs = async (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -252,8 +256,8 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       setLocalCaptionsEnabled(nextState);
       onToggleCaptions?.(nextState);
 
-      // Requirement 4: Auto-detect subtitles once the caption icon is set to ON
-      if (nextState && !hasSubtitles && onFetchSubtitles) {
+      // Auto-detect subtitles once the caption icon is set to ON - scoped strictly to Android native app
+      if (nextState && !hasSubtitles && onFetchSubtitles && isAndroidApp) {
         onFetchSubtitles();
       }
     };
@@ -272,14 +276,14 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     const [showControls, setShowControls] = useState(true);
     const hideControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-    // Auto-TTS Narration State (default OFF: by default don't tts-play, only show the target translation)
+    // Auto-TTS Narration State (default ON: presents subtitles and enables TTS narration)
     const [autoTTSEnabled, setAutoTTSEnabled] = useState<boolean>(() => {
-      if (typeof window === 'undefined') return settings?.autoPlayTTS ?? false;
+      if (typeof window === 'undefined') return settings?.autoPlayTTS ?? true;
       try {
         const val = localStorage.getItem('yt_auto_tts_enabled');
-        return val !== null ? val === 'true' : (settings?.autoPlayTTS ?? false);
+        return val !== null ? val === 'true' : (settings?.autoPlayTTS ?? true);
       } catch {
-        return settings?.autoPlayTTS ?? false;
+        return settings?.autoPlayTTS ?? true;
       }
     });
 
@@ -1360,7 +1364,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     data-testid="active-subtitle-cue-text"
                     className="text-neutral-400 text-xs"
                   >
-                    Turn captions ON to detect dialogue
+                    {isAndroidApp ? 'Turn captions ON to detect dialogue' : 'Captions active • Spoken dialogue will appear here'}
                   </p>
                 )}
               </div>
@@ -1539,6 +1543,22 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   >
                     <Globe className="w-4 h-4 text-indigo-400" />
                     <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+                  </button>
+                )}
+
+                {/* 2b. Quick Bringup: Subtitle Artifacts Browser */}
+                {onOpenArtifacts && (
+                  <button
+                    id="open-artifacts-view-btn"
+                    data-testid="open-artifacts-view-btn"
+                    type="button"
+                    onClick={onOpenArtifacts}
+                    aria-label="Browse Subtitle Artifacts"
+                    className="min-h-[44px] px-3 rounded-xl bg-indigo-950/90 hover:bg-indigo-900/90 text-indigo-300 border border-indigo-700/60 flex items-center gap-1.5 text-xs font-semibold shadow-lg hover:ring-2 hover:ring-indigo-400 hover:border-indigo-400 hover:brightness-125 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
+                    title="Quick Bringup: Browse Subtitle Artifacts (.SRT tracks, raw cues)"
+                  >
+                    <FileText className="w-4 h-4 text-indigo-400" />
+                    <span className="hidden sm:inline">Artifacts</span>
                   </button>
                 )}
 
@@ -1770,10 +1790,25 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           {/* Expanded Mode Subtitle Overlay */}
           {isCaptionsActive && (
             <div
-              id="video-subtitles-overlay-expanded"
-              className="absolute left-4 right-4 bottom-4 z-20 flex flex-col items-center pointer-events-none"
+              id="video-subtitles-overlay"
+              data-testid="video-subtitles-overlay"
+              className={`absolute left-4 right-4 z-30 flex flex-col items-center pointer-events-none transition-all duration-300 ${
+                subtitlePosition === 'top'
+                  ? 'top-4 sm:top-6'
+                  : subtitlePosition === 'above'
+                  ? 'top-2 sm:top-4'
+                  : subtitlePosition === 'under'
+                  ? 'bottom-2 sm:bottom-4'
+                  : 'bottom-4 sm:bottom-6'
+              }`}
             >
-              <div className="max-w-2xl px-4 py-2 rounded-xl bg-black/85 backdrop-blur-md border border-neutral-800/80 shadow-2xl text-center space-y-1.5 animate-fadeIn">
+              <div
+                className={`max-w-2xl px-4 py-2 rounded-xl bg-black/90 backdrop-blur-md shadow-2xl text-center space-y-1.5 animate-fadeIn pointer-events-auto relative z-40 transition-all duration-200 ${
+                  targetLangCode === 'he' || isHebrewHighlighted
+                    ? 'border-2 border-amber-500/90 ring-2 ring-amber-400/40 shadow-[0_0_25px_rgba(251,191,36,0.35)]'
+                    : 'border border-neutral-800/80'
+                }`}
+              >
                 {isFetchingSubtitles ? (
                   <div className="flex items-center justify-center gap-2 text-amber-300 text-xs py-1">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1943,7 +1978,7 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                     data-testid="active-subtitle-cue-text"
                     className="text-neutral-400 text-xs"
                   >
-                    Turn captions ON to detect dialogue
+                    {isAndroidApp ? 'Turn captions ON to detect dialogue' : 'Captions active • Spoken dialogue will appear here'}
                   </p>
                 )}
               </div>
@@ -2095,6 +2130,21 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               >
                 <Globe className="w-3.5 h-3.5 text-indigo-400" />
                 <span>{targetLanguage ? targetLanguage.toUpperCase() : 'Lang'}</span>
+              </button>
+            )}
+
+            {/* Quick Bringup 2b: Subtitle Artifacts Browser */}
+            {onOpenArtifacts && (
+              <button
+                id="open-artifacts-view-btn-expanded"
+                data-testid="open-artifacts-view-btn-expanded"
+                type="button"
+                onClick={onOpenArtifacts}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-950/70 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition active:scale-95"
+                title="Quick Bringup: Browse Subtitle Artifacts (.SRT tracks, raw cues)"
+              >
+                <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Artifacts</span>
               </button>
             )}
 

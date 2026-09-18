@@ -7,25 +7,34 @@ import { isRtl } from '../utils/rtlUtils';
 import { AppSettings } from '../utils/appSettings';
 import { subscribeTTSDebug, TTSDebugPayload } from '../lib/ttsEngine';
 
-interface ParallelTranslationsOverlayProps {
-  displayedTargetLanguages: string[];
+export interface ParallelTranslationsOverlayProps {
+  displayedTargetLanguages?: string[];
   activeCue: CaptionCue | null;
-  targetLangCode: string;
-  parallelTranslations: Record<string, string>;
-  isHebrewHighlighted: boolean;
-  showSubtitleTimestamps: boolean;
-  isSyncSpeaking: boolean;
-  syncTTSLang: string | null;
-  currentSpeakingCharIndex: number | null;
-  activeTTSTarget: string | null;
-  isTTSSpeakingState: boolean;
-  autoTTSEnabled: boolean;
-  singleTargetLanguageMode: boolean;
-  onSpeakCue: (targetOrLang: 'original' | 'translated' | string, customText?: string, e?: React.MouseEvent) => void;
-  onToggleAutoTTS: (e?: React.MouseEvent) => void;
+  targetLangCode?: string;
+  primaryTargetLang?: string;
+  parallelTranslations?: Record<string, string>;
+  effectiveDisplayTranslatedText?: string;
+  displayTranslatedText?: string;
+  translatedCueText?: string | null;
+  isHebrewHighlighted?: boolean;
+  showSubtitleTimestamps?: boolean;
+  isSyncSpeaking?: boolean;
+  syncTTSLang?: string | null;
+  syncTTSCharIndex?: number | null;
+  currentSpeakingCharIndex?: number | null;
+  activeTTSTarget?: string | null;
+  activeTTSCharIndex?: number | null;
+  isTTSSpeakingState?: boolean;
+  autoTTSEnabled?: boolean;
+  singleTargetLanguageMode?: boolean;
+  onSpeakCue?: (targetOrLang: 'original' | 'translated' | string, customText?: string, e?: React.MouseEvent) => void;
+  onSpeak?: (targetOrLang: 'original' | 'translated' | string, customText?: string, e?: React.MouseEvent) => void;
+  onToggleAutoTTS?: (e?: React.MouseEvent) => void;
+  toggleAutoTTS?: (e?: React.MouseEvent) => void;
   onToggleParallelMode?: (e?: React.MouseEvent) => void;
   onOpenTargetLanguageModal?: () => void;
   onSeekTo?: (time: number) => void;
+  seekTo?: (time: number) => void;
   settings?: AppSettings;
 }
 
@@ -80,27 +89,38 @@ const LANGUAGE_COLOR_STYLES: Record<string, { bg: string; text: string; border: 
   },
 };
 
-export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayProps> = ({
-  displayedTargetLanguages,
-  activeCue,
-  targetLangCode,
-  parallelTranslations,
-  isHebrewHighlighted,
-  showSubtitleTimestamps,
-  isSyncSpeaking,
-  syncTTSLang,
-  currentSpeakingCharIndex,
-  activeTTSTarget,
-  isTTSSpeakingState,
-  autoTTSEnabled,
-  singleTargetLanguageMode,
-  onSpeakCue,
-  onToggleAutoTTS,
-  onToggleParallelMode,
-  onOpenTargetLanguageModal,
-  onSeekTo,
-  settings,
-}) => {
+export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayProps> = (props) => {
+  const {
+    displayedTargetLanguages,
+    activeCue,
+    targetLangCode,
+    primaryTargetLang,
+    parallelTranslations = {},
+    effectiveDisplayTranslatedText,
+    displayTranslatedText,
+    translatedCueText,
+    isHebrewHighlighted = false,
+    showSubtitleTimestamps = true,
+    isSyncSpeaking = false,
+    syncTTSLang = null,
+    syncTTSCharIndex = null,
+    currentSpeakingCharIndex,
+    activeTTSTarget = null,
+    activeTTSCharIndex = null,
+    isTTSSpeakingState = false,
+    autoTTSEnabled = true,
+    singleTargetLanguageMode,
+    onSpeakCue,
+    onSpeak,
+    onToggleAutoTTS,
+    toggleAutoTTS,
+    onToggleParallelMode,
+    onOpenTargetLanguageModal,
+    onSeekTo,
+    seekTo,
+    settings,
+  } = props;
+
   const [ttsDebugPayload, setTtsDebugPayload] = useState<TTSDebugPayload | null>(null);
 
   useEffect(() => {
@@ -112,14 +132,31 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
 
   if (!activeCue) return null;
 
+  const effectiveTargetLang = targetLangCode || primaryTargetLang || 'he';
+  const effectiveSingleMode =
+    singleTargetLanguageMode !== undefined
+      ? singleTargetLanguageMode
+      : (!displayedTargetLanguages || displayedTargetLanguages.length <= 1);
+
+  const effectiveOnSpeak = onSpeakCue || onSpeak || (() => {});
+  const effectiveOnSeekTo = onSeekTo || seekTo;
+  const effectiveOnToggleTTS = onToggleAutoTTS || toggleAutoTTS || (() => {});
+  const effectiveCharIndex = currentSpeakingCharIndex ?? activeTTSCharIndex ?? syncTTSCharIndex ?? null;
+
   const isRepeatingCurrentTTS =
     Boolean(ttsDebugPayload?.isRepeat && (isTTSSpeakingState || isSyncSpeaking));
   const currentRepeatCount = ttsDebugPayload?.repeatCount || 1;
 
   // Single target language presentation
-  if (singleTargetLanguageMode) {
-    const lang = targetLangCode;
-    const translationText = parallelTranslations[lang] || '';
+  if (effectiveSingleMode) {
+    const lang = effectiveTargetLang;
+    const translationText =
+      parallelTranslations[lang] ||
+      effectiveDisplayTranslatedText ||
+      displayTranslatedText ||
+      translatedCueText ||
+      '';
+
     if (!translationText) return null;
 
     const isTranslatedRtl = isRtl(lang, translationText);
@@ -136,7 +173,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
             data-testid="cue-time-section"
             onClick={(e) => {
               e.stopPropagation();
-              onSeekTo?.(activeCue.start);
+              effectiveOnSeekTo?.(activeCue.start);
             }}
             className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-50"
             title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(
@@ -167,7 +204,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
           </span>
         )}
 
-        {(targetLangCode === 'he' || isHebrewHighlighted) && (
+        {(lang === 'he' || isHebrewHighlighted) && (
           <span
             id="defaulted-hebrew-subtitles-badge"
             data-testid="defaulted-hebrew-subtitles-badge"
@@ -184,7 +221,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
           dir={isTranslatedRtl ? 'rtl' : 'ltr'}
           data-rtl={isTranslatedRtl ? 'true' : 'false'}
           className={`text-xs sm:text-sm font-semibold tracking-wide drop-shadow-sm leading-snug ${
-            targetLangCode === 'he' || isHebrewHighlighted
+            lang === 'he' || isHebrewHighlighted
               ? 'text-amber-300 font-bold bg-amber-950/50 px-2.5 py-0.5 rounded-lg border border-amber-500/70 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
               : 'text-emerald-400'
           } ${isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-center'}`}
@@ -192,12 +229,12 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
           <HighlightableText
             text={translationText}
             isSpeaking={isThisLangSpeaking}
-            activeCharIndex={currentSpeakingCharIndex}
+            activeCharIndex={effectiveCharIndex}
             syncMode={settings?.ttsSyncMode || 'word_boundary'}
-            lang={targetLangCode}
+            lang={lang}
             dir={isTranslatedRtl ? 'rtl' : 'ltr'}
             className={
-              targetLangCode === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'
+              lang === 'he' || isHebrewHighlighted ? 'text-amber-300 font-bold' : 'text-emerald-400'
             }
             activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
           />
@@ -207,7 +244,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
           type="button"
           id="speak-translated-cue-btn"
           data-testid="speak-translated-cue-btn"
-          onClick={(e) => onSpeakCue('translated', translationText, e)}
+          onClick={(e) => effectiveOnSpeak('translated', translationText, e)}
           className="p-1 px-1.5 rounded-md bg-emerald-950/80 hover:bg-emerald-800 text-emerald-400 hover:text-white border border-emerald-700/60 hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] relative z-50"
           title="Speak translated text (TTS with word highlight)"
         >
@@ -219,7 +256,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
           type="button"
           id="quick-toggle-tts-btn"
           data-testid="quick-toggle-tts-btn"
-          onClick={onToggleAutoTTS}
+          onClick={effectiveOnToggleTTS}
           className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:border-emerald-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto shrink-0 flex items-center gap-1 text-[10px] font-semibold relative z-50 ${
             autoTTSEnabled
               ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
@@ -266,7 +303,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
             title="Quickly select or edit target languages for translation"
           >
             <Globe className="w-3 h-3 text-indigo-400" />
-            <span>{targetLangCode}</span>
+            <span>{effectiveTargetLang}</span>
           </button>
         )}
       </div>
@@ -274,6 +311,11 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
   }
 
   // Parallel Multi-Language Presentation
+  const targetLangs =
+    displayedTargetLanguages && displayedTargetLanguages.length > 0
+      ? displayedTargetLanguages
+      : [effectiveTargetLang];
+
   return (
     <div
       id="parallel-translations-container"
@@ -290,7 +332,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
               data-testid="cue-time-section"
               onClick={(e) => {
                 e.stopPropagation();
-                onSeekTo?.(activeCue.start);
+                effectiveOnSeekTo?.(activeCue.start);
               }}
               className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-xs text-neutral-300 bg-neutral-900/90 border border-neutral-700/80 px-1.5 py-0.5 rounded shrink-0 select-none shadow-sm whitespace-nowrap hover:ring-2 hover:ring-amber-400 hover:border-amber-400 hover:scale-105 active:scale-95 transition cursor-pointer pointer-events-auto relative z-50"
               title={`Subtitle timeframe: ${formatTimestamp(activeCue.start)} to ${formatTimestamp(
@@ -304,19 +346,41 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
               </span>
             </button>
           )}
-          <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-indigo-300 bg-indigo-950/80 px-1.5 py-0.5 rounded border border-indigo-800/60">
-            <Layers className="w-3 h-3 text-indigo-400" />
-            <span>Parallel ({displayedTargetLanguages.length} Langs)</span>
-          </span>
+
+          {isRepeatingCurrentTTS && (
+            <span
+              id="tts-repeat-overlay-red-light"
+              data-testid="tts-repeat-overlay-red-light"
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/95 text-rose-200 border border-rose-600 shadow-[0_0_12px_rgba(244,63,94,0.8)] animate-pulse shrink-0"
+              title={`TTS repeating on identical text: ${currentRepeatCount} times`}
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-80" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500 shadow-[0_0_6px_rgba(239,68,68,1)]" />
+              </span>
+              <span>REPEAT x{currentRepeatCount}</span>
+            </span>
+          )}
+
+          {effectiveTargetLang === 'he' && (
+            <span
+              id="defaulted-hebrew-subtitles-badge"
+              data-testid="defaulted-hebrew-subtitles-badge"
+              className="inline-flex items-center gap-1 font-mono text-[10px] text-amber-300 bg-amber-950/90 border border-amber-500/80 px-2 py-0.5 rounded shrink-0 shadow-sm animate-pulse"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>עברית (Hebrew)</span>
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto relative z-50">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
             id="quick-toggle-tts-btn"
             data-testid="quick-toggle-tts-btn"
-            onClick={onToggleAutoTTS}
-            className={`p-1 px-1.5 rounded-md border hover:ring-2 hover:ring-emerald-400 hover:scale-105 active:scale-95 transition text-[10px] font-semibold flex items-center gap-1 ${
+            onClick={effectiveOnToggleTTS}
+            className={`p-1 px-1.5 rounded-md border flex items-center gap-1 text-[10px] font-semibold transition pointer-events-auto relative z-50 ${
               autoTTSEnabled
                 ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600'
                 : 'bg-neutral-900/90 text-neutral-400 hover:text-white border-neutral-700'
@@ -336,7 +400,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
               id="quick-toggle-parallel-btn"
               data-testid="quick-toggle-parallel-btn"
               onClick={onToggleParallelMode}
-              className="p-1 px-1.5 rounded-md bg-indigo-900/80 hover:bg-indigo-700 text-indigo-200 border border-indigo-600/70 text-[10px] font-semibold transition"
+              className="p-1 px-1.5 rounded-md bg-indigo-900/80 hover:bg-indigo-700 text-indigo-200 border border-indigo-600/70 text-[10px] font-semibold transition pointer-events-auto relative z-50"
               title="Switch back to single target language mode"
             >
               1 Lang
@@ -352,7 +416,7 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
                 e.stopPropagation();
                 onOpenTargetLanguageModal();
               }}
-              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 border border-indigo-700/60 text-[10px] uppercase font-mono font-bold transition flex items-center gap-1"
+              className="p-1 px-1.5 rounded-md bg-indigo-950/80 hover:bg-indigo-800 text-indigo-300 border border-indigo-700/60 text-[10px] uppercase font-mono font-bold transition flex items-center gap-1 pointer-events-auto relative z-50"
             >
               <Globe className="w-3 h-3 text-indigo-400" />
               <span>Languages</span>
@@ -363,11 +427,14 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
 
       {/* Parallel Language Rows */}
       <div className="flex flex-col gap-1.5 max-h-[180px] overflow-y-auto pr-1 select-text">
-        {displayedTargetLanguages.map((lang) => {
-          const text = parallelTranslations[lang] || '';
+        {targetLangs.map((lang) => {
+          const text =
+            parallelTranslations[lang] ||
+            (lang === effectiveTargetLang ? (effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText) : '') ||
+            '';
           const isTranslatedRtl = isRtl(lang, text);
           const isThisLangSpeaking =
-            (isTTSSpeakingState && (activeTTSTarget === lang || (lang === targetLangCode && activeTTSTarget === 'translated'))) ||
+            (isTTSSpeakingState && (activeTTSTarget === lang || (lang === effectiveTargetLang && activeTTSTarget === 'translated'))) ||
             (isSyncSpeaking && syncTTSLang === lang);
 
           const style = LANGUAGE_COLOR_STYLES[lang] || {
@@ -388,65 +455,52 @@ export const ParallelTranslationsOverlay: React.FC<ParallelTranslationsOverlayPr
                   : `${style.bg} ${style.border}`
               }`}
             >
-              <div className="flex items-center gap-2 flex-1 min-w-0">
-                <span
-                  className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] uppercase shrink-0 border ${
-                    style.badgeBg
-                  }`}
-                >
-                  {lang}
-                </span>
-
-                {isThisLangSpeaking && isRepeatingCurrentTTS && (
-                  <span
-                    id={`tts-repeat-row-red-light-${lang}`}
-                    data-testid={`tts-repeat-row-red-light-${lang}`}
-                    className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-rose-950 text-rose-300 border border-rose-600 animate-pulse shrink-0"
-                    title={`Repeating x${currentRepeatCount}`}
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shadow-[0_0_6px_rgba(239,68,68,1)]" />
-                    <span>x{currentRepeatCount}</span>
-                  </span>
-                )}
-
-                <div
-                  dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                  className={`text-xs sm:text-sm font-medium tracking-wide flex-1 overflow-hidden text-ellipsis leading-snug ${
-                    style.text
-                  } ${isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-left'}`}
-                >
-                  {text ? (
-                    <HighlightableText
-                      text={text}
-                      isSpeaking={isThisLangSpeaking}
-                      activeCharIndex={currentSpeakingCharIndex}
-                      syncMode={settings?.ttsSyncMode || 'word_boundary'}
-                      lang={lang}
-                      dir={isTranslatedRtl ? 'rtl' : 'ltr'}
-                      className={style.text}
-                      activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
-                    />
-                  ) : (
-                    <span className="text-[11px] text-neutral-500 italic">Translating...</span>
-                  )}
-                </div>
-              </div>
-
+              {/* Left Badge */}
               <button
                 type="button"
-                id={`speak-translated-cue-btn-${lang}`}
-                data-testid={`speak-translated-cue-btn-${lang}`}
-                onClick={(e) => onSpeakCue(lang, text, e)}
-                disabled={!text}
-                className={`p-1 px-1.5 rounded-md border text-[10px] shrink-0 flex items-center gap-1 font-semibold transition-all duration-150 cursor-pointer pointer-events-auto relative z-50 ${
-                  isThisLangSpeaking
-                    ? 'bg-amber-500 text-neutral-950 border-amber-400 ring-2 ring-amber-300 shadow-md animate-pulse'
-                    : 'bg-neutral-900/80 hover:bg-neutral-700 text-neutral-300 hover:text-white border-neutral-700 hover:border-neutral-500'
-                }`}
-                title={`Speak ${lang.toUpperCase()} translation`}
+                id={`parallel-lang-badge-${lang}`}
+                data-testid={`parallel-lang-badge-${lang}`}
+                onClick={(e) => effectiveOnSpeak(lang, text, e)}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-mono uppercase font-bold border shrink-0 transition-transform active:scale-95 cursor-pointer pointer-events-auto relative z-50 ${style.badgeBg}`}
+                title={`Click to speak ${lang.toUpperCase()} translation`}
+              >
+                {lang}
+              </button>
+
+              {/* Translation Text with TTS Highlighting */}
+              <div
+                className={`flex-1 text-xs font-medium leading-snug px-1 ${
+                  lang === 'he' ? 'text-amber-200 font-semibold' : style.text
+                } ${isTranslatedRtl ? 'text-right dir-rtl font-sans' : 'text-left'}`}
+                dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+              >
+                {text ? (
+                  <HighlightableText
+                    text={text}
+                    isSpeaking={isThisLangSpeaking}
+                    activeCharIndex={isThisLangSpeaking ? effectiveCharIndex : null}
+                    syncMode={settings?.ttsSyncMode || 'word_boundary'}
+                    lang={lang}
+                    dir={isTranslatedRtl ? 'rtl' : 'ltr'}
+                    activeWordClassName="bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow ring-2 ring-amber-300 scale-105 inline-block mx-0.5"
+                  />
+                ) : (
+                  <span className="text-neutral-500 italic text-[11px]">
+                    Translating into {lang.toUpperCase()}...
+                  </span>
+                )}
+              </div>
+
+              {/* Speak Single Row Button */}
+              <button
+                type="button"
+                id={`parallel-speak-btn-${lang}`}
+                data-testid={`parallel-speak-btn-${lang}`}
+                onClick={(e) => effectiveOnSpeak(lang, text, e)}
+                className="p-1 rounded bg-neutral-900/80 hover:bg-neutral-700 text-neutral-300 hover:text-white border border-neutral-700 transition pointer-events-auto shrink-0 relative z-50"
+                title={`Speak ${lang.toUpperCase()} narration`}
               >
                 <Volume2 className="w-3 h-3" />
-                <span>{isThisLangSpeaking ? 'Speaking' : 'Play'}</span>
               </button>
             </div>
           );

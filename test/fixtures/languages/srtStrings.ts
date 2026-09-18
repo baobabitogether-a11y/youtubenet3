@@ -1,47 +1,14 @@
-// Universal loader for authentic .srt fixtures across Vite client and Node/esbuild environments
-import fs from 'fs';
-import path from 'path';
+import arSrt from './ar.srt?raw';
+import enSrt from './en.srt?raw';
+import heSrt from './he.srt?raw';
+import itSrt from './it.srt?raw';
+import ruSrt from './ru.srt?raw';
 
-// Vite client raw loader
-const globFiles = (typeof import.meta !== 'undefined' && import.meta.glob
-  ? import.meta.glob('./*.srt', { query: '?raw', eager: true, import: 'default' })
-  : {}) as Record<string, string>;
-
-const viteSrtFiles: Record<string, string> = {};
-for (const [key, value] of Object.entries(globFiles)) {
-  if (typeof value === 'string' && value.length > 0) {
-    const cleanKey = key.replace(/^\.\//, '').replace(/\.srt$/i, '').toLowerCase();
-    viteSrtFiles[cleanKey] = value;
-    viteSrtFiles[key] = value;
-    const langMatch = key.match(/([a-z]{2,3})\.srt$/i);
-    if (langMatch) {
-      viteSrtFiles[langMatch[1].toLowerCase()] = value;
-    }
-  }
-}
-
-function readSrtFromDisk(langCode: string): string {
-  try {
-    if (typeof process !== 'undefined' && process.versions?.node) {
-      const candidatePaths = [
-        path.join(process.cwd(), 'test/fixtures/languages', `${langCode}.srt`),
-        path.join(__dirname, `${langCode}.srt`),
-      ];
-      for (const p of candidatePaths) {
-        if (fs.existsSync(p)) {
-          return fs.readFileSync(p, 'utf-8');
-        }
-      }
-    }
-  } catch {}
-  return '';
-}
-
-export const arSrtRaw: string = viteSrtFiles['ar'] || viteSrtFiles['./ar.srt'] || readSrtFromDisk('ar');
-export const enSrtRaw: string = viteSrtFiles['en'] || viteSrtFiles['./en.srt'] || readSrtFromDisk('en');
-export const heSrtRaw: string = viteSrtFiles['he'] || viteSrtFiles['./he.srt'] || readSrtFromDisk('he');
-export const itSrtRaw: string = viteSrtFiles['it'] || viteSrtFiles['./it.srt'] || readSrtFromDisk('it');
-export const ruSrtRaw: string = viteSrtFiles['ru'] || viteSrtFiles['./ru.srt'] || readSrtFromDisk('ru');
+export const arSrtRaw: string = arSrt || '';
+export const enSrtRaw: string = enSrt || '';
+export const heSrtRaw: string = heSrt || '';
+export const itSrtRaw: string = itSrt || '';
+export const ruSrtRaw: string = ruSrt || '';
 
 /**
  * Default favorite languages: ar, il, ru, it, he
@@ -76,7 +43,7 @@ export function normalizeLanguageCode(langCode: string): string {
  */
 export function getRawSrtForLanguage(langCode: string): string | null {
   const clean = normalizeLanguageCode(langCode);
-  return viteSrtFiles[clean] || SRT_RAW_MAP[clean] || SRT_RAW_MAP[langCode] || readSrtFromDisk(clean) || null;
+  return SRT_RAW_MAP[clean] || SRT_RAW_MAP[langCode] || null;
 }
 
 /**

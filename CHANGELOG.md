@@ -8,6 +8,133 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Fix Dev Server Startup (Decouple Server Imports from SRT Loader)
+
+- **Root Cause**: `server.ts` imported `src/utils/youtube.ts`, which imported `DEFAULT_VIDEO_ID` and `DEFAULT_VIDEO_URL` from `src/config/appConfig.ts`. `appConfig.ts` imported `FCRZADI8R9U_LANGUAGE_SRT_TRACKS` from `defaultSubtitles.ts`, which imported `test/fixtures/languages/srtStrings.ts` (containing static raw `.srt` imports). When `tsx server.ts` started the dev server, Node's runtime ESM module loader attempted to load `.srt` files and threw `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".srt"`.
+- **Resolution**:
+  - Decoupled `src/utils/youtube.ts` from `src/config/appConfig.ts` by defining `DEFAULT_VIDEO_ID` and `DEFAULT_VIDEO_URL` directly as constants in `youtube.ts`, completely isolating `server.ts` from client subtitle fixtures.
+  - Verified `server.ts` boots instantly on `http://0.0.0.0:3000` with status 200.
+  - Verified all local `.srt` fixtures continue to load seamlessly on the Vite client in `SubtitleArtifactsModal.tsx`.
+- **Verification**:
+  - Dev server verified running on port 3000 returning `HTTP/1.1 200 OK`.
+  - `lint_applet` (`tsc --noEmit`): 0 errors.
+  - `compile_applet` (`npm run build`): Build succeeded.
+
+### Ensure Subtitle Artifacts Load & Display from Local .SRT Fixtures for Demo Video (FcRzAdI8R9U)
+
+- **Local SRT Fixtures Ingestion**:
+  - Bound the client-side raw asset loading for `test/fixtures/languages/*.srt` (`ar.srt`, `en.srt`, `he.srt`, `it.srt`, `ru.srt`) in `srtStrings.ts` with direct raw string resolution.
+  - Ensured `FCRZADI8R9U_LANGUAGE_SRT_TRACKS` in `defaultSubtitles.ts` populates authentic 1,578-segment subtitle tracks for Russian (`ru`), Hebrew (`he`/`il`/`iw`), English (`en`), Italian (`it`), and Arabic (`ar`).
+  - Ensured `getCachedSrtForVideoAndLanguage` and `getAllCachedLanguageCodesForVideo` correctly resolve subtitle tracks for the default demonstration video (`FcRzAdI8R9U`) and empty/fallback IDs.
+- **Subtitle Artifacts Modal (`SubtitleArtifactsModal.tsx`)**:
+  - Verified the Artifacts Browser correctly renders all 1,578 cues in the Dual Subtitle Matrix, Raw `.SRT` format viewer, and structured JSON tab upon clicking the "Artifacts" button.
+  - Verified language tab switching (`ru`, `he`, `en`, `it`, `ar`), in-modal search filtering, cue text-to-speech audio pronunciation, and one-click `.srt` download.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+  - Dev server restarted and verified healthy on port 3000.
+
+### Fix Dev Server Startup Crash (Node ESM Unknown File Extension on .srt)
+
+- **Root Cause**: `test/fixtures/languages/srtStrings.ts` included static ESM imports with Vite queries (`import arSrt from './ar.srt?raw'`). When `tsx server.ts` started the dev server, Node's runtime ESM loader attempted to resolve `.srt` files and crashed with `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".srt"`.
+- **Resolution**: Refactored `srtStrings.ts` to use Vite's transform-time `import.meta.glob('./*.srt', { query: '?raw', eager: true, import: 'default' })` on the client bundle, combined with safe dynamic Node filesystem access when running under Node/tsx.
+- **Verification**: Verified dev server boots cleanly on port 3000, responds with HTTP 200 on `/api/health` and `/`, and passes both `lint_applet` and `compile_applet`.
+
+### Fix React Hook Order Violation in SubtitleArtifactsModal
+
+- **Root Cause**: `SubtitleArtifactsModal.tsx` contained an early return `if (!isOpen) return null;` placed before a `useMemo` hook (`filteredCues`). When `isOpen` transitioned from `false` to `true`, the number of hooks called changed, violating React's Rules of Hooks.
+- **Resolution**: Moved all hook invocations to the top level of the component and repositioned `if (!isOpen) return null;` after all hooks and handlers, immediately prior to rendering JSX.
+- **Verification**: Verified with `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`) with zero errors.
+
+### Landing Page Demo Subtitle Synchronization & Platform-Scoped Fallback Message
+
+- **Subtitle Visibility on Landing Page Demo**:
+  - Resolved cue synchronization on initial demo load (`FcRzAdI8R9U`) by adding an `activeCue` synchronization effect upon subtitle track load.
+  - Aligned expanded and compact overlay container IDs (`#video-subtitles-overlay`), z-indexing (`z-30`/`z-40`), and pointer events across both viewing modes.
+- **Platform-Scoped Fallback Message**:
+  - Scoped the message `"Turn captions ON to detect dialogue"` exclusively to the native Android platform (`isAndroidAppEnvironment()`).
+  - In web environments, the fallback message displays `"Captions active • Spoken dialogue will appear here"` when captions are enabled without active dialogue.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### Caption Icon Subtitle Auto-Detection Scoped to Android Native Platform
+
+- **Android Native Platform Scoping for Caption Auto-Detection**:
+  - Scoped automatic subtitle detection / fetching upon toggling the dedicated caption icon (`#caption-toggle-button`) strictly to the Android native application environment (`isAndroidAppEnvironment()`).
+  - On the Web Companion demo, toggling the caption icon cleanly enables/disables subtitle overlay display without initiating unrequested background network auto-detection calls.
+  - On Android native shell (`AndroidNativeShell`), enabling the caption icon seamlessly triggers native subtitle interception and dialogue auto-detection.
+- **E2E Test Coverage**:
+  - Added **WEB CRITICAL TEST 16** in `e2e/web.spec.ts` verifying the Caption Toggle icon's platform scoping, `aria-pressed` states, and CC toggling behavior.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### Demo Quick Floating Dock on Landing Page: 1-Click Compact Mode & Single/All Subtitles Toggle
+
+- **Demo Quick Floating Dock (`DemoQuickFloatingDock.tsx`)**:
+  - Implemented a floating control dock pinned to the bottom-left of the viewport for the demonstration landing page video (`FcRzAdI8R9U`).
+  - **1. Compact Mode Toggle (`#demo-floating-compact-toggle`)**: 1-click toggle between Compact Mode (`compactView: true`) and the Expanded Teacher Workspace (`compactView: false`).
+  - **2. Subtitle Tracks Mode Toggle (`#demo-floating-subtitles-toggle`)**: 1-click toggle between:
+    - Single Subtitle: Hebrew Only (`singleTargetLanguageMode: true`, target language `he`).
+    - Multiple Subtitles: All Tracks ON (`singleTargetLanguageMode: false`, target languages `['he', 'it', 'en', 'ar', 'ru']`), enabling simultaneous multi-track subtitles across video overlays and the multi-column workspace.
+  - Added collapsible state toggle (`#demo-floating-collapse-btn`) for non-intrusive viewing.
+- **E2E Test Coverage**:
+  - Added **WEB CRITICAL TEST 15** in `e2e/web.spec.ts` verifying the Quick Floating Dock's visibility, 1-click Compact Mode toggle, Subtitle Mode toggle (Hebrew Only vs All Subtitles), and collapse/expand controls.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### Default Compact Design, Subtitle Artifacts Browser, and Comprehensive Button Verification Suites
+
+- **Default Compact View Design (`compactView: true`)**:
+  - Updated `DEFAULT_APP_SETTINGS` in `src/utils/appSettings.ts` to set `compactView: true` by default.
+  - Ensured the initial load lands in a clean, zero-scroll compact layout with high-visibility quick controls docked neatly around the video player.
+  - Maintained full toggleability via `SettingsModal.tsx` and quick view switchers so users can alternate between Compact View and Expanded Teacher Workspace seamlessly.
+- **Subtitle Artifacts Browser (`SubtitleArtifactsModal.tsx`)**:
+  - Created `src/components/SubtitleArtifactsModal.tsx` allowing instant browsing of subtitle tracks for the demonstration video (`FcRzAdI8R9U`) across source and target languages (`ru`, `he`, `it`, `en`, `ar`).
+  - Implemented multi-track switching tabs with RTL support, raw `.SRT` viewing with copy-to-clipboard and `.srt` file download, formatted subtitle cue tables with instant search filtering, single-cue TTS playback, and click-to-seek video player synchronization.
+  - Linked the Artifacts Browser across key entry points: Navbar (`#navbar-artifacts-btn`), compact and expanded VideoPlayer quick controls (`#open-artifacts-view-btn`), and SubtitlesTeacherPanel (`#browse-all-artifacts-btn`).
+- **Comprehensive Button Action & Modal E2E Test Suites**:
+  - Added **WEB CRITICAL TEST 12**: Verifies full button action suite across Navbar modal triggers (Library, Share, Artifacts, Settings, Logs), Quick Controls, and Subtitle Position Dropdowns.
+  - Added **WEB CRITICAL TEST 13**: Verifies the Subtitle Artifacts Browser across track tab switching, Raw `.SRT` vs Formatted cues toggling, search input filtering, and modal lifecycle.
+  - Added **WEB CRITICAL TEST 14**: Verifies App Settings & Exact Status Export/Import (Export JSON, Copy snapshot to clipboard, Import Paste dialog, and Reset defaults).
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### AGENTS.md Guidelines Synchronization, Settings Import/Export, Hello Prompt Skills & Web Platform Specifics
+
+- **AGENTS.md & PROMPT.md Synchronization**:
+  - Updated Section 1 (`Documentation File System`) to establish that `PROMPT.md` (and alias `PROMPTS.md`) contains active TODOs and prompt accomplishments, where completed items must be archived to `CHANGELOG.md` upon completion.
+  - Added **Section 12: Prompt Skills & Conversational Protocols: Remind Basic Prompt Skills on Hello**, defining the conversational protocol for introducing the core capabilities of the platform upon receiving a user greeting ("hello", "hi").
+  - Added **Section 13: App Settings & Exact Status Import/Export Architecture**, detailing the full JSON schema (`AppStateSnapshot`), per-video preferences, and import/export lifecycle.
+  - Updated Section 5 and added **Section 14: Platform Specifics & Web vs Native APK Presentation Rules**, documenting the rule to disable showing native APK details/intrusive banners on the web platform.
+- **App Settings & Exact Status Import/Export Implementation**:
+  - Created `exportFullAppState` and `importFullAppState` helper utilities in `src/utils/appSettings.ts` exporting complete configuration snapshots including `AppSettings`, per-video target language/TTS rate mappings, and runtime platform status.
+  - Integrated interactive UI controls in `SettingsModal.tsx` allowing users to **Export JSON**, **Copy Snapshot** to clipboard, **Import File** (`.json`), or **Paste JSON** with immediate state update and validation.
+- **Web vs Android Platform Specifics UI Handling**:
+  - Updated `SettingsModal.tsx` to detect `isAndroidNative` and clearly display "Web Companion Demo" / "Android App Only" on web browsers to avoid misleading native installation prompts on pure web clients.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
+### Default Landing Page Subtitle Presentation & Auto-TTS Narration
+
+- **Default Subtitle Presentation on Landing Page**:
+  - Initialized `activeCue` immediately with the first cue of authentic demonstration video tracks (`FcRzAdI8R9U`) on app mount, preventing latency or empty subtitle states on initial render.
+  - Initialized `translatedCueText` immediately for the primary target language (`he` - Hebrew or user target languages) using authentic local subtitle fixtures (`FCRZADI8R9U_LANGUAGE_SRT_TRACKS.he`).
+  - Configured `captionsEnabled` to default to `true`, ensuring synchronized dual-language subtitle overlays (`VideoPlayer`) and the interactive `SubtitlesTeacherPanel` are immediately displayed upon landing.
+- **Default Auto-TTS Narration (`autoPlayTTS: true`)**:
+  - Updated `DEFAULT_APP_SETTINGS` in `src/utils/appSettings.ts` to set `autoPlayTTS: true` by default.
+  - Updated `VideoPlayer.tsx` to default `autoTTSEnabled` to `settings?.autoPlayTTS ?? true`, enabling synchronized speech narration and word-boundary text highlighting out-of-the-box.
+  - Updated `TTSQueueDebugger.tsx` default prop to `autoTTSEnabled = true`.
+  - Updated `SettingsModal.tsx` documentation and settings toggle to describe Auto-TTS as ON by default.
+  - Maintained full support for manual user override, pause controls, and URL parameter override (`?tts=0` / `?tts=1`).
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build` with Vite SPA & backend esbuild): Succeeded with 0 errors.
+
 ### Multi-Fork Management, README Sync Workflow, and Isolated Hebrew Mini Demo (`demo/`)
 
 - **Multi-Fork Repository Identity Synchronization**:
