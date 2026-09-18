@@ -63,6 +63,7 @@ import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../
 import { SelectTargetLanguageModal } from './components/SelectTargetLanguageModal';
 import { TTSInputTextsModal } from './components/TTSInputTextsModal';
 import { SubtitleArtifactsModal } from './components/SubtitleArtifactsModal';
+import { DemoQuickFloatingDock } from './components/DemoQuickFloatingDock';
 import { translateText } from './lib/translateService';
 import { DEFAULT_LIBRARY_ITEMS } from './config/appConfig';
 
@@ -1404,6 +1405,15 @@ export default function App() {
         <NetworkInspectorModal />
         <ErrorInspectorModal />
         {settings.enableDiagnosticDock && <FloatingDiagnosticDock />}
+
+        {/* Quick Floating Dock on Landing Page for Demo Video */}
+        <DemoQuickFloatingDock
+          videoId={videoId}
+          settings={settings}
+          selectedTargetLang={selectedTargetLang}
+          onUpdateSettings={handleUpdateSettings}
+          onSelectTargetLanguage={handleUpdateTargetLang}
+        />
       </div>
     );
   }
@@ -1785,6 +1795,15 @@ export default function App() {
           onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
         />
       )}
+
+      {/* Quick Floating Dock on Landing Page for Demo Video */}
+      <DemoQuickFloatingDock
+        videoId={videoId}
+        settings={settings}
+        selectedTargetLang={selectedTargetLang}
+        onUpdateSettings={handleUpdateSettings}
+        onSelectTargetLanguage={handleUpdateTargetLang}
+      />
     </div>
   );
 }

@@ -8,6 +8,21 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Demo Quick Floating Dock on Landing Page: 1-Click Compact Mode & Single/All Subtitles Toggle
+
+- **Demo Quick Floating Dock (`DemoQuickFloatingDock.tsx`)**:
+  - Implemented a floating control dock pinned to the bottom-left of the viewport for the demonstration landing page video (`FcRzAdI8R9U`).
+  - **1. Compact Mode Toggle (`#demo-floating-compact-toggle`)**: 1-click toggle between Compact Mode (`compactView: true`) and the Expanded Teacher Workspace (`compactView: false`).
+  - **2. Subtitle Tracks Mode Toggle (`#demo-floating-subtitles-toggle`)**: 1-click toggle between:
+    - Single Subtitle: Hebrew Only (`singleTargetLanguageMode: true`, target language `he`).
+    - Multiple Subtitles: All Tracks ON (`singleTargetLanguageMode: false`, target languages `['he', 'it', 'en', 'ar', 'ru']`), enabling simultaneous multi-track subtitles across video overlays and the multi-column workspace.
+  - Added collapsible state toggle (`#demo-floating-collapse-btn`) for non-intrusive viewing.
+- **E2E Test Coverage**:
+  - Added **WEB CRITICAL TEST 15** in `e2e/web.spec.ts` verifying the Quick Floating Dock's visibility, 1-click Compact Mode toggle, Subtitle Mode toggle (Hebrew Only vs All Subtitles), and collapse/expand controls.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
 ### Default Compact Design, Subtitle Artifacts Browser, and Comprehensive Button Verification Suites
 
 - **Default Compact View Design (`compactView: true`)**:

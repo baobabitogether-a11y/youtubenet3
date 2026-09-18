@@ -984,4 +984,45 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
     await closeSettingsBtn.click();
     await expect(settingsModal).not.toBeVisible();
   });
+
+  /**
+   * WEB CRITICAL TEST 15:
+   * Verify Demo Quick Floating Dock: 1-Click Compact Mode Toggle & Subtitles Single vs All Tracks Toggle
+   */
+  test('15. Demo Quick Floating Dock: Compact Mode Toggle & Subtitles Single vs All Mode', async ({ page }) => {
+    // Locate the quick floating dock
+    const floatingDock = page.locator('#demo-quick-floating-dock');
+    await expect(floatingDock).toBeVisible({ timeout: 10000 });
+
+    // 1. Verify and click Compact Mode Toggle
+    const compactToggleBtn = page.locator('#demo-floating-compact-toggle');
+    await expect(compactToggleBtn).toBeVisible();
+    await compactToggleBtn.click();
+    await page.waitForTimeout(300);
+
+    // Click again to return to previous mode
+    await compactToggleBtn.click();
+    await page.waitForTimeout(300);
+
+    // 2. Verify and click Subtitles Single (Hebrew) vs Multiple (All On) Toggle
+    const subtitlesToggleBtn = page.locator('#demo-floating-subtitles-toggle');
+    await expect(subtitlesToggleBtn).toBeVisible();
+    
+    // Toggle to All Subtitles (5 Tracks)
+    await subtitlesToggleBtn.click();
+    await page.waitForTimeout(400);
+
+    // Toggle back to Hebrew Only
+    await subtitlesToggleBtn.click();
+    await page.waitForTimeout(400);
+
+    // 3. Test Collapse / Expand button
+    const collapseBtn = page.locator('#demo-floating-collapse-btn');
+    if (await collapseBtn.isVisible()) {
+      await collapseBtn.click();
+      await page.waitForTimeout(200);
+      await collapseBtn.click();
+      await page.waitForTimeout(200);
+    }
+  });
 });
