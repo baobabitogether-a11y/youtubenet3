@@ -630,8 +630,8 @@ async function startServer() {
   // Google Translate TTS audio proxy (high-fidelity neural audio for 80+ languages)
   app.get('/api/tts', async (req, res) => {
     try {
-      const text = (req.query.text as string || '').trim();
-      const lang = (req.query.lang as string || 'en').replace(/_auto$/, '').trim();
+      const text = ((req.query.text as string) || (req.query.q as string) || '').trim();
+      const lang = ((req.query.lang as string) || (req.query.tl as string) || 'en').replace(/_auto$/, '').trim();
       if (!text) {
         return res.status(400).json({ error: 'Parameter text is required' });
       }

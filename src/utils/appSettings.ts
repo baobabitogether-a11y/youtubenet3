@@ -175,8 +175,8 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   // TTS Play & Text Highlight Sync Mode (4 Alternatives, default: word_boundary)
   ttsSyncMode: 'word_boundary',
 
-  // Non-Native TTS Fallback: DISABLED by default (native only)
-  allowNonNativeTTSFallback: false,
+  // Non-Native TTS Fallback: ENABLED by default for web / non-native fallback
+  allowNonNativeTTSFallback: true,
 
   // Present TTS input and TTS queue by default for real-time debugging
   showTtsDebugQueue: true,
@@ -212,14 +212,13 @@ const SETTINGS_STORAGE_KEY = STORAGE_KEYS.SETTINGS_STORAGE_KEY;
 
 export function loadAppSettings(): AppSettings {
   if (typeof window === 'undefined') return DEFAULT_APP_SETTINGS;
-  const isAndroid = isAndroidAppEnvironment();
   try {
     const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {
         ...DEFAULT_APP_SETTINGS,
-        compactView: parsed.compactView !== undefined ? parsed.compactView : isAndroid,
+        compactView: parsed.compactView !== undefined ? parsed.compactView : true,
         ...parsed,
         methods: {
           ...DEFAULT_APP_SETTINGS.methods,
@@ -232,7 +231,7 @@ export function loadAppSettings(): AppSettings {
   }
   return {
     ...DEFAULT_APP_SETTINGS,
-    compactView: isAndroid,
+    compactView: true,
   };
 }
 

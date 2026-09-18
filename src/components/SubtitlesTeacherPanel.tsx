@@ -20,6 +20,7 @@ import {
   Radio,
   Clock,
   RotateCcw,
+  Repeat,
   Subtitles,
   HelpCircle,
   FolderHeart,

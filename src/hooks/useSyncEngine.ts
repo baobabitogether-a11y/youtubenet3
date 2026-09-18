@@ -310,17 +310,15 @@ export function useSyncEngine({
           const currentTime = player.getCurrentTime();
           const elapsed = (Date.now() - startTime) / 1000;
 
-          // Stop when current time passes target, or fallback timeout elapsed
-          if (
-            currentTime >= targetEnd - 0.15 ||
-            (currentTime < start - 2 && currentTime > 0) ||
-            elapsed >= durationSec + 3
-          ) {
-            clearInterval(checkInterval);
-            player.pause();
-            resolve();
+          // Allow at least 400ms for player to seek and begin playback before boundary checks
+          if (elapsed >= 0.4) {
+            if (currentTime >= targetEnd - 0.1 || elapsed >= durationSec + 1.2) {
+              clearInterval(checkInterval);
+              player.pause();
+              resolve();
+            }
           }
-        }, 100);
+        }, 80);
       });
     },
     [playerRef]

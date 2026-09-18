@@ -139,17 +139,13 @@ export default function App() {
   const [isArtifactsModalOpen, setIsArtifactsModalOpen] = useState<boolean>(false);
   const [isApkUpdateModalOpen, setIsApkUpdateModalOpen] = useState<boolean>(false);
   const [hasApkUpdate, setHasApkUpdate] = useState<boolean>(false);
+  const [latestApkTag, setLatestApkTag] = useState<string | null>(null);
   const isAndroidApp = isAndroidAppEnvironment();
   const [settings, setSettings] = useState<AppSettings>(() => {
     const loaded = loadAppSettings();
-    let initialCompact = loaded.compactView;
-    if (!isAndroidApp && typeof window !== 'undefined') {
-      try {
-        const raw = localStorage.getItem('yt_app_settings_v4');
-        if (!raw) {
-          initialCompact = false;
-        }
-      } catch {}
+    let initialCompact = loaded.compactView ?? true;
+    if (initialUrlState.mode) {
+      initialCompact = initialUrlState.mode === 'compact';
     }
     if (initialUrlState.autoTTS !== undefined) {
       return { ...loaded, autoPlayTTS: initialUrlState.autoTTS, compactView: initialCompact };
@@ -407,10 +403,10 @@ export default function App() {
           observedTimedTextUrl,
         },
         tts: {
-          isSpeaking: syncTTSState.isSpeaking,
-          currentTTSText: syncTTSState.currentTTSText,
-          currentTTSLang: syncTTSState.currentTTSLang,
-          activeCharIndex: syncTTSState.activeCharIndex,
+          isSpeaking: syncEngine.isSpeaking,
+          currentTTSText: syncEngine.currentTTSText,
+          currentTTSLang: syncEngine.currentTTSLang,
+          activeCharIndex: syncEngine.activeCharIndex,
           autoPlayTTS: settings.autoPlayTTS,
           ttsSyncMode: settings.ttsSyncMode,
           allowNonNativeFallback: settings.allowNonNativeTTSFallback ?? false,
@@ -430,7 +426,10 @@ export default function App() {
     activeCue,
     translatedCueText,
     selectedTargetLang,
-    syncTTSState,
+    syncEngine.isSpeaking,
+    syncEngine.currentTTSText,
+    syncEngine.currentTTSLang,
+    syncEngine.activeCharIndex,
     settings,
     captionsEnabled,
     theaterMode,

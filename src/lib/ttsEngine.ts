@@ -1,17 +1,32 @@
-// Unified TTS Engine supporting Android Native TextToSpeech, Web Speech Synthesis, and Neural Audio Stream Fallback
+// Unified TTS Engine with ITtsEngineAdapter Pattern & Tokenized AbortController Lifecycle
 import { logTTS, logError, logWarn, logInfo } from '../utils/logBuffer';
 import { store } from '../store/index';
 import { addError } from '../store/errorsSlice';
 import { recordRequestStart, recordRequestComplete, recordRequestFailed } from '../store/networkSlice';
 import { loadAppSettings } from '../utils/appSettings';
 
-let currentUtterance: SpeechSynthesisUtterance | null = null;
-let currentAudioElement: HTMLAudioElement | null = null;
-let currentNativeUtteranceId: string | null = null;
-let activeBoundaryCallback: ((charIndex: number) => void) | null = null;
-let simulatedBoundaryTimer: NodeJS.Timeout | null = null;
-let nativeTTSResolvers: Map<string, { resolve: () => void; reject: (err: any) => void }> = new Map();
-let isTTSCancelledByUser = false;
+export interface TTSRequest {
+  text: string;
+  lang: string;
+  rate: number;
+  voiceName?: string;
+  onBoundary?: (charIndex: number) => void;
+  signal?: AbortSignal;
+  requestId: number;
+}
+
+export interface TTSResult {
+  completed: boolean;
+  cancelled?: boolean;
+  error?: string;
+}
+
+export interface ITtsEngineAdapter {
+  readonly name: 'android_native' | 'web_speech' | 'audio_stream';
+  isSupported(): boolean;
+  speak(request: TTSRequest): Promise<TTSResult>;
+  stop(): void;
+}
 
 export interface TTSDebugPayload {
   text: string;
@@ -61,6 +76,7 @@ export interface TTSInputRecord {
   error?: string;
 }
 
+// Global debug and telemetry state
 let lastSpokenTextNormalized: string | null = null;
 let currentConsecutiveRepeatCount: number = 0;
 let totalTTSInputCounter: number = 0;
@@ -75,6 +91,11 @@ const ttsDebugListeners = new Set<
     inputs: TTSInputRecord[];
   }) => void
 >();
+
+// Tokenized AbortController Lifecycle
+let currentAbortController: AbortController | null = null;
+let currentRequestId: number = 0;
+let isTTSCancelledByUser: boolean = false;
 
 function notifyTTSDebugListeners() {
   const data = {
@@ -128,11 +149,7 @@ function completeTTSDebugState(status: 'completed' | 'cancelled' | 'error', errM
   notifyTTSDebugListeners();
 }
 
-export function getTTSDebugInfo(): {
-  current: TTSDebugPayload | null;
-  history: TTSDebugHistoryItem[];
-  inputs: TTSInputRecord[];
-} {
+export function getTTSDebugInfo() {
   return {
     current: currentTTSDebugInput ? { ...currentTTSDebugInput } : null,
     history: [...ttsDebugHistory],
@@ -171,19 +188,13 @@ export function subscribeTTSDebug(
   };
 }
 
-/**
- * Unlocks browser audio playback and speech synthesis on user interaction.
- * Call this upon any click, tap, or play button interaction.
- */
 export function unlockTTSAudio(): void {
   if (typeof window === 'undefined') return;
-  // 1. Resume Web Speech if paused or suspended
   if (window.speechSynthesis && window.speechSynthesis.paused) {
     try {
       window.speechSynthesis.resume();
     } catch {}
   }
-  // 2. Resume browser AudioContext
   try {
     const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioCtx) {
@@ -197,7 +208,6 @@ export function unlockTTSAudio(): void {
   } catch {}
 }
 
-// Helper to report errors to both logBuffer and Redux errorsSlice
 function reportTTSError(message: string, details?: any) {
   logError('TTS', message, details);
   try {
@@ -213,83 +223,490 @@ function reportTTSError(message: string, details?: any) {
   } catch {}
 }
 
-// Initialize native TTS callbacks on window once
-if (typeof window !== 'undefined') {
-  window.onNativeTTSDone = (utteranceId: string) => {
-    logTTS(`[Native TTS] Completed utterance: ${utteranceId}`);
-    const callbacks = nativeTTSResolvers.get(utteranceId);
-    if (callbacks) {
-      callbacks.resolve();
-      nativeTTSResolvers.delete(utteranceId);
-    }
-    if (currentNativeUtteranceId === utteranceId) {
-      currentNativeUtteranceId = null;
-      activeBoundaryCallback = null;
+// ----------------------------------------------------------------------------
+// Word Timings & Simulated Boundary Helper
+// ----------------------------------------------------------------------------
+export function extractWordTimings(text: string): Array<{ word: string; start: number; length: number; weight: number }> {
+  if (!text) return [];
+  const words: Array<{ word: string; start: number; length: number; weight: number }> = [];
+  const regex = /\S+/gu;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    const word = match[0];
+    const isPunct = /^[.,!?;:()[\]{}'"]+$/.test(word);
+    const weight = isPunct ? 60 : Math.max(120, word.length * 65);
+    words.push({
+      word,
+      start: match.index,
+      length: word.length,
+      weight,
+    });
+  }
+
+  return words;
+}
+
+export function startSimulatedBoundaryProgression(
+  text: string,
+  rate: number,
+  onBoundary: (charIndex: number) => void,
+  totalDurationMs?: number
+): () => void {
+  const words = extractWordTimings(text);
+  if (words.length === 0) return () => {};
+
+  onBoundary(words[0].start);
+
+  const cleanRate = Math.max(0.4, rate || 1.0);
+  let intervals: number[] = [];
+
+  if (totalDurationMs && totalDurationMs > 0) {
+    const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
+    intervals = words.map((w) => Math.max(80, (w.weight / totalWeight) * totalDurationMs));
+  } else {
+    intervals = words.map((w) => Math.max(80, Math.min(1200, w.weight / cleanRate)));
+  }
+
+  let currentWordIdx = 0;
+  let isCancelled = false;
+  let timerId: NodeJS.Timeout | null = null;
+
+  const scheduleNext = () => {
+    if (isCancelled) return;
+    currentWordIdx++;
+    if (currentWordIdx < words.length) {
+      onBoundary(words[currentWordIdx].start);
+      const nextDelay = intervals[currentWordIdx] || 250;
+      timerId = setTimeout(scheduleNext, nextDelay);
     }
   };
 
-  window.onNativeTTSError = (utteranceId: string, err: string) => {
-    reportTTSError(`Native TTS error (${utteranceId}): ${err}`);
-    const callbacks = nativeTTSResolvers.get(utteranceId);
-    if (callbacks) {
-      callbacks.reject(new Error(err || 'Native TTS error'));
-      nativeTTSResolvers.delete(utteranceId);
-    }
-    if (currentNativeUtteranceId === utteranceId) {
-      currentNativeUtteranceId = null;
-      activeBoundaryCallback = null;
-    }
-  };
+  const initialDelay = intervals[0] || 250;
+  timerId = setTimeout(scheduleNext, initialDelay);
 
-  window.onNativeTTSBoundary = (utteranceId: string, charIndex: number) => {
-    if (activeBoundaryCallback && currentNativeUtteranceId === utteranceId) {
-      activeBoundaryCallback(charIndex);
+  return () => {
+    isCancelled = true;
+    if (timerId) {
+      clearTimeout(timerId);
+      timerId = null;
     }
   };
 }
 
+// ----------------------------------------------------------------------------
+// Adapter 1: Android Native Shell Engine
+// ----------------------------------------------------------------------------
+class NativeAndroidEngineAdapter implements ITtsEngineAdapter {
+  readonly name = 'android_native' as const;
+  private currentUtteranceId: string | null = null;
+  private activeResolvers: Map<string, { resolve: (res: TTSResult) => void; reject: (err: any) => void }> = new Map();
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.onNativeTTSDone = (utteranceId: string) => {
+        logTTS(`[Native TTS] Done: ${utteranceId}`);
+        const callbacks = this.activeResolvers.get(utteranceId);
+        if (callbacks) {
+          callbacks.resolve({ completed: true });
+          this.activeResolvers.delete(utteranceId);
+        }
+        if (this.currentUtteranceId === utteranceId) {
+          this.currentUtteranceId = null;
+        }
+      };
+
+      window.onNativeTTSError = (utteranceId: string, err: string) => {
+        reportTTSError(`Native TTS error (${utteranceId}): ${err}`);
+        const callbacks = this.activeResolvers.get(utteranceId);
+        if (callbacks) {
+          callbacks.resolve({ completed: false, error: err });
+          this.activeResolvers.delete(utteranceId);
+        }
+        if (this.currentUtteranceId === utteranceId) {
+          this.currentUtteranceId = null;
+        }
+      };
+
+      window.onNativeTTSBoundary = (utteranceId: string, charIndex: number) => {
+        // Broadcast to active listener if utterance matches
+      };
+    }
+  }
+
+  isSupported(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      Boolean(window.AndroidNativeShell?.speak && typeof window.AndroidNativeShell.speak === 'function')
+    );
+  }
+
+  async speak(request: TTSRequest): Promise<TTSResult> {
+    if (!this.isSupported()) return { completed: false, error: 'Not supported' };
+
+    return new Promise<TTSResult>((resolve, reject) => {
+      const utteranceId = `native_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      this.currentUtteranceId = utteranceId;
+      this.activeResolvers.set(utteranceId, { resolve, reject });
+
+      let clearBoundary: (() => void) | null = null;
+      if (request.onBoundary) {
+        clearBoundary = startSimulatedBoundaryProgression(request.text, request.rate, request.onBoundary);
+      }
+
+      if (request.signal) {
+        request.signal.addEventListener('abort', () => {
+          if (clearBoundary) clearBoundary();
+          this.stop();
+          resolve({ completed: false, cancelled: true });
+        });
+      }
+
+      try {
+        const success = window.AndroidNativeShell!.speak(
+          request.text,
+          request.lang,
+          request.rate,
+          utteranceId
+        );
+        if (!success) {
+          if (clearBoundary) clearBoundary();
+          this.activeResolvers.delete(utteranceId);
+          this.currentUtteranceId = null;
+          resolve({ completed: false, error: 'Native speak returned false' });
+        }
+      } catch (err: any) {
+        if (clearBoundary) clearBoundary();
+        this.activeResolvers.delete(utteranceId);
+        this.currentUtteranceId = null;
+        resolve({ completed: false, error: err?.message || String(err) });
+      }
+    });
+  }
+
+  stop(): void {
+    if (typeof window !== 'undefined' && window.AndroidNativeShell?.stopSpeaking) {
+      try {
+        window.AndroidNativeShell.stopSpeaking();
+      } catch {}
+    }
+    if (this.currentUtteranceId) {
+      const callbacks = this.activeResolvers.get(this.currentUtteranceId);
+      if (callbacks) callbacks.resolve({ completed: false, cancelled: true });
+      this.activeResolvers.delete(this.currentUtteranceId);
+      this.currentUtteranceId = null;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Adapter 2: Web Speech Synthesis Engine
+// ----------------------------------------------------------------------------
+class WebSpeechEngineAdapter implements ITtsEngineAdapter {
+  readonly name = 'web_speech' as const;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
+
+  isSupported(): boolean {
+    return typeof window !== 'undefined' && Boolean(window.speechSynthesis);
+  }
+
+  async speak(request: TTSRequest): Promise<TTSResult> {
+    if (!this.isSupported()) return { completed: false, error: 'SpeechSynthesis unavailable' };
+
+    return new Promise<TTSResult>((resolve) => {
+      try {
+        if (window.speechSynthesis.paused) {
+          window.speechSynthesis.resume();
+        }
+
+        const utterance = new SpeechSynthesisUtterance(request.text);
+        utterance.lang = request.lang;
+        utterance.rate = request.rate;
+        this.currentUtterance = utterance;
+        (window as any).__activeTTSUtterance = utterance;
+
+        const voices = window.speechSynthesis.getVoices() || [];
+        if (request.voiceName && voices.length > 0) {
+          const found = voices.find((v) => v.name === request.voiceName || v.voiceURI === request.voiceName);
+          if (found) utterance.voice = found;
+        }
+        if (!utterance.voice && voices.length > 0) {
+          const exact = voices.find((v) => v.lang.toLowerCase() === request.lang.toLowerCase());
+          const prefix = voices.find((v) => v.lang.toLowerCase().startsWith(request.lang.toLowerCase().split('-')[0]));
+          if (exact) utterance.voice = exact;
+          else if (prefix) utterance.voice = prefix;
+        }
+
+        // If voices are loaded in the browser but no voice matches the requested language,
+        // Web Speech will either silently drop or mispronounce. Fall back to neural audio stream.
+        if (voices.length > 0 && !utterance.voice) {
+          logWarn('TTS', `[Web Speech] No voice found for language "${request.lang}" (${voices.length} voices installed). Falling back to Audio Stream.`);
+          resolve({ completed: false, error: `No voice available for language ${request.lang}` });
+          return;
+        }
+
+        let hasRealBoundary = false;
+        let clearSimulated: (() => void) | null = null;
+
+        if (request.onBoundary) {
+          request.onBoundary(0);
+          clearSimulated = startSimulatedBoundaryProgression(request.text, request.rate, (charIdx) => {
+            if (!hasRealBoundary && !request.signal?.aborted) {
+              request.onBoundary?.(charIdx);
+            }
+          });
+
+          utterance.onboundary = (event) => {
+            if (request.signal?.aborted) return;
+            if ((event.name === 'word' || !event.name) && typeof event.charIndex === 'number') {
+              if (event.charIndex > 0) {
+                hasRealBoundary = true;
+                if (clearSimulated) clearSimulated();
+              }
+              request.onBoundary?.(event.charIndex);
+            }
+          };
+        }
+
+        let isSettled = false;
+
+        const cleanup = () => {
+          if (clearSimulated) clearSimulated();
+          this.currentUtterance = null;
+          (window as any).__activeTTSUtterance = null;
+        };
+
+        const finish = (result: TTSResult) => {
+          if (!isSettled) {
+            isSettled = true;
+            cleanup();
+            resolve(result);
+          }
+        };
+
+        if (request.signal) {
+          request.signal.addEventListener('abort', () => {
+            try {
+              window.speechSynthesis.cancel();
+            } catch {}
+            finish({ completed: false, cancelled: true });
+          });
+        }
+
+        const startTime = Date.now();
+        utterance.onstart = () => {
+          logTTS(`[Web Speech] Started "${request.text.substring(0, 40)}..."`);
+        };
+
+        utterance.onend = () => {
+          const elapsed = Date.now() - startTime;
+          // In Chromium, if speech engine cannot synthesize the language, onend fires immediately (<100ms)
+          if (elapsed < 100 && request.text.trim().length > 3) {
+            logWarn('TTS', `[Web Speech] Ended suspiciously fast (${elapsed}ms) for "${request.lang}" - treating as silent drop`);
+            finish({ completed: false, error: 'Silent drop by Web Speech' });
+            return;
+          }
+          logTTS(`[Web Speech] Completed "${request.text.substring(0, 40)}..."`);
+          finish({ completed: true });
+        };
+
+        utterance.onerror = (event: any) => {
+          const errType = event?.error || 'error';
+          if (errType === 'canceled' || errType === 'interrupted' || request.signal?.aborted) {
+            finish({ completed: false, cancelled: true });
+          } else {
+            finish({ completed: false, error: errType });
+          }
+        };
+
+        // Safety fallback timer based on word length
+        const wordCount = request.text.split(/\s+/).filter(Boolean).length;
+        const maxDurationMs = Math.min(18000, Math.max(1200, (wordCount / (2.0 * Math.max(0.4, request.rate))) * 1000 + 1500));
+        setTimeout(() => {
+          if (!isSettled) {
+            finish({ completed: true });
+          }
+        }, maxDurationMs);
+
+        window.speechSynthesis.speak(utterance);
+      } catch (err: any) {
+        resolve({ completed: false, error: err?.message || String(err) });
+      }
+    });
+  }
+
+  stop(): void {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      try {
+        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+          window.speechSynthesis.cancel();
+        }
+      } catch {}
+    }
+    this.currentUtterance = null;
+    if (typeof window !== 'undefined') {
+      (window as any).__activeTTSUtterance = null;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Adapter 3: Neural Audio Stream Fallback Engine
+// ----------------------------------------------------------------------------
+class AudioStreamFallbackEngineAdapter implements ITtsEngineAdapter {
+  readonly name = 'audio_stream' as const;
+  private currentAudioElement: HTMLAudioElement | null = null;
+
+  isSupported(): boolean {
+    return typeof window !== 'undefined' && Boolean(window.Audio);
+  }
+
+  async speak(request: TTSRequest): Promise<TTSResult> {
+    if (!this.isSupported()) return { completed: false, error: 'Audio not supported' };
+
+    return new Promise<TTSResult>((resolve) => {
+      const langParam = encodeURIComponent(request.lang);
+      const textParam = encodeURIComponent(request.text.trim());
+      const primaryUrl = `/api/tts?text=${textParam}&lang=${langParam}&q=${textParam}&tl=${langParam}`;
+      const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${langParam}&client=tw-ob&q=${textParam}&text=${textParam}`;
+
+      const audio = new Audio(primaryUrl);
+      this.currentAudioElement = audio;
+      audio.playbackRate = Math.max(0.5, Math.min(2.0, request.rate || 1.0));
+
+      let clearBoundary: (() => void) | null = null;
+      let isSettled = false;
+
+      const finish = (result: TTSResult) => {
+        if (!isSettled) {
+          isSettled = true;
+          if (clearBoundary) clearBoundary();
+          if (this.currentAudioElement === audio) {
+            this.currentAudioElement = null;
+          }
+          resolve(result);
+        }
+      };
+
+      if (request.signal) {
+        request.signal.addEventListener('abort', () => {
+          try {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.src = '';
+          } catch {}
+          finish({ completed: false, cancelled: true });
+        });
+      }
+
+      if (request.onBoundary) {
+        const words = extractWordTimings(request.text);
+        if (words.length > 0) {
+          audio.ontimeupdate = () => {
+            if (!audio.duration || isNaN(audio.duration) || audio.duration <= 0) return;
+            const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
+            const currentTimeMs = (audio.currentTime * 1000) / audio.playbackRate;
+            const totalDurationMs = (audio.duration * 1000) / audio.playbackRate;
+
+            let accumulatedMs = 0;
+            for (let i = 0; i < words.length; i++) {
+              const wordMs = Math.max(80, (words[i].weight / totalWeight) * totalDurationMs);
+              if (currentTimeMs >= accumulatedMs && currentTimeMs < accumulatedMs + wordMs) {
+                if (!request.signal?.aborted) request.onBoundary?.(words[i].start);
+                break;
+              }
+              accumulatedMs += wordMs;
+            }
+          };
+        }
+      }
+
+      audio.onplay = () => {
+        if (request.onBoundary && !clearBoundary) {
+          clearBoundary = startSimulatedBoundaryProgression(request.text, request.rate, request.onBoundary);
+        }
+      };
+
+      audio.onended = () => {
+        finish({ completed: true });
+      };
+
+      audio.onerror = () => {
+        if (audio.src.includes('/api/tts')) {
+          audio.src = fallbackUrl;
+          audio.play().catch((playErr) => {
+            finish({ completed: false, error: String(playErr) });
+          });
+        } else {
+          finish({ completed: false, error: 'Audio stream failed on all endpoints' });
+        }
+      };
+
+      audio.play().catch((playErr) => {
+        unlockTTSAudio();
+        if (request.onBoundary) {
+          clearBoundary = startSimulatedBoundaryProgression(request.text, request.rate, request.onBoundary);
+        }
+        const wordCount = request.text.split(/\s+/).filter(Boolean).length;
+        const estDurationMs = Math.min(8000, Math.max(1000, (wordCount / (2.2 * Math.max(0.5, request.rate))) * 1000));
+        setTimeout(() => {
+          finish({ completed: true });
+        }, estDurationMs);
+      });
+    });
+  }
+
+  stop(): void {
+    if (this.currentAudioElement) {
+      try {
+        this.currentAudioElement.pause();
+        this.currentAudioElement.currentTime = 0;
+        this.currentAudioElement.src = '';
+      } catch {}
+      this.currentAudioElement = null;
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
+// Adapter Registry
+// ----------------------------------------------------------------------------
+const nativeAdapter = new NativeAndroidEngineAdapter();
+const webSpeechAdapter = new WebSpeechEngineAdapter();
+const audioStreamAdapter = new AudioStreamFallbackEngineAdapter();
+
 export function isAndroidNativeTTS(): boolean {
-  return typeof window !== 'undefined' &&
-    !!(window.AndroidNativeShell?.speak && typeof window.AndroidNativeShell.speak === 'function');
+  return nativeAdapter.isSupported();
 }
 
 export function getTTSEngineType(): 'android_native' | 'web_speech' | 'audio_stream' {
-  if (isAndroidNativeTTS()) return 'android_native';
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) return 'web_speech';
+  if (nativeAdapter.isSupported()) return 'android_native';
+  if (webSpeechAdapter.isSupported()) return 'web_speech';
   return 'audio_stream';
 }
 
 export function isTTSAvailable(): boolean {
-  return true; // Supported across native, web speech, and audio stream fallback
+  return true;
 }
 
-/**
- * Detects language from unicode script if lang is ambiguous or default 'en'
- */
 export function detectLanguageFromText(text: string): string {
   if (!text) return 'en';
-  // Cyrillic (Russian, Ukrainian, etc.)
   if (/[\u0400-\u04FF]/.test(text)) return 'ru';
-  // Arabic
   if (/[\u0600-\u06FF]/.test(text)) return 'ar';
-  // Hebrew
   if (/[\u0590-\u05FF]/.test(text)) return 'he';
-  // Japanese Kana / Kanji
   if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(text)) return 'ja';
-  // Chinese
   if (/[\u4E00-\u9FFF]/.test(text)) return 'zh';
-  // Korean Hangul
   if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(text)) return 'ko';
-  // Greek
   if (/[\u0370-\u03FF]/.test(text)) return 'el';
-  // Devanagari (Hindi)
   if (/[\u0900-\u097F]/.test(text)) return 'hi';
   return 'en';
 }
 
-/**
- * Retrieves available system voices, optionally filtered by language code.
- */
+export function normalizeLanguageCode(code: string): string {
+  if (!code) return 'en';
+  return code.replace(/_auto$/, '').trim();
+}
+
 export function getAvailableVoices(langCode?: string): SpeechSynthesisVoice[] {
   if (typeof window === 'undefined' || !window.speechSynthesis) return [];
   try {
@@ -303,34 +720,20 @@ export function getAvailableVoices(langCode?: string): SpeechSynthesisVoice[] {
     });
 
     if (!langCode) return voices;
-
     const clean = normalizeLanguageCode(langCode).toLowerCase();
     const prefix = clean.split('-')[0];
-
-    // Priority: Exact match, then prefix match
     const matching = voices.filter(
       (v) => v.lang.toLowerCase() === clean || v.lang.toLowerCase().startsWith(prefix)
     );
-
     return matching.length > 0 ? matching : voices;
   } catch {
     return [];
   }
 }
 
-/**
- * Normalizes language codes (e.g. "es_auto" -> "es", "zh-CN" -> "zh-CN")
- */
-export function normalizeLanguageCode(code: string): string {
-  if (!code) return 'en';
-  return code.replace(/_auto$/, '').trim();
-}
-
-/**
- * Speaks text using Android device native TextToSpeech, Web SpeechSynthesis,
- * or Neural Audio Stream fallback.
- * Returns a Promise that resolves when speech finishes.
- */
+// ----------------------------------------------------------------------------
+// Primary API: speakText & stopTTS
+// ----------------------------------------------------------------------------
 export async function speakText(
   text: string,
   lang: string = 'en',
@@ -340,19 +743,23 @@ export async function speakText(
 ): Promise<void> {
   if (!text || !text.trim()) return;
 
+  // Cancel any active speech immediately (Tokenized AbortController Lifecycle)
+  stopTTS();
+  isTTSCancelledByUser = false;
+
+  const thisRequestId = ++currentRequestId;
+  const abortController = new AbortController();
+  currentAbortController = abortController;
+
+  unlockTTSAudio();
+
   let cleanLang = normalizeLanguageCode(lang);
-  // Auto-detect script if lang is 'en' or 'auto' but text contains non-Latin scripts
   if ((cleanLang === 'en' || cleanLang === 'auto') && text) {
     const detected = detectLanguageFromText(text);
-    if (detected !== 'en') {
-      cleanLang = detected;
-    }
+    if (detected !== 'en') cleanLang = detected;
   }
 
   const cleanRate = Math.max(0.2, Math.min(3.0, rate || 1.0));
-  stopTTS();
-  isTTSCancelledByUser = false;
-  unlockTTSAudio();
 
   const normalizedText = text.trim().toLowerCase();
   if (lastSpokenTextNormalized && lastSpokenTextNormalized === normalizedText) {
@@ -361,7 +768,6 @@ export async function speakText(
     lastSpokenTextNormalized = normalizedText;
     currentConsecutiveRepeatCount = 1;
   }
-
   const isRepeat = currentConsecutiveRepeatCount > 1;
 
   logTTS(
@@ -403,599 +809,105 @@ export async function speakText(
     isRepeat,
   };
   ttsInputsFeed.unshift(inputRecord);
-  if (ttsInputsFeed.length > 200) {
-    ttsInputsFeed.pop();
-  }
+  if (ttsInputsFeed.length > 200) ttsInputsFeed.pop();
 
   notifyTTSDebugListeners();
 
   const wrappedBoundary = (charIdx: number) => {
+    // Only accept boundary if this request is still active
+    if (thisRequestId !== currentRequestId || abortController.signal.aborted) return;
     updateTTSDebugCharIndex(charIdx);
-    if (onBoundary) onBoundary(charIdx);
+    onBoundary?.(charIdx);
   };
-  activeBoundaryCallback = wrappedBoundary;
+
+  const request: TTSRequest = {
+    text,
+    lang: cleanLang,
+    rate: cleanRate,
+    voiceName,
+    onBoundary: wrappedBoundary,
+    signal: abortController.signal,
+    requestId: thisRequestId,
+  };
 
   try {
-    // 1. Android Native TTS Bridge
-    if (isAndroidNativeTTS() && window.AndroidNativeShell?.speak) {
-      await new Promise<void>((resolve, reject) => {
-        try {
-          const utteranceId = `native_tts_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-          currentNativeUtteranceId = utteranceId;
-          nativeTTSResolvers.set(utteranceId, { resolve, reject });
+    // 1. Android Native TTS
+    if (nativeAdapter.isSupported()) {
+      const res = await nativeAdapter.speak(request);
+      if (thisRequestId !== currentRequestId) return;
+      if (res.completed) {
+        completeTTSDebugState('completed');
+        return;
+      }
+      if (res.cancelled) {
+        completeTTSDebugState('cancelled');
+        return;
+      }
+      logWarn('TTS', 'Native TTS failed or returned false, falling back to Web Speech / Audio');
+    }
 
-          if (wrappedBoundary) {
-            startSimulatedBoundaryProgression(text, cleanRate, wrappedBoundary);
-          }
+    // 2. Web Speech API
+    if (webSpeechAdapter.isSupported()) {
+      const res = await webSpeechAdapter.speak(request);
+      if (thisRequestId !== currentRequestId) return;
+      if (res.completed) {
+        completeTTSDebugState('completed');
+        return;
+      }
+      if (res.cancelled) {
+        completeTTSDebugState('cancelled');
+        return;
+      }
+      logWarn('TTS', `Web Speech returned error (${res.error}), testing Audio Stream`);
+    }
 
-          const success = window.AndroidNativeShell!.speak(text, cleanLang, cleanRate, utteranceId);
-          if (!success) {
-            logWarn('TTS', 'Native TTS speak call returned false, falling back to Web Speech / Audio');
-            nativeTTSResolvers.delete(utteranceId);
-            currentNativeUtteranceId = null;
-            fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary)
-              .then(resolve)
-              .catch(reject);
-          }
-        } catch (err) {
-          logWarn('TTS', `Native TTS error, falling back: ${err}`);
-          fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary)
-            .then(resolve)
-            .catch(reject);
-        }
-      });
+    // 3. Audio Stream Fallback (if allowed by settings or fallback)
+    const appSettings = loadAppSettings();
+    const allowNonNative = appSettings.allowNonNativeTTSFallback === true || !nativeAdapter.isSupported();
+    if (allowNonNative && audioStreamAdapter.isSupported()) {
+      const res = await audioStreamAdapter.speak(request);
+      if (thisRequestId !== currentRequestId) return;
+      if (res.completed) {
+        completeTTSDebugState('completed');
+        return;
+      }
+      if (res.cancelled) {
+        completeTTSDebugState('cancelled');
+        return;
+      }
+      completeTTSDebugState('error', res.error);
+    } else {
       completeTTSDebugState('completed');
-      return;
     }
-
-    // 2. Web Speech API with automatic Audio Stream fallback
-    await fallbackWebOrAudio(text, cleanLang, cleanRate, voiceName, wrappedBoundary);
-    completeTTSDebugState('completed');
   } catch (err: any) {
-    completeTTSDebugState('error', err?.message || String(err));
-    throw err;
-  }
-}
-
-interface WordTimingInfo {
-  start: number;
-  end: number;
-  text: string;
-  weight: number;
-}
-
-function extractWordTimings(text: string): WordTimingInfo[] {
-  const result: WordTimingInfo[] = [];
-  const regex = /(\s+|[^\s\p{L}\p{N}]+|[\p{L}\p{N}]+)/gu;
-  let match: RegExpExecArray | null;
-  const rawTokens: { text: string; start: number; end: number; isWord: boolean }[] = [];
-
-  while ((match = regex.exec(text)) !== null) {
-    const matchText = match[0];
-    const start = match.index;
-    const end = start + matchText.length;
-    const isWord = /\S/.test(matchText) && !/^[.,!?;:"'()[\]{}<>«»„“—–]+$/.test(matchText);
-    rawTokens.push({ text: matchText, start, end, isWord });
-  }
-
-  for (let i = 0; i < rawTokens.length; i++) {
-    const token = rawTokens[i];
-    if (token.isWord) {
-      // Base weight: 100ms base + 35ms per character
-      let weight = 100 + token.text.length * 35;
-      // Check trailing punctuation for natural pause
-      const nextToken = rawTokens[i + 1];
-      if (nextToken && !nextToken.isWord) {
-        if (/[,;—–-]/.test(nextToken.text)) {
-          weight += 160;
-        } else if (/[.!?:\n]/.test(nextToken.text)) {
-          weight += 280;
-        }
-      }
-      result.push({
-        start: token.start,
-        end: token.end,
-        text: token.text,
-        weight,
-      });
+    if (thisRequestId === currentRequestId) {
+      completeTTSDebugState('error', err?.message || String(err));
     }
   }
-
-  return result;
 }
 
-function startSimulatedBoundaryProgression(
-  text: string,
-  rate: number,
-  onBoundary: (charIndex: number) => void,
-  totalDurationMs?: number
-): () => void {
-  if (simulatedBoundaryTimer) {
-    clearTimeout(simulatedBoundaryTimer);
-    simulatedBoundaryTimer = null;
-  }
-
-  const words = extractWordTimings(text);
-  if (words.length === 0) return () => {};
-
-  // Notify first word immediately
-  onBoundary(words[0].start);
-
-  const cleanRate = Math.max(0.4, rate || 1.0);
-  let intervals: number[] = [];
-
-  if (totalDurationMs && totalDurationMs > 0) {
-    const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
-    intervals = words.map((w) => Math.max(80, (w.weight / totalWeight) * totalDurationMs));
-  } else {
-    intervals = words.map((w) => Math.max(80, Math.min(1200, w.weight / cleanRate)));
-  }
-
-  let currentWordIdx = 0;
-  let isCancelled = false;
-
-  const scheduleNext = () => {
-    if (isCancelled) return;
-    currentWordIdx++;
-    if (currentWordIdx < words.length) {
-      onBoundary(words[currentWordIdx].start);
-      const nextDelay = intervals[currentWordIdx] || 250;
-      simulatedBoundaryTimer = setTimeout(scheduleNext, nextDelay);
-    }
-  };
-
-  const initialDelay = intervals[0] || 250;
-  simulatedBoundaryTimer = setTimeout(scheduleNext, initialDelay);
-
-  return () => {
-    isCancelled = true;
-    if (simulatedBoundaryTimer) {
-      clearTimeout(simulatedBoundaryTimer);
-      simulatedBoundaryTimer = null;
-    }
-  };
-}
-
-/**
- * Executes Web Speech synthesis or seamlessly cascades to neural Audio Stream (only if explicitly enabled in Settings)
- */
-async function fallbackWebOrAudio(
-  text: string,
-  cleanLang: string,
-  rate: number,
-  voiceName?: string,
-  onBoundary?: (charIndex: number) => void
-): Promise<void> {
-  if (isTTSCancelledByUser) return;
-
-  const appSettings = loadAppSettings();
-  const allowNonNative = appSettings.allowNonNativeTTSFallback === true;
-
-  // If Web Speech is available, attempt synthesis
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window && window.speechSynthesis) {
-    try {
-      const voices = window.speechSynthesis.getVoices() || [];
-      const hasMatchingVoice = voices.some((v) => {
-        const langLower = v.lang.toLowerCase();
-        const cleanLower = cleanLang.toLowerCase();
-        return langLower === cleanLower || langLower.startsWith(cleanLower.split('-')[0]);
-      });
-
-      // If voices are already loaded and none match a non-English language
-      if (voices.length > 0 && !hasMatchingVoice && cleanLang !== 'en') {
-        if (isTTSCancelledByUser) return;
-        if (allowNonNative) {
-          logInfo('TTS', `No local Web Speech voice found for "${cleanLang}", using neural Audio Stream fallback`);
-          return speakViaAudioStream(text, cleanLang, rate, onBoundary);
-        } else {
-          logInfo('TTS', `No local Web Speech voice found for "${cleanLang}"; attempting default Web Speech voice (non-native stream disabled by default)`);
-          // Fall through to attemptWebSpeechSynthesis with default voice
-        }
-      }
-
-      const success = await attemptWebSpeechSynthesis(text, cleanLang, rate, voiceName, onBoundary);
-      if (success || isTTSCancelledByUser) return;
-    } catch (err: any) {
-      if (isTTSCancelledByUser) return;
-      if (allowNonNative) {
-        logWarn('TTS', `Web SpeechSynthesis failed (${err?.message || err}), falling back to Audio Stream`);
-      } else {
-        logWarn('TTS', `Web SpeechSynthesis failed (${err?.message || err}); non-native fallback is disabled in settings`);
-        return;
-      }
-    }
-  }
-
-  if (isTTSCancelledByUser) return;
-
-  // Fallback to high-fidelity audio stream ONLY if explicitly allowed by user settings
-  if (allowNonNative) {
-    return speakViaAudioStream(text, cleanLang, rate, onBoundary);
-  } else {
-    logInfo('TTS', 'TTS completed via native engine; non-native Audio Stream fallback is disabled by default.');
-  }
-}
-
-function attemptWebSpeechSynthesis(
-  text: string,
-  cleanLang: string,
-  rate: number,
-  voiceName?: string,
-  onBoundary?: (charIndex: number) => void
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      if (isTTSCancelledByUser) {
-        resolve(true);
-        return;
-      }
-
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-      }
-
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = cleanLang;
-      utterance.rate = rate;
-
-      // Pin utterance globally to prevent Chromium aggressive garbage-collection bug
-      (window as any).__activeTTSUtterance = utterance;
-      currentUtterance = utterance;
-
-      const voices = window.speechSynthesis.getVoices() || [];
-      if (voiceName && voices.length > 0) {
-        const found = voices.find((v) => v.name === voiceName || v.voiceURI === voiceName);
-        if (found) utterance.voice = found;
-      }
-
-      if (!utterance.voice && voices.length > 0) {
-        const exact = voices.find((v) => v.lang.toLowerCase() === cleanLang.toLowerCase());
-        const prefix = voices.find((v) => v.lang.toLowerCase().startsWith(cleanLang.toLowerCase().split('-')[0]));
-        if (exact) utterance.voice = exact;
-        else if (prefix) utterance.voice = prefix;
-      }
-
-      let hasRealBoundary = false;
-      let clearSimulated: (() => void) | null = null;
-
-      if (onBoundary) {
-        onBoundary(0);
-        clearSimulated = startSimulatedBoundaryProgression(text, rate, (charIdx) => {
-          if (!hasRealBoundary) onBoundary(charIdx);
-        });
-
-        utterance.onboundary = (event) => {
-          if ((event.name === 'word' || !event.name) && typeof event.charIndex === 'number') {
-            if (event.charIndex > 0) {
-              hasRealBoundary = true;
-              if (clearSimulated) clearSimulated();
-            }
-            onBoundary(event.charIndex);
-          }
-        };
-      }
-
-      const wordCount = text.split(/\s+/).filter(Boolean).length;
-      const estimatedMs = Math.min(15000, Math.max(1000, (wordCount / (2.2 * Math.max(0.4, rate))) * 1000 + 1000));
-      let isSettled = false;
-      let hasStarted = false;
-
-      const finishSuccess = () => {
-        if (!isSettled) {
-          isSettled = true;
-          clearTimeout(startCheckTimer);
-          clearTimeout(safetyTimer);
-          if (simulatedBoundaryTimer) {
-            clearTimeout(simulatedBoundaryTimer);
-            simulatedBoundaryTimer = null;
-          }
-          currentUtterance = null;
-          (window as any).__activeTTSUtterance = null;
-          logTTS(`[Web Speech] Completed speech for "${text.substring(0, 40)}..."`);
-          resolve(true);
-        }
-      };
-
-      const finishFailure = (reason: string) => {
-        if (!isSettled) {
-          isSettled = true;
-          clearTimeout(startCheckTimer);
-          clearTimeout(safetyTimer);
-          if (simulatedBoundaryTimer) {
-            clearTimeout(simulatedBoundaryTimer);
-            simulatedBoundaryTimer = null;
-          }
-          currentUtterance = null;
-          (window as any).__activeTTSUtterance = null;
-          logWarn('TTS', `[Web Speech] Speech aborted (${reason}), will cascade to Audio Stream`);
-          resolve(false);
-        }
-      };
-
-      // Fast-fail detection: If synthesis hasn't fired onstart within 600ms, immediately failover to Audio Stream
-      const startCheckTimer = setTimeout(() => {
-        if (!hasStarted && !isSettled) {
-          if (isTTSCancelledByUser) {
-            isSettled = true;
-            resolve(true);
-            return;
-          }
-          try {
-            window.speechSynthesis.cancel();
-          } catch {}
-          finishFailure('did_not_start_within_600ms');
-        }
-      }, 600);
-
-      const safetyTimer = setTimeout(() => {
-        if (!hasStarted) {
-          finishFailure('timeout_before_start');
-        } else {
-          finishSuccess();
-        }
-      }, estimatedMs);
-
-      utterance.onstart = () => {
-        hasStarted = true;
-        clearTimeout(startCheckTimer);
-        logTTS(`[Web Speech] Speech output started for "${text.substring(0, 40)}..."`);
-      };
-
-      utterance.onend = () => {
-        finishSuccess();
-      };
-
-      utterance.onerror = (event: any) => {
-        const errType = event?.error || 'error';
-        if (errType === 'canceled' || errType === 'interrupted' || isTTSCancelledByUser) {
-          // Intentional stop or interruption by next utterance / user action
-          if (!isSettled) {
-            isSettled = true;
-            clearTimeout(startCheckTimer);
-            clearTimeout(safetyTimer);
-            if (simulatedBoundaryTimer) {
-              clearTimeout(simulatedBoundaryTimer);
-              simulatedBoundaryTimer = null;
-            }
-            currentUtterance = null;
-            (window as any).__activeTTSUtterance = null;
-            logTTS(`[Web Speech] Speech ${errType} cleanly`);
-            resolve(true); // Resolved cleanly - do not cascade to Audio Stream
-          }
-        } else {
-          finishFailure(errType);
-        }
-      };
-
-      logTTS(`[Web Speech] Speaking "${text.substring(0, 40)}..." [lang: ${cleanLang}, voice: ${utterance.voice?.name || 'default'}]`);
-      try {
-        if (window.speechSynthesis.paused) {
-          window.speechSynthesis.resume();
-        }
-        window.speechSynthesis.cancel();
-      } catch {}
-      window.speechSynthesis.speak(utterance);
-    } catch (err: any) {
-      reportTTSError(`Web speech synthesis threw exception: ${err?.message || err}`, { error: err });
-      resolve(false);
-    }
-  });
-}
-
-/**
- * Plays speech through high-fidelity neural audio stream with full word boundary simulation
- */
-function speakViaAudioStream(
-  text: string,
-  cleanLang: string,
-  rate: number,
-  onBoundary?: (charIndex: number) => void
-): Promise<void> {
-  return new Promise((resolve) => {
-    try {
-      const primaryUrl = `/api/tts?text=${encodeURIComponent(text.substring(0, 500))}&lang=${encodeURIComponent(cleanLang)}`;
-      const fallbackUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text.substring(0, 500))}&tl=${encodeURIComponent(cleanLang)}&client=tw-ob`;
-
-      const reqId = `tts-net-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      const startTime = Date.now();
-      try {
-        store.dispatch(
-          recordRequestStart({
-            id: reqId,
-            url: primaryUrl,
-            method: 'GET',
-            type: 'translation_api',
-          })
-        );
-      } catch {}
-
-      const audio = new Audio(primaryUrl);
-      currentAudioElement = audio;
-      audio.playbackRate = Math.max(0.5, Math.min(2.0, rate || 1.0));
-
-      let clearBoundary: (() => void) | null = null;
-      let isSettled = false;
-
-      const finish = (success = true, errMsg?: string) => {
-        if (!isSettled) {
-          isSettled = true;
-          if (clearBoundary) clearBoundary();
-          if (simulatedBoundaryTimer) {
-            clearTimeout(simulatedBoundaryTimer);
-            simulatedBoundaryTimer = null;
-          }
-          if (currentAudioElement === audio) {
-            currentAudioElement = null;
-          }
-          try {
-            if (success) {
-              store.dispatch(
-                recordRequestComplete({
-                  id: reqId,
-                  status: 200,
-                  statusText: 'OK',
-                  duration: Date.now() - startTime,
-                  responseBody: `Audio stream completed for "${text.substring(0, 30)}..."`,
-                })
-              );
-              logTTS(`[Audio Stream] Completed playback for "${text.substring(0, 40)}..."`);
-            } else {
-              store.dispatch(
-                recordRequestFailed({
-                  id: reqId,
-                  error: errMsg || 'Audio playback failed',
-                  duration: Date.now() - startTime,
-                })
-              );
-            }
-          } catch {}
-          resolve();
-        }
-      };
-
-      audio.onloadedmetadata = () => {
-        if (audio.duration && !isNaN(audio.duration) && audio.duration > 0 && onBoundary) {
-          if (clearBoundary) clearBoundary();
-          const totalDurationMs = (audio.duration * 1000) / audio.playbackRate;
-          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary, totalDurationMs);
-        }
-      };
-
-      audio.onplay = () => {
-        logTTS(`[Audio Stream] Playing neural audio stream for "${text.substring(0, 40)}..." [lang: ${cleanLang}]`);
-        if (onBoundary) {
-          const totalDurationMs = audio.duration && !isNaN(audio.duration) && audio.duration > 0
-            ? (audio.duration * 1000) / audio.playbackRate
-            : undefined;
-          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary, totalDurationMs);
-        }
-      };
-
-      // Continuous timeupdate sync: matches current audio playback time to exact word offsets
-      const words = extractWordTimings(text);
-      if (words.length > 0 && onBoundary) {
-        audio.ontimeupdate = () => {
-          if (!audio.duration || isNaN(audio.duration) || audio.duration <= 0) return;
-          const totalWeight = words.reduce((acc, w) => acc + w.weight, 0);
-          const currentTimeMs = (audio.currentTime * 1000) / audio.playbackRate;
-          const totalDurationMs = (audio.duration * 1000) / audio.playbackRate;
-
-          let accumulatedMs = 0;
-          for (let i = 0; i < words.length; i++) {
-            const wordMs = Math.max(80, (words[i].weight / totalWeight) * totalDurationMs);
-            if (currentTimeMs >= accumulatedMs && currentTimeMs < accumulatedMs + wordMs) {
-              onBoundary(words[i].start);
-              break;
-            }
-            accumulatedMs += wordMs;
-          }
-        };
-      }
-
-      audio.onended = () => {
-        finish(true);
-      };
-
-      audio.onerror = () => {
-        // If primary /api/tts endpoint fails, try direct upstream URL
-        if (audio.src.includes('/api/tts')) {
-          logWarn('TTS', '[Audio Stream] Primary /api/tts stream failed, switching to direct Google TTS URL');
-          audio.src = fallbackUrl;
-          audio.play().catch((playErr) => {
-            reportTTSError(`Audio stream fallback playback failed: ${playErr?.message || playErr}`, { error: playErr });
-            finish(false, String(playErr));
-          });
-        } else {
-          reportTTSError('Audio stream playback failed on all endpoints');
-          finish(false, 'Audio stream failed on all endpoints');
-        }
-      };
-
-      audio.play().catch((playErr) => {
-        logWarn('TTS', `[Audio Stream] play() rejected (${playErr?.message || playErr}); running visual word-boundary progression`);
-        unlockTTSAudio();
-        if (onBoundary) {
-          clearBoundary = startSimulatedBoundaryProgression(text, rate, onBoundary);
-        }
-        const wordCount = text.split(/\s+/).filter(Boolean).length;
-        const estDurationMs = Math.min(8000, Math.max(1000, (wordCount / (2.2 * Math.max(0.5, rate))) * 1000));
-        setTimeout(() => {
-          finish(true);
-        }, estDurationMs);
-      });
-    } catch (err: any) {
-      reportTTSError(`Failed to initialize audio stream: ${err?.message || err}`, { error: err });
-      resolve();
-    }
-  });
-}
-
-/**
- * Stops any active TTS playback immediately
- */
 export function stopTTS(): void {
   isTTSCancelledByUser = true;
-  if (simulatedBoundaryTimer) {
-    clearTimeout(simulatedBoundaryTimer);
-    simulatedBoundaryTimer = null;
-  }
-  activeBoundaryCallback = null;
-
-  // Stop HTML5 Audio stream
-  if (currentAudioElement) {
-    try {
-      currentAudioElement.pause();
-      currentAudioElement.currentTime = 0;
-      currentAudioElement.src = '';
-    } catch {}
-    currentAudioElement = null;
+  if (currentAbortController) {
+    currentAbortController.abort();
+    currentAbortController = null;
   }
 
-  // Stop Android Native Shell
-  if (typeof window !== 'undefined') {
-    if (window.AndroidNativeShell?.stopSpeaking) {
-      try {
-        window.AndroidNativeShell.stopSpeaking();
-      } catch {}
-    }
-    // Stop Web Speech
-    if (window.speechSynthesis) {
-      try {
-        if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
-          window.speechSynthesis.cancel();
-        }
-      } catch {}
-    }
-  }
-
-  currentUtterance = null;
-  if (typeof window !== 'undefined') {
-    (window as any).__activeTTSUtterance = null;
-  }
+  nativeAdapter.stop();
+  webSpeechAdapter.stop();
+  audioStreamAdapter.stop();
 
   if (currentTTSDebugInput && currentTTSDebugInput.status === 'speaking') {
     completeTTSDebugState('cancelled');
   }
-
-  if (currentNativeUtteranceId) {
-    const callbacks = nativeTTSResolvers.get(currentNativeUtteranceId);
-    if (callbacks) callbacks.resolve();
-    nativeTTSResolvers.delete(currentNativeUtteranceId);
-    currentNativeUtteranceId = null;
-  }
 }
 
-/**
- * Checks if speech is currently outputting
- */
 export function isTTSSpeaking(): boolean {
   if (typeof window === 'undefined') return false;
-  if (currentAudioElement && !currentAudioElement.paused) return true;
-  if (isAndroidNativeTTS() && window.AndroidNativeShell?.isSpeaking) {
+  if (nativeAdapter.isSupported() && window.AndroidNativeShell?.isSpeaking) {
     try {
-      return !!window.AndroidNativeShell.isSpeaking();
+      return Boolean(window.AndroidNativeShell.isSpeaking());
     } catch {}
   }
-  return !!window.speechSynthesis?.speaking || !!currentNativeUtteranceId;
+  return Boolean(window.speechSynthesis?.speaking);
 }
-

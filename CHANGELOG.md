@@ -8,6 +8,51 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### TTS Narration Fix, Dual Query Compatibility, and Default Compact Mode
+
+- **TTS Engine Parameter Compatibility & Silent Failure Recovery**:
+  - Updated `/server.ts` `/api/tts` endpoint to accept both `text`/`lang` and `q`/`tl` parameters, ensuring 100% compatibility across all client caller adapters.
+  - Enhanced `AudioStreamFallbackEngineAdapter` in `src/lib/ttsEngine.ts` to supply both parameter sets and gracefully stream MP3 audio via HTML5 Audio with duration safety bounds.
+  - Updated `WebSpeechEngineAdapter` in `src/lib/ttsEngine.ts` to detect when a browser lacks native voice support or terminates utterances prematurely (< 100ms), immediately delegating to `AudioStreamFallbackEngineAdapter`.
+  - Configured `speakText` to automatically enable non-native audio streaming fallback whenever the native Android bridge is unavailable.
+- **Default Compact Mode Viewport Experience**:
+  - Updated `src/utils/appSettings.ts` to set `compactView: true` as the universal application default.
+  - Updated `src/App.tsx` state initialization to prioritize compact view on initial load while continuing to respect URL query flags (`?mode=expanded` or `?mode=compact`) and explicit user overrides.
+- **Video & TTS Playback Synchronization in Compact View**:
+  - Integrated the coordinated pause-and-resume Auto-TTS narration loop in `src/components/VideoPlayer.tsx`, ensuring that when Auto-TTS is active, the video plays the source sentence dialogue, automatically pauses at the end of the cue, narrates the target translation with word highlights, and smoothly resumes video playback.
+  - Added direct Sentence Sync, Speak Cue, and Loop Cue controls to the compact mode video control bar, providing instant 1-tap dual-language synchronization and TTS testing in compact mode.
+
+### Architecture Modernization: Modular Video Player Decomposition, ITtsEngineAdapter Pattern & Robust Video-TTS Sentence Synchronization
+
+- **Component Decomposition (Anti-Monolith Architecture)**:
+  - Decomposed the monolithic player architecture into focused, single-responsibility submodules:
+    - `src/hooks/usePlayerPlaybackSync.ts`: Encapsulates the headless playback state machine (`UNSTARTED`, `BUFFERING`, `PLAYING`, `PAUSED_BY_USER`, `PAUSED_FOR_TTS`, `SEEKING`), cross-origin IFrame message binding, timer tickers, mute, volume, and seeking.
+    - `src/components/YouTubePlayerContainer.tsx`: Handles raw iframe presentation, responsive aspect ratio container, touch shields, and custom click handlers.
+    - `src/components/SubtitleOverlayContainer.tsx`: Encapsulates multi-position subtitle overlays (`top`, `above`, `under`, `bottom`), source dialogue cue, target translation, word-boundary highlight integration, and `ParallelTranslationsOverlay`.
+    - `src/components/VideoControlsOverlay.tsx`: Handles compact player tap controls, play/pause center buttons, progress scrubber, volume, CC captions toggle, quick target language switchers, and direct speech flow bar.
+- **ITtsEngineAdapter Architecture & Tokenized AbortController Lifecycle**:
+  - Refactored `src/lib/ttsEngine.ts` into the formal `ITtsEngineAdapter` pattern:
+    - `NativeAndroidEngineAdapter`: High-priority hardware TTS bridge via `AndroidNativeShell.speak()`.
+    - `WebSpeechEngineAdapter`: Browser `speechSynthesis` engine with `SpeechSynthesisUtterance` boundary tracking and safety duration fallbacks.
+    - `AudioStreamFallbackEngineAdapter`: Neural audio streaming fallback via `/api/tts` with timeupdate word-boundary tracking.
+  - Introduced tokenized `AbortController` lifecycles: each speech request generates an incremented `requestId` and scoped abort token. Prevents ghost callbacks, audio overlaps, and mismatched word highlights when users rapidly step through dialogue cues.
+- **Video Play and TTS Sentence Synchronization Fix**:
+  - In `src/hooks/useSyncEngine.ts`, resolved the false early-termination bug in `playVideoCueSegment` where initial post-seek iframe lag caused premature pauses before dialogue played.
+  - Standardized the alternating playback loop: YouTube dialogue segment plays for full cue duration -> video automatically pauses -> hardware/WebSpeech TTS speaks target translation -> video automatically resumes next cue.
+  - Enforced strict mutual exclusion: video is paused during speech narration and TTS is silenced before video playback begins.
+
+### GitHub Import Migration & Full Workspace Verification
+
+- **Import Triage & Migration**:
+  - Followed `/skills/system_skills/github_import_migration/SKILL.md` (Node.js runtime, Category C).
+  - Created `.env.example` documenting `GEMINI_API_KEY=` for server-side capabilities.
+  - Resolved missing TypeScript symbols:
+    - Added `latestApkTag` state declaration in `src/App.tsx`.
+    - Corrected global app state provider reference from undefined `syncTTSState` to `syncEngine` in `src/App.tsx`.
+    - Added missing `Repeat` icon import from `lucide-react` in `src/components/SubtitlesTeacherPanel.tsx`.
+  - Verified full verification loop: `tsc --noEmit` (`lint_applet`) passes with 0 errors; `compile_applet` builds successfully.
+
+
 ### Web Companion Demo Showcase, Direct SRT Synchronization & Modern Glassmorphic Workstation
 
 - **Platform Separation & Web Companion Demo**:

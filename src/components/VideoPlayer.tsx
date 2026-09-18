@@ -314,8 +314,10 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
     // Single target language TTS playback: plays TTS only for the current target language and strictly what is presented on screen!
     const playCurrentCueTTS = async () => {
       unlockTTSAudio();
-      setIsPlaying(false);
-      isPlayingRef.current = false;
+      if (!isAutoTTSPausingRef.current) {
+        setIsPlaying(false);
+        isPlayingRef.current = false;
+      }
       try {
         ytPlayerRef.current?.pauseVideo?.();
       } catch {}
@@ -754,13 +756,40 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       onTimeUpdateRef.current = onTimeUpdate;
     });
 
-    // Time ticker for progress bar and active cue synchronization
+    const activeCueRef = useRef(activeCue);
+    useEffect(() => {
+      activeCueRef.current = activeCue;
+    }, [activeCue]);
+
+    const autoTTSEnabledRef = useRef(autoTTSEnabled);
+    useEffect(() => {
+      autoTTSEnabledRef.current = autoTTSEnabled;
+    }, [autoTTSEnabled]);
+
+    const isLoopingCueRef = useRef(isLoopingCue);
+    useEffect(() => {
+      isLoopingCueRef.current = isLoopingCue;
+    }, [isLoopingCue]);
+
+    const isSyncActiveRef = useRef(isSyncActive);
+    useEffect(() => {
+      isSyncActiveRef.current = isSyncActive;
+    }, [isSyncActive]);
+
+    const isSyncSpeakingRef = useRef(isSyncSpeaking);
+    useEffect(() => {
+      isSyncSpeakingRef.current = isSyncSpeaking;
+    }, [isSyncSpeaking]);
+
+    // Time ticker for progress bar, active cue synchronization, and Auto-TTS playback
     useEffect(() => {
       const interval = setInterval(() => {
         try {
+          let cur = -1;
           if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === 'function') {
-            const cur = ytPlayerRef.current.getCurrentTime();
-            if (typeof cur === 'number' && !isNaN(cur) && cur >= 0) {
+            const ytCur = ytPlayerRef.current.getCurrentTime();
+            if (typeof ytCur === 'number' && !isNaN(ytCur) && ytCur >= 0) {
+              cur = ytCur;
               setCurrentTime(cur);
               currentTimeRef.current = cur;
               onTimeUpdateRef.current?.(cur);
@@ -770,18 +799,58 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
               setDuration(dur);
             }
           } else if (isPlayingRef.current && !isAutoTTSPausingRef.current) {
-            const cur = (Date.now() - playStartTimeRef.current) / 1000;
-            if (cur >= 0) {
+            const estCur = (Date.now() - playStartTimeRef.current) / 1000;
+            if (estCur >= 0) {
+              cur = estCur;
               setCurrentTime(cur);
               currentTimeRef.current = cur;
               onTimeUpdateRef.current?.(cur);
+            }
+          }
+
+          // Coordinated pause-and-resume Auto-TTS loop during video playback
+          const currentCue = activeCueRef.current;
+          if (
+            cur >= 0 &&
+            autoTTSEnabledRef.current &&
+            isPlayingRef.current &&
+            !isSyncActiveRef.current &&
+            !isSyncSpeakingRef.current &&
+            !isAutoTTSSpeakingRef.current &&
+            !isAutoTTSPausingRef.current &&
+            currentCue?.text
+          ) {
+            const cueDur = currentCue.duration && currentCue.duration > 0 ? currentCue.duration : 2.5;
+            const cueEnd = currentCue.start + cueDur;
+            if (cur >= cueEnd - 0.25 && cur < cueEnd + 2.0 && lastSpokenCueIdRef.current !== currentCue.id) {
+              lastSpokenCueIdRef.current = currentCue.id;
+              isAutoTTSPausingRef.current = true;
+              isAutoTTSSpeakingRef.current = true;
+              try {
+                ytPlayerRef.current?.pauseVideo?.();
+              } catch {}
+              postIframeCommand('pauseVideo');
+
+              playCurrentCueTTS().then(() => {
+                if (isAutoTTSPausingRef.current) {
+                  isAutoTTSPausingRef.current = false;
+                  isAutoTTSSpeakingRef.current = false;
+                  if (isLoopingCueRef.current) {
+                    seekTo(currentCue.start);
+                  }
+                  try {
+                    ytPlayerRef.current?.playVideo?.();
+                  } catch {}
+                  postIframeCommand('playVideo');
+                }
+              });
             }
           }
         } catch {}
       }, 350);
 
       return () => clearInterval(interval);
-    }, []);
+    }, [seekTo]);
 
     // Imperative handle for subtitle time-sync engine
     useImperativeHandle(
@@ -1580,6 +1649,57 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
                   >
                     {isMuted ? <VolumeX className="w-5 h-5 text-red-400" /> : <Volume2 className="w-5 h-5" />}
                   </button>
+
+                  {/* Direct SRT Speech Flow: Start Sentence Sync */}
+                  {onToggleSync && (
+                    <button
+                      id="compact-toggle-sync-btn"
+                      data-testid="compact-toggle-sync-btn"
+                      type="button"
+                      onClick={onToggleSync}
+                      className={`min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold border flex items-center gap-1.5 hover:ring-2 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40 ${
+                        isSyncActive
+                          ? 'bg-amber-500 hover:bg-amber-400 text-neutral-950 border-amber-400 glow-amber'
+                          : 'bg-indigo-600 hover:bg-indigo-500 text-white border-indigo-500'
+                      }`}
+                      title={isSyncActive ? 'Pause Sentence Sync' : 'Start Dual-Language Sentence Sync'}
+                    >
+                      {isSyncActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+                      <span>{isSyncActive ? 'Sync: ON' : 'Sync'}</span>
+                    </button>
+                  )}
+
+                  {/* Direct Speak Cue Test Button */}
+                  <button
+                    id="compact-speak-cue-btn"
+                    data-testid="compact-speak-cue-btn"
+                    type="button"
+                    onClick={() => playCurrentCueTTS()}
+                    disabled={!activeCue}
+                    className="min-h-[44px] px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-neutral-900/90 hover:bg-neutral-800 text-amber-300 border border-neutral-700/80 flex items-center gap-1.5 disabled:opacity-40 hover:ring-2 hover:ring-amber-400 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40"
+                    title="Speak current active subtitle cue in target language"
+                  >
+                    <Volume2 className="w-4 h-4 text-amber-400" />
+                    <span className="hidden sm:inline">Speak</span>
+                  </button>
+
+                  {/* Loop Cue Toggle */}
+                  {onToggleLoopCue && (
+                    <button
+                      id="compact-loop-cue-btn"
+                      data-testid="compact-loop-cue-btn"
+                      type="button"
+                      onClick={onToggleLoopCue}
+                      className={`min-h-[44px] px-2.5 py-1.5 rounded-xl text-xs font-medium border flex items-center gap-1 hover:ring-2 hover:scale-105 active:scale-95 transition-all duration-150 cursor-pointer pointer-events-auto relative z-40 ${
+                        isLoopingCue
+                          ? 'bg-amber-400/20 border-amber-400 text-amber-300 font-bold'
+                          : 'bg-neutral-900/90 border-neutral-700/80 text-neutral-300 hover:bg-neutral-800'
+                      }`}
+                      title="Loop current cue sentence and translation"
+                    >
+                      <Repeat className={`w-3.5 h-3.5 ${isLoopingCue ? 'animate-spin' : ''}`} />
+                    </button>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2">
