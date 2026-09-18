@@ -8,6 +8,18 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Fix Dev Server Startup (Decouple Server Imports from SRT Loader)
+
+- **Root Cause**: `server.ts` imported `src/utils/youtube.ts`, which imported `DEFAULT_VIDEO_ID` and `DEFAULT_VIDEO_URL` from `src/config/appConfig.ts`. `appConfig.ts` imported `FCRZADI8R9U_LANGUAGE_SRT_TRACKS` from `defaultSubtitles.ts`, which imported `test/fixtures/languages/srtStrings.ts` (containing static raw `.srt` imports). When `tsx server.ts` started the dev server, Node's runtime ESM module loader attempted to load `.srt` files and threw `TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".srt"`.
+- **Resolution**:
+  - Decoupled `src/utils/youtube.ts` from `src/config/appConfig.ts` by defining `DEFAULT_VIDEO_ID` and `DEFAULT_VIDEO_URL` directly as constants in `youtube.ts`, completely isolating `server.ts` from client subtitle fixtures.
+  - Verified `server.ts` boots instantly on `http://0.0.0.0:3000` with status 200.
+  - Verified all local `.srt` fixtures continue to load seamlessly on the Vite client in `SubtitleArtifactsModal.tsx`.
+- **Verification**:
+  - Dev server verified running on port 3000 returning `HTTP/1.1 200 OK`.
+  - `lint_applet` (`tsc --noEmit`): 0 errors.
+  - `compile_applet` (`npm run build`): Build succeeded.
+
 ### Ensure Subtitle Artifacts Load & Display from Local .SRT Fixtures for Demo Video (FcRzAdI8R9U)
 
 - **Local SRT Fixtures Ingestion**:
