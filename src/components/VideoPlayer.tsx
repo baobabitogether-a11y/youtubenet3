@@ -36,7 +36,7 @@ import { setPlayerReady as setReduxPlayerReady, setPlayerState as setReduxPlayer
 import { transition } from '../store/stateMachineSlice';
 import { addError } from '../store/errorsSlice';
 import { UI_TEXT } from '../config/appConfig';
-import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings, getSingleTargetLanguageMode, setSingleTargetLanguageMode } from '../utils/appSettings';
+import { SubtitlePosition, loadAppSettings, saveAppSettings, AppSettings, getSingleTargetLanguageMode, setSingleTargetLanguageMode, isAndroidAppEnvironment } from '../utils/appSettings';
 import { HighlightableText } from './HighlightableText';
 import { ParallelTranslationsOverlay } from './ParallelTranslationsOverlay';
 import { speakText, stopTTS, unlockTTSAudio } from '../lib/ttsEngine';
@@ -255,8 +255,9 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       setLocalCaptionsEnabled(nextState);
       onToggleCaptions?.(nextState);
 
-      // Requirement 4: Auto-detect subtitles once the caption icon is set to ON
-      if (nextState && !hasSubtitles && onFetchSubtitles) {
+      // Auto-detect subtitles once the caption icon is set to ON - scoped strictly to Android native app
+      const isAndroidApp = isAndroidAppEnvironment();
+      if (nextState && !hasSubtitles && onFetchSubtitles && isAndroidApp) {
         onFetchSubtitles();
       }
     };

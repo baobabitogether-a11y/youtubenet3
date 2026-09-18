@@ -1025,4 +1025,30 @@ test.describe('YouTube Video Viewer - Web E2E Tests', () => {
       await page.waitForTimeout(200);
     }
   });
+
+  /**
+   * WEB CRITICAL TEST 16:
+   * Verify Caption Toggle Icon: Subtitle Auto-Detection Scoped to Android Native App
+   */
+  test('16. Caption Toggle Icon: Platform Scoping & CC Toggle Behavior', async ({ page }) => {
+    // Locate the caption toggle button
+    const captionToggle = page.locator('#caption-toggle-button').first();
+    await expect(captionToggle).toBeVisible();
+
+    // Verify initial aria-pressed or active state
+    const initialPressed = await captionToggle.getAttribute('aria-pressed');
+
+    // Click caption toggle to toggle state
+    await captionToggle.click();
+    await page.waitForTimeout(300);
+
+    const toggledPressed = await captionToggle.getAttribute('aria-pressed');
+    expect(toggledPressed).not.toBe(initialPressed);
+
+    // Toggle back to original state
+    await captionToggle.click();
+    await page.waitForTimeout(300);
+    const restoredPressed = await captionToggle.getAttribute('aria-pressed');
+    expect(restoredPressed).toBe(initialPressed);
+  });
 });

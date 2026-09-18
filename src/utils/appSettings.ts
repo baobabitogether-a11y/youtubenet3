@@ -345,6 +345,13 @@ export interface AppStateSnapshot {
   };
 }
 
+export function isAndroidAppEnvironment(): boolean {
+  if (typeof window === 'undefined') return false;
+  if ((window as any).AndroidNativeShell) return true;
+  if (typeof navigator !== 'undefined' && /android/i.test(navigator.userAgent)) return true;
+  return false;
+}
+
 export function exportFullAppState(extraStatus?: Record<string, any>): string {
   const currentSettings = loadAppSettings();
   const allVideoSettings: Record<string, VideoSpecificSettings> = {};
@@ -364,7 +371,7 @@ export function exportFullAppState(extraStatus?: Record<string, any>): string {
     }
   }
 
-  const isNative = typeof window !== 'undefined' && !!(window as any).AndroidNativeShell;
+  const isNative = isAndroidAppEnvironment();
 
   const snapshot: AppStateSnapshot = {
     exportedAt: new Date().toISOString(),

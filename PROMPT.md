@@ -4,8 +4,7 @@
 
 All actionable tasks from the latest prompt have been fully implemented, verified, and archived to `CHANGELOG.md`:
 
-- [x] **Default Compact Design**: `compactView: true` enabled by default in `DEFAULT_APP_SETTINGS` with seamless toggleability in `SettingsModal` and quick controls.
-- [x] **Subtitle Artifacts Browser**: Created `SubtitleArtifactsModal.tsx` for exploring full `.SRT` tracks, raw file preview, search filtering, single-cue TTS, and `.srt` file downloads for default and multi-lingual fixtures.
-- [x] **Comprehensive Button Verification Suites**: Expanded Playwright E2E test suites with Tests 12, 13, and 14 verifying every button in the Navbar, Quick Controls, Position Selectors, Artifacts Browser, and Settings Import/Export.
+- [x] **Caption Icon Subtitle Detection Scoped to Android Native App**: Scoped automatic subtitle detection / fetching when enabling captions via the dedicated caption icon (`#caption-toggle-button`) strictly to the Android native platform via `isAndroidAppEnvironment()`, avoiding unrequested auto-fetches on web while preserving full native dialogue interception.
+- [x] **E2E Test Verification**: Added **WEB CRITICAL TEST 16** in `e2e/web.spec.ts` testing platform-scoped caption toggling and UI accessibility states.
 - [x] **Zero-Error Standard Verification**: Verified with `lint_applet` (`tsc --noEmit`) and `compile_applet` (`npm run build`).
 

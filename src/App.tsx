@@ -56,7 +56,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ActivityLogModal } from './components/ActivityLogModal';
 import { ApkUpdateModal } from './components/ApkUpdateModal';
 import { checkApkUpdate } from './utils/apkUpdater';
-import { loadAppSettings, saveAppSettings, AppSettings, DEFAULT_APP_SETTINGS, loadVideoSettings, saveVideoSettings, VideoSpecificSettings, getVideoTargetLang, setVideoTargetLang } from './utils/appSettings';
+import { loadAppSettings, saveAppSettings, AppSettings, DEFAULT_APP_SETTINGS, loadVideoSettings, saveVideoSettings, VideoSpecificSettings, getVideoTargetLang, setVideoTargetLang, isAndroidAppEnvironment } from './utils/appSettings';
 import { logInfo, logWarn, logSubtitles, registerAppStateProvider } from './utils/logBuffer';
 import { checkAndPerformUrlCacheReset, getAppStateFromUrl, syncAppStateToUrl } from './utils/urlStateManager';
 import { getMockedSubtitlesForVideo, FCRZADI8R9U_LANGUAGE_SRT_TRACKS } from '../test/fixtures/defaultSubtitles';
@@ -1277,6 +1277,7 @@ export default function App() {
             captionsEnabled={captionsEnabled}
             onToggleCaptions={(enabled) => {
               setCaptionsEnabled(enabled);
+              const isAndroidApp = isAndroidAppEnvironment();
               if (enabled) {
                 dispatch(
                   transition({
@@ -1285,7 +1286,8 @@ export default function App() {
                     payload: { videoId },
                   })
                 );
-                if (activeCues.length === 0) {
+                // Subtitle auto-detection when enabling captions is scoped to Android app
+                if (activeCues.length === 0 && isAndroidApp) {
                   handleFetchSubtitles(videoId, false);
                 }
               } else {
@@ -1636,6 +1638,7 @@ export default function App() {
             onBackOrClose={() => setIsLibraryOpen(true)}
             onToggleCaptions={(enabled) => {
               setCaptionsEnabled(enabled);
+              const isAndroidApp = isAndroidAppEnvironment();
               if (enabled) {
                 dispatch(
                   transition({
@@ -1644,7 +1647,8 @@ export default function App() {
                     payload: { videoId },
                   })
                 );
-                if (activeCues.length === 0) {
+                // Subtitle auto-detection when enabling captions is scoped to Android app
+                if (activeCues.length === 0 && isAndroidApp) {
                   handleFetchSubtitles(videoId, false);
                 }
               } else {

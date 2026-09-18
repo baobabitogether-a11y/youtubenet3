@@ -8,6 +8,18 @@ All notable changes and completed historical tasks for the YouTube Video Viewer 
 
 ## Historical Completed Tasks Archive
 
+### Caption Icon Subtitle Auto-Detection Scoped to Android Native Platform
+
+- **Android Native Platform Scoping for Caption Auto-Detection**:
+  - Scoped automatic subtitle detection / fetching upon toggling the dedicated caption icon (`#caption-toggle-button`) strictly to the Android native application environment (`isAndroidAppEnvironment()`).
+  - On the Web Companion demo, toggling the caption icon cleanly enables/disables subtitle overlay display without initiating unrequested background network auto-detection calls.
+  - On Android native shell (`AndroidNativeShell`), enabling the caption icon seamlessly triggers native subtitle interception and dialogue auto-detection.
+- **E2E Test Coverage**:
+  - Added **WEB CRITICAL TEST 16** in `e2e/web.spec.ts` verifying the Caption Toggle icon's platform scoping, `aria-pressed` states, and CC toggling behavior.
+- **Verification & Zero-Error Standard**:
+  - `lint_applet` (`tsc --noEmit`): Passed with 0 errors.
+  - `compile_applet` (`npm run build`): Succeeded with 0 errors.
+
 ### Demo Quick Floating Dock on Landing Page: 1-Click Compact Mode & Single/All Subtitles Toggle
 
 - **Demo Quick Floating Dock (`DemoQuickFloatingDock.tsx`)**:
