@@ -74,6 +74,7 @@ interface SubtitlesTeacherPanelProps {
   onJumpToCue?: (cue: CaptionCue, index: number) => void;
   onSyncStateChange?: (isActive: boolean) => void;
   onSyncSpeakingChange?: (isSpeaking: boolean, text: string | null, lang: string | null, charIdx: number | null) => void;
+  syncEngine?: ReturnType<typeof useSyncEngine>;
 }
 
 const DEFAULT_TARGET_LANGUAGES: TargetLanguage[] = [
@@ -164,6 +165,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
   onJumpToCue,
   onSyncStateChange,
   onSyncSpeakingChange,
+  syncEngine: syncEngineProp,
 }: SubtitlesTeacherPanelProps) => {
   const dispatch = useAppDispatch();
   const [activeTargetLang, setActiveTargetLang] = useState<string>(() => {
@@ -411,22 +413,7 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     }));
   }, [targetLanguages, activeTargetLang]);
 
-  const {
-    activeCueIndex,
-    isSyncActive,
-    isSpeaking,
-    currentTTSLang,
-    currentTTSText,
-    activeCharIndex,
-    translations,
-    startSync,
-    pauseSync,
-    jumpToCue,
-    nextCue,
-    prevCue,
-    testSpeakLang,
-    speakDirectText,
-  } = useSyncEngine({
+  const internalSyncEngine = useSyncEngine({
     cues: effectiveCues,
     sourceLang,
     languages: effectiveLanguagesForSync,
@@ -436,6 +423,26 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
     videoId,
     externalTranslations: tableTranslations,
   });
+
+  const activeSync = syncEngineProp || internalSyncEngine;
+  const {
+    activeCueIndex,
+    isSyncActive,
+    isSpeaking,
+    currentTTSLang,
+    currentTTSText,
+    activeCharIndex,
+    translations,
+    isLoopingCue,
+    toggleLoopCue,
+    startSync,
+    pauseSync,
+    jumpToCue,
+    nextCue,
+    prevCue,
+    testSpeakLang,
+    speakDirectText,
+  } = activeSync;
 
   const onSyncStateChangeRef = useRef(onSyncStateChange);
   const onSyncSpeakingChangeRef = useRef(onSyncSpeakingChange);
@@ -1172,6 +1179,22 @@ export const SubtitlesTeacherPanel: React.FC<SubtitlesTeacherPanelProps> = ({
                       <span>Start Teacher Sync</span>
                     </>
                   )}
+                </button>
+
+                <button
+                  id="sync-teacher-loop-button"
+                  type="button"
+                  data-testid="sync-teacher-loop-button"
+                  onClick={toggleLoopCue}
+                  title="Loop active sentence and translation"
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-semibold transition border ${
+                    isLoopingCue
+                      ? 'bg-amber-400/20 border-amber-400 text-amber-300 shadow-md font-bold'
+                      : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border-neutral-700'
+                  }`}
+                >
+                  <Repeat className={`w-4 h-4 ${isLoopingCue ? 'animate-spin' : ''}`} />
+                  <span>Loop Cue</span>
                 </button>
 
                 <button

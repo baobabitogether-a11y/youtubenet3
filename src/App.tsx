@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Navbar } from './components/Navbar';
 import { LinkInputBar } from './components/LinkInputBar';
 import { VideoPlayer } from './components/VideoPlayer';
@@ -26,7 +26,9 @@ import {
   YouTubeFormatType,
   YouTubePlayerHandle,
   CaptionCue,
+  TargetLanguage,
 } from './types';
+import { useSyncEngine } from './hooks/useSyncEngine';
 import {
   DEFAULT_VIDEO_ID,
   DEFAULT_VIDEO_URL,
@@ -137,13 +139,22 @@ export default function App() {
   const [isArtifactsModalOpen, setIsArtifactsModalOpen] = useState<boolean>(false);
   const [isApkUpdateModalOpen, setIsApkUpdateModalOpen] = useState<boolean>(false);
   const [hasApkUpdate, setHasApkUpdate] = useState<boolean>(false);
-  const [latestApkTag, setLatestApkTag] = useState<string | undefined>(undefined);
+  const isAndroidApp = isAndroidAppEnvironment();
   const [settings, setSettings] = useState<AppSettings>(() => {
     const loaded = loadAppSettings();
-    if (initialUrlState.autoTTS !== undefined) {
-      return { ...loaded, autoPlayTTS: initialUrlState.autoTTS };
+    let initialCompact = loaded.compactView;
+    if (!isAndroidApp && typeof window !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('yt_app_settings_v4');
+        if (!raw) {
+          initialCompact = false;
+        }
+      } catch {}
     }
-    return loaded;
+    if (initialUrlState.autoTTS !== undefined) {
+      return { ...loaded, autoPlayTTS: initialUrlState.autoTTS, compactView: initialCompact };
+    }
+    return { ...loaded, compactView: initialCompact };
   });
   const [interceptedData, setInterceptedData] = useState<InterceptedCaptionData | null>(null);
   const [captionsEnabled, setCaptionsEnabled] = useState<boolean>(() => initialUrlState.captionsEnabled ?? true);
@@ -309,44 +320,12 @@ export default function App() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [restoredToast, setRestoredToast] = useState<string | null>(null);
 
-  // Sync engine TTS state to synchronize VideoPlayer overlays with active speaking queue
-  const [syncTTSState, setSyncTTSState] = useState<{
-    isSpeaking: boolean;
-    currentTTSText: string | null;
-    currentTTSLang: string | null;
-    activeCharIndex: number | null;
-  }>({
-    isSpeaking: false,
-    currentTTSText: null,
-    currentTTSLang: null,
-    activeCharIndex: null,
-  });
+  // Active cues list resolved from custom loaded cues, intercepted native captions, or defaults
+  const activeCues = useMemo(() => {
+    return customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
+  }, [customCues, interceptedData]);
 
-  const handleSyncSpeakingChange = useCallback(
-    (isSpeaking: boolean, text: string | null, lang: string | null, charIdx: number | null) => {
-      setSyncTTSState((prev) => {
-        if (
-          prev.isSpeaking === isSpeaking &&
-          prev.currentTTSText === text &&
-          prev.currentTTSLang === lang &&
-          prev.activeCharIndex === charIdx
-        ) {
-          return prev;
-        }
-        return {
-          isSpeaking,
-          currentTTSText: text,
-          currentTTSLang: lang,
-          activeCharIndex: charIdx,
-        };
-      });
-    },
-    []
-  );
-
-  // Shared Link feedback state (complaint if not youtube link, or success)
-  const [sharedLinkComplaint, setSharedLinkComplaint] = useState<string | null>(null);
-  const [sharedLinkSuccess, setSharedLinkSuccess] = useState<string | null>(null);
+  const playerRef = useRef<YouTubePlayerHandle | null>(null);
 
   // Observed YouTube TimedText URL for repeating requests with tlang & fmt=srt
   const [observedTimedTextUrl, setObservedTimedTextUrl] = useState<string | null>(() => {
@@ -357,8 +336,48 @@ export default function App() {
     setObservedTimedTextUrl(getObservedTimedTextUrl(videoId));
   }, [videoId]);
 
-  const playerRef = useRef<YouTubePlayerHandle | null>(null);
+  // Target languages configured for sentence sync
+  const targetLanguagesForSync: TargetLanguage[] = useMemo(() => [
+    { id: 'lang-he', code: 'he', name: 'Hebrew (עברית)', ttsRate: 1.0, enabled: selectedTargetLang === 'he', color: '#8b5cf6' },
+    { id: 'lang-it', code: 'it', name: 'Italian (Italiano)', ttsRate: 1.0, enabled: selectedTargetLang === 'it', color: '#10b981' },
+    { id: 'lang-en', code: 'en', name: 'English (English)', ttsRate: 1.0, enabled: selectedTargetLang === 'en', color: '#3b82f6' },
+    { id: 'lang-ar', code: 'ar', name: 'Arabic (العربية)', ttsRate: 1.0, enabled: selectedTargetLang === 'ar', color: '#f59e0b' },
+    { id: 'lang-ru', code: 'ru', name: 'Russian (Русский)', ttsRate: 1.0, enabled: selectedTargetLang === 'ru', color: '#ec4899' },
+  ], [selectedTargetLang]);
+
+  // Primary sentence-by-sentence Direct SRT Sync Engine (Mutual exclusion: video play vs TTS play)
+  const syncEngine = useSyncEngine({
+    cues: activeCues,
+    sourceLang: 'ru',
+    languages: targetLanguagesForSync,
+    playerRef,
+    playOrder: 'video_first',
+    observedUrl: observedTimedTextUrl,
+    videoId,
+  });
+
   const [isSyncActive, setIsSyncActive] = useState<boolean>(false);
+  useEffect(() => {
+    setIsSyncActive(syncEngine.isSyncActive);
+  }, [syncEngine.isSyncActive]);
+
+  // Shared Link feedback state (complaint if not youtube link, or success)
+  const [sharedLinkComplaint, setSharedLinkComplaint] = useState<string | null>(null);
+  const [sharedLinkSuccess, setSharedLinkSuccess] = useState<string | null>(null);
+
+  const effectiveActiveCue = useMemo(() => {
+    if (syncEngine.isSyncActive && syncEngine.activeCueIndex >= 0 && activeCues[syncEngine.activeCueIndex]) {
+      return activeCues[syncEngine.activeCueIndex];
+    }
+    return activeCue;
+  }, [syncEngine.isSyncActive, syncEngine.activeCueIndex, activeCues, activeCue]);
+
+  const effectiveTranslatedCueText = useMemo(() => {
+    if (syncEngine.isSpeaking && syncEngine.currentTTSText) {
+      return syncEngine.currentTTSText;
+    }
+    return translatedCueText;
+  }, [syncEngine.isSpeaking, syncEngine.currentTTSText, translatedCueText]);
 
   // Register comprehensive dynamic application state provider for Copy All diagnostics logs
   useEffect(() => {
@@ -435,16 +454,17 @@ export default function App() {
   }, [videoId, currentUrl, selectedTargetLang, settings.autoPlayTTS, settings.compactView, captionsEnabled]);
 
   const handlePlayerTimeUpdate = useCallback((t: number) => {
-    const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
-    if (!active || active.length === 0) return;
-    const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+    if (!activeCues || activeCues.length === 0) return;
+    const match = activeCues.find((c) => t >= c.start - 0.1 && t <= (c.start + (c.duration || 2.5)) + 0.15);
     setActiveCue((prev) => {
       if (match) {
         return prev?.id === match.id ? prev : match;
       }
-      // If player is at 0, default to first cue; otherwise maintain previous valid cue during slight gaps
-      if (t === 0) return active[0];
-      return prev || active[0];
+      if (prev && t >= prev.start && t <= (prev.start + (prev.duration || 2.5)) + 1.0) {
+        return prev;
+      }
+      if (t < 0.5) return activeCues[0];
+      return null;
     });
 
     // Throttled time update to URL
@@ -458,38 +478,40 @@ export default function App() {
         mode: settings.compactView ? 'compact' : 'expanded',
       });
     }
-  }, [customCues, interceptedData, videoId, selectedTargetLang, settings.autoPlayTTS, settings.compactView, captionsEnabled]);
+  }, [activeCues, videoId, selectedTargetLang, settings.autoPlayTTS, settings.compactView, captionsEnabled]);
 
   // Active cue tracker from player playback position
   useEffect(() => {
-    const active = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
-    if (!active || active.length === 0) {
+    if (!activeCues || activeCues.length === 0) {
       setActiveCue(null);
       return;
     }
     // Initialize active cue immediately if currently null
     setActiveCue((prev) => {
-      if (prev && active.some((c) => c.id === prev.id)) return prev;
-      return active[0] || null;
+      if (prev && activeCues.some((c) => c.id === prev.id)) return prev;
+      return activeCues[0] || null;
     });
 
     const interval = setInterval(() => {
       try {
         const t = playerRef.current?.getCurrentTime?.();
         if (typeof t === 'number' && !isNaN(t) && t >= 0) {
-          const match = active.find((c) => t >= c.start && t <= c.start + (c.duration || 2.5));
+          const match = activeCues.find((c) => t >= c.start - 0.1 && t <= (c.start + (c.duration || 2.5)) + 0.15);
           setActiveCue((prev) => {
             if (match) {
               return prev?.id === match.id ? prev : match;
             }
-            if (t === 0) return active[0];
-            return prev || active[0];
+            if (prev && t >= prev.start && t <= (prev.start + (prev.duration || 2.5)) + 1.0) {
+              return prev;
+            }
+            if (t < 0.5) return activeCues[0];
+            return null;
           });
         }
       } catch {}
     }, 250);
     return () => clearInterval(interval);
-  }, [customCues, interceptedData, videoId]);
+  }, [activeCues, videoId]);
 
   // Cached Video and Subtitle Library
   const [library, setLibrary] = useState<LibraryVideoItem[]>(() => {
@@ -1166,8 +1188,6 @@ export default function App() {
     setLibrary((prev) => prev.filter((item) => item.id !== idToRemove));
   };
 
-  const activeCues = customCues && customCues.length > 0 ? customCues : (interceptedData?.cues || []);
-
   // Performance & Display Mode: Compact View when enabled by user (fast, tap-to-show controls, no scrolling)
   if (Boolean(settings.compactView)) {
     return (
@@ -1238,8 +1258,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Newer APK available banner in compact view */}
-        {hasApkUpdate && (
+        {/* Newer APK available banner only in Android app environment */}
+        {hasApkUpdate && isAndroidApp && (
           <div
             id="compact-apk-update-banner"
             data-testid="compact-apk-update-banner"
@@ -1312,14 +1332,26 @@ export default function App() {
               }
             }}
             compactView={true}
-            isSyncActive={isSyncActive}
-            syncTTSText={syncTTSState.currentTTSText}
-            syncTTSLang={syncTTSState.currentTTSLang}
-            isSyncSpeaking={syncTTSState.isSpeaking}
-            syncTTSCharIndex={syncTTSState.activeCharIndex}
+            isSyncActive={syncEngine.isSyncActive}
+            onToggleSync={() => {
+              if (syncEngine.isSyncActive) {
+                syncEngine.pauseSync();
+              } else {
+                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
+                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
+              }
+            }}
+            isLoopingCue={syncEngine.isLoopingCue}
+            onToggleLoopCue={syncEngine.toggleLoopCue}
+            onNextCue={syncEngine.nextCue}
+            onPrevCue={syncEngine.prevCue}
+            syncTTSText={syncEngine.currentTTSText}
+            syncTTSLang={syncEngine.currentTTSLang}
+            isSyncSpeaking={syncEngine.isSpeaking}
+            syncTTSCharIndex={syncEngine.activeCharIndex}
             onTimeUpdate={handlePlayerTimeUpdate}
-            activeCue={activeCue}
-            translatedCueText={translatedCueText}
+            activeCue={effectiveActiveCue}
+            translatedCueText={effectiveTranslatedCueText}
             targetLanguage={selectedTargetLang}
             onSelectTargetLanguage={handleUpdateTargetLang}
             subtitlePosition={settings.subtitlePosition}
@@ -1448,7 +1480,7 @@ export default function App() {
         onOpenLogs={() => setIsLogsModalOpen(true)}
         onOpenTTSInputs={() => setIsTTSInputsModalOpen(true)}
         onOpenApkUpdate={() => setIsApkUpdateModalOpen(true)}
-        hasApkUpdate={hasApkUpdate}
+        hasApkUpdate={hasApkUpdate && isAndroidApp}
         latestApkVersion={latestApkTag}
         settings={settings}
       />
@@ -1459,8 +1491,8 @@ export default function App() {
             theaterMode ? 'max-w-7xl' : 'max-w-5xl'
           }`}
         >
-          {/* Newer APK Available Banner in Expanded View */}
-          {hasApkUpdate && (
+          {/* Newer APK Available Banner in Expanded View (Only on Android) */}
+          {hasApkUpdate && isAndroidApp && (
             <div
               id="expanded-apk-update-banner"
               data-testid="expanded-apk-update-banner"
@@ -1610,6 +1642,51 @@ export default function App() {
             libraryCount={library.length}
           />
 
+          {/* Web Companion Demo Showcase & Fixed Multi-lingual Artifacts Bar */}
+          {!isAndroidApp && (
+            <div
+              id="web-demo-showcase-bar"
+              data-testid="web-demo-showcase-bar"
+              className="p-4 rounded-2xl glass-panel border border-indigo-500/30 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center shrink-0 shadow-sm">
+                  <Sparkles className="w-5 h-5 text-indigo-300" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-neutral-100">Web Companion Demo</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] font-bold">
+                      Live Showcase &amp; CI/CD Test Driver
+                    </span>
+                  </div>
+                  <p className="text-neutral-400 text-xs mt-0.5">
+                    Demonstrating authentic dual-language subtitle learning with 1,578 bundled cues for video <strong className="text-neutral-200">FcRzAdI8R9U</strong> (Russian source, Hebrew, Italian, English, Arabic). Pure SRT synchronization with zero queues.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap shrink-0">
+                <button
+                  type="button"
+                  id="demo-load-default-video-btn"
+                  onClick={() => handleSelectVideo(DEFAULT_VIDEO_ID, DEFAULT_VIDEO_URL)}
+                  className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-medium text-xs transition active:scale-95"
+                >
+                  Reset Demo Video
+                </button>
+                <button
+                  type="button"
+                  id="demo-open-artifacts-btn"
+                  onClick={() => setIsArtifactsModalOpen(true)}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-500/40 font-semibold text-xs transition active:scale-95 flex items-center gap-1.5"
+                >
+                  <Subtitles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Cached .SRT Tracks</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Main Video Player */}
           <VideoPlayer
             ref={playerRef}
@@ -1624,14 +1701,26 @@ export default function App() {
             hasSubtitles={activeCues.length > 0}
             captionsEnabled={captionsEnabled}
             compactView={false}
-            isSyncActive={isSyncActive}
-            syncTTSText={syncTTSState.currentTTSText}
-            syncTTSLang={syncTTSState.currentTTSLang}
-            isSyncSpeaking={syncTTSState.isSpeaking}
-            syncTTSCharIndex={syncTTSState.activeCharIndex}
+            isSyncActive={syncEngine.isSyncActive}
+            onToggleSync={() => {
+              if (syncEngine.isSyncActive) {
+                syncEngine.pauseSync();
+              } else {
+                const cueIdx = effectiveActiveCue ? activeCues.findIndex((c) => c.id === effectiveActiveCue.id) : -1;
+                syncEngine.startSync(cueIdx >= 0 ? cueIdx : undefined);
+              }
+            }}
+            isLoopingCue={syncEngine.isLoopingCue}
+            onToggleLoopCue={syncEngine.toggleLoopCue}
+            onNextCue={syncEngine.nextCue}
+            onPrevCue={syncEngine.prevCue}
+            syncTTSText={syncEngine.currentTTSText}
+            syncTTSLang={syncEngine.currentTTSLang}
+            isSyncSpeaking={syncEngine.isSpeaking}
+            syncTTSCharIndex={syncEngine.activeCharIndex}
             onTimeUpdate={handlePlayerTimeUpdate}
-            activeCue={activeCue}
-            translatedCueText={translatedCueText}
+            activeCue={effectiveActiveCue}
+            translatedCueText={effectiveTranslatedCueText}
             targetLanguage={selectedTargetLang}
             onSelectTargetLanguage={handleUpdateTargetLang}
             subtitlePosition={settings.subtitlePosition}
@@ -1700,12 +1789,14 @@ export default function App() {
             onFetchSubtitles={() => handleFetchSubtitles(videoId, false)}
             isFetchingSubtitles={isFetchingSubtitles}
             fetchError={fetchError}
-            activeCue={activeCue}
-            onJumpToCue={(cue) => {
+            activeCue={effectiveActiveCue}
+            onJumpToCue={(cue, idx) => {
               setActiveCue(cue);
+              if (syncEngine.isSyncActive) {
+                syncEngine.jumpToCue(idx);
+              }
             }}
-            onSyncStateChange={setIsSyncActive}
-            onSyncSpeakingChange={handleSyncSpeakingChange}
+            syncEngine={syncEngine}
           />
         </div>
       </main>

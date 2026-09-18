@@ -10,6 +10,7 @@ Coding agents must understand and respect the role of each markdown documentatio
 | **`CHANGELOG.md`** | **Historical Archive**: Not of interest to agents during active coding. Holds chronological records of completed tasks, previous prompts, implementation logs, and version milestones. |
 | **`README.md`** | **User Guide & Live Links**: Contains the single CLI command for installing the latest APK on Android devices via ADB, and direct links to GitHub Pages (live web-app demo, web E2E tests, and Android emulator E2E tests). To update `README.md` for a new repository owner, run `npm run update:readme [username]` or `node scripts/update-readme.mjs [username]`. |
 | **`COVERAGE.md`** | **Test Coverage Matrix**: Tracks E2E and unit test suites across Web Companion and Android Native Shell. Organizes tests into TODOs and DONE sections, moving items upon test passes and highlighting platform-unique tests. |
+| **`DEPRECATED.md`** | **Historical Architecture & Retired Sandboxes**: Contains records of deprecated patterns, retired subsystems (e.g. the retired `/demo/` sandbox, artificial TTS queue debuggers), and obsolete modules moved out of active development. |
 | **`AGENTS.md`** | **Architecture, Guidelines & Guardrails**: System documentation containing the app's design goals, component flow, subtitle fetching orders, platform separation rules, prompt skills on hello greetings, settings import/export protocols, and protected files. |
 
 ---
@@ -43,14 +44,17 @@ The application runtime is constructed from interconnected functional modules an
 |                                      Navbar                                       |
 |  [Library Button]  [Share Button]  [Settings Button]  [Logs Button]  [APK Update] |
 +-----------------------------------------------------------------------------------+
+|                      Web Demo Showcase & Fixed Artifacts Bar                      |
+|  [🇷🇺 Source: 1,578 Cues] [🇮🇱 HE] [🇮🇹 IT] [🇺🇸 EN] [🇸🇦 AR] [Reset Demo] [SRT Tracks] |
++-----------------------------------------------------------------------------------+
 |                                   LinkInputBar                                    |
 |  [#youtube-url-input]                 [#load-video-btn]       [#open-library-btn] |
 +-----------------------------------------------------------------------------------+
 |                                    VideoPlayer                                    |
 |  - YouTube IFrame API Embed (`ref={playerRef}`)                                   |
-|  - Dynamic Subtitle Overlays (Source Cue + Translated Cue)                        |
+|  - Dynamic Subtitle Overlays (Source Cue + Target SRT Cue with Word Highlighting) |
 |  - Quick Control Bar: [#open-target-language-btn] [#open-logs-view-btn]           |
-|  - Key Controls (Play/Pause, Theater Mode, Subtitle Position Dropdown)            |
+|  - Direct SRT Speech Flow Bar: [Play/Pause Sync] [Loop Cue] [Target SRT Switchers]|
 +-----------------------------------------------------------------------------------+
 |                               SubtitlesTeacherPanel                               |
 |  - Sync Engine Controls: [Play/Pause] [Loop Cue] [Prev/Next] [Auto-TTS Toggle]    |
@@ -63,7 +67,7 @@ The application runtime is constructed from interconnected functional modules an
 |  - SelectTargetLanguageModal  - VideoLibraryModal    - ShareLinkModal             |
 |  - SettingsModal              - ApkUpdateModal       - ActivityLogModal           |
 |  - NetworkInspectorModal      - ErrorInspectorModal  - FloatingDiagnosticDock     |
-|  - TTSInputTextsModal         - TTSQueueDebugger     - ParallelTranslationsOverlay|
+|  - TTSInputTextsModal         - SubtitleArtifactsModal- ParallelTranslationsOverlay|
 |  - OfflineIndicator                                                               |
 +-----------------------------------------------------------------------------------+
 ```
@@ -73,6 +77,9 @@ The application runtime is constructed from interconnected functional modules an
 - **`Navbar`**:
   - Fixed header containing quick modal triggers: `#open-library-btn`, `#open-share-btn`, `#open-settings-btn`, `#open-logs-btn`, `#navbar-tts-inputs-button`, and `#apk-update-btn`.
   - Displays badge counter for saved library items and dynamic notifications when a newer APK version is detected on GitHub.
+- **`Web Demo Showcase & Fixed Artifacts Bar`**:
+  - Prominent presentation bar on the Web Companion Demo (landing page) showcasing authentic 1,578-cue multi-lingual tracks (`ru.srt`, `he.srt`, `it.srt`, `en.srt`, `ar.srt`) for video `FcRzAdI8R9U`.
+  - Provides instant 1-click language preset switching, demo reset, and .SRT track exploration without external network overhead.
 - **`LinkInputBar`**:
   - Primary URL ingestion component containing `#youtube-url-input` and `#load-video-btn`.
   - Parses video ID and timestamp, validates against YouTube domains, and dispatches to Redux `videoSlice` and `stateMachineSlice`.
@@ -80,12 +87,8 @@ The application runtime is constructed from interconnected functional modules an
   - Encapsulates the YouTube IFrame Player (`ref={playerRef}`) and coordinates playback time updates via `onTimeUpdate`.
   - Tracks playback state transitions (`isAutoTTSPausingRef` vs user pauses) to prevent state freezing during TTS speech loops.
   - Renders synchronized subtitle overlays according to user preferences (`subtitlePosition`: `top`, `above`, `under`, `bottom`).
+  - Directly docks the **SRT Speech Flow Bar** beneath controls for instantaneous start/pause sentence sync, loop toggle, and target language switching without artificial queuing.
   - Supports both single-language target subtitle display and multi-lingual `ParallelTranslationsOverlay`.
-  - Provides instant top-bar access to logs (`#open-logs-view-btn`), target language selection (`#open-target-language-btn`), and inline `TTSQueueDebugger`.
-- **`TTSQueueDebugger` & `TTSInputTextsView`**:
-  - Real-time diagnostic interface docked directly under the player (`#tts-queue-debugger`).
-  - Features dedicated list control presenting chronologically ordered TTS inputs ("Newer on Top" feed) with repeat tags (`REPEAT xN`), active speech progress indicators, quick-copy, search filters, and single-cue audio replays.
-  - Provides visual red-light indicators (`#tts-repeat-red-light`) when speech synthesis encounters consecutive identical cue repetitions.
 - **`SubtitlesTeacherPanel`**:
   - The interactive learning workstation hosting the multi-column translation interface.
   - Connects to `useSyncEngine.ts` to coordinate video time boundaries, active cue detection, sentence looping, and utterance triggers.
@@ -154,10 +157,14 @@ The repository contains two operational facets, with explicit prioritization:
 - **OS Intent Integration**: Registers Android `ACTION_SEND` intent filter in `AndroidManifest.xml` to receive shared links directly from the native YouTube Android app.
 - **In-App APK Updates**: The native shell displays in-app APK update notifications and triggers download and installation flows through Android's package installer.
 
-### 2. Scoped Web Companion — TEST DRIVER & DEMO ONLY
+### 2. Scoped Web Companion — LANDING PAGE & INTERACTIVE DEMO ONLY
 - **Strict Scope**: The browser build exists solely to:
   1. Drive automated CI/CD test suites (Playwright and Cypress) in headless Linux runners.
-  2. Host an interactive static demonstration on GitHub Pages.
+  2. Host an interactive static demonstration and landing page on GitHub Pages and local development.
+- **Fixed Multi-Lingual Artifacts for Zero-Overhead Testing**:
+  - The Web Companion defaults to an **Expanded Dual-View Workstation** showcasing the Video Player with dual subtitles alongside the interactive Subtitles Teacher Panel.
+  - Bundles the default demonstration video (`FcRzAdI8R9U`) with complete, authentic 1,578-cue `.srt` tracks in `test/fixtures/languages/*.srt` for source (`ru`) and target languages (`he`, `it`, `en`, `ar`).
+  - Presents the **Web Demo Showcase & Fixed Artifacts Bar** with 1-click language switchers, demo reset, and track inspection for frictionless testing and presentation of the entire app flow.
 - **Platform Specifics — Disable Showing APK Details on Web Platform**:
   - The Web Companion runtime runs inside standard desktop and mobile browsers where Android APKs cannot be natively installed.
   - Therefore, **disable showing APK's details, native package installer info, and intrusive APK update banners on the web platform**.
@@ -479,35 +486,28 @@ jobs:
 
 ---
 
-## 11. Handling Repeated App Logic Issues via Isolated Mini Demo (`demo/`)
+## 11. Direct SRT Subtitle Synchronization Architecture (Zero Queues, Pure SRT Subtitles)
 
-Complex reactive applications with high-frequency time tickers (200–350ms), multi-language state trees, hardware TTS loops, and modals are susceptible to subtle regressions (e.g., circular state updates, cue boundary jitter, and seeking race conditions). Debugging these within the full multi-component tree can be difficult due to overlapping side effects.
+Following user directive (**"Don't use queue, you have SRT subtitles"**), the application eliminates all artificial Text-to-Speech queues, background buffer pools, and queue debugger widgets (`TTSQueueDebugger`).
 
-### A. The Mini Demo Sandbox Pattern (`/demo/`)
+*(Note: The historical `/demo/` sandbox pattern has been retired and archived to [`DEPRECATED.md`](file:///c:/Users/User/Desktop/WORK3/youtubenet3/DEPRECATED.md).)*
 
-To isolate and eliminate repeated app logic regressions, the repository maintains an autonomous **Mini Demo Reference Application** located under `/demo/` (`demo/index.html` and `demo/mini-demo.ts`):
-
-1. **Zero-Dependency Architecture**:
-   - Completely standalone: excludes Redux, `SubtitlesTeacherPanel`, TTS queue debuggers, multi-language translation matrices, and native WebView bridge layers.
-   - Built with pure TypeScript and direct YouTube IFrame API bindings.
-2. **Single Hebrew Subtitle Track Constraint**:
-   - Bundles exclusively 1 authentic subtitle track: **Hebrew (`he`)** with 1,578 cues parsed from `test/fixtures/languages/he.srt` (`demo/hebrewCues.ts`).
-   - Features right-to-left (`dir="rtl"`) typography, high-contrast subtitle overlays, and time-frame boundaries.
-3. **Pure Time-Sync Engine**:
-   - Synchronizes video playback with active subtitle cues strictly based on start and end frames (`currentTime >= cue.start && currentTime <= cue.end`).
-   - Renders a live cue table highlighting the active subtitle cue in real-time with smooth auto-scrolling.
-   - Provides instant **click-to-seek**: clicking any Hebrew subtitle row seeks the YouTube player directly to `cue.start`.
-4. **Accessing the Mini Demo**:
-   - **Local Development**: Navigate directly to `http://localhost:3000/demo/`.
-   - **Live Production & GitHub Pages**: Hosted at `https://<owner>.github.io/<repo>/demo/` and accessible from the top navigation bar of both the main application and the Cypress test runner portal (`cypress/reports/index.html`).
-
-### B. Diagnostic Workflow for Coding Agents & Developers
-
-When diagnosing or verifying subtitle synchronization issues:
-1. **Reproduce in `demo/` First**: Verify if the timing discrepancy exists in the isolated `/demo/` player.
-   - If `/demo/` reproduces the issue, the bug is mathematical (e.g. cue boundary rounding, YouTube IFrame player lag, or SRT time-frame parsing).
-   - If `/demo/` functions perfectly, the bug in the main app is architectural (e.g. unmemoized React callbacks, Redux state thrashing, or circular TTS pause-and-resume loops).
-2. **Algorithm Prototyping**: Always prototype improvements to seek algorithms, boundary interpolation, or cue matching inside `demo/mini-demo.ts` before propagating them into the main application.
+### A. Core Architecture: Direct SRT Cue Binding
+1. **Authentic Multi-Lingual SRT Source of Truth**:
+   - The platform binds directly to complete, authentic 1,578-cue `.srt` tracks in `test/fixtures/languages/*.srt` for source (`ru`) and target languages (`he`, `it`, `en`, `ar`).
+   - Every cue is deterministically defined by `{ id, start, duration, text }`.
+   - Matching between source dialogue and target translation is direct and instant based on timestamp proximity:
+     `srtTargetCues.find(tc => Math.abs(tc.start - sourceCue.start) < 0.75) || srtTargetCues[sourceIndex]`.
+2. **Zero Queues — Direct Speech Execution**:
+   - Audio narration is executed **immediately** on the active cue via `speakText(targetSrtText, targetLang, ...)`.
+   - Speech synthesis never sits in an asynchronous FIFO queue or delayed retry buffer.
+   - User pauses, timeline seeks, or cue skips abort speech immediately (`stopTTS()`), resetting state without leftover queue artifacts.
+3. **Sentence-by-Sentence Speech Flow Cycle**:
+   - **Step 1 (Video Dialogue)**: YouTube player plays the cue interval (`cue.start` to `cue.start + cue.duration`). The learner listens to the native speaker audio.
+   - **Step 2 (Auto-Pause)**: YouTube player automatically pauses at cue completion.
+   - **Step 3 (TTS Narration)**: TTS speaks the target SRT translation directly, while `HighlightableText.tsx` highlights words in real-time (`data-testid="active-tts-word-highlight"`).
+   - **Step 4 (Advance)**: Video resumes automatically at the next cue after a brief natural cadence pause (200ms).
+   - **Step 5 (Loop Cue)**: When loop mode is enabled, repeats Steps 1–3 for the active sentence.
 
 ---
 
