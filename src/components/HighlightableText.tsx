@@ -29,7 +29,7 @@ export const HighlightableText: React.FC<HighlightableTextProps> = ({
   activeCharIndex,
   syncMode = 'word_boundary',
   className = '',
-  activeWordClassName = 'bg-amber-400 text-neutral-950 font-bold px-1.5 py-0.5 rounded shadow-md ring-2 ring-amber-300 transition-all duration-100 scale-105 inline-block mx-0.5',
+  activeWordClassName = 'word-boundary-active font-bold px-2 py-0.5 rounded shadow-lg ring-2 ring-amber-400/80 scale-105 inline-block mx-0.5 transition-all duration-100',
   pastWordClassName = 'text-neutral-300 opacity-90',
   futureWordClassName = 'text-neutral-100',
   dir,

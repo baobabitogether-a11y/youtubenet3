@@ -46,7 +46,6 @@ import { getVideoSettings } from '../utils/videoSettings';
 import { isRtl } from '../utils/rtlUtils';
 import { SAMPLE_TRANSLATIONS } from '../config/fixtures';
 import { logBuffer } from '../utils/logBuffer';
-import { TTSQueueDebugger } from './TTSQueueDebugger';
 
 interface VideoPlayerProps {
   videoId: string;
@@ -79,6 +78,11 @@ interface VideoPlayerProps {
   syncTTSLang?: string | null;
   isSyncSpeaking?: boolean;
   syncTTSCharIndex?: number | null;
+  onToggleSync?: () => void;
+  isLoopingCue?: boolean;
+  onToggleLoopCue?: () => void;
+  onNextCue?: () => void;
+  onPrevCue?: () => void;
   settings?: AppSettings;
   onUpdateSettings?: (newSettings: AppSettings) => void;
   onSelectVideo?: (videoId: string, rawUrl: string) => void;
@@ -122,6 +126,11 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       syncTTSLang = null,
       isSyncSpeaking = false,
       syncTTSCharIndex = null,
+      onToggleSync,
+      isLoopingCue = false,
+      onToggleLoopCue,
+      onNextCue,
+      onPrevCue,
       settings: propSettings,
       onUpdateSettings,
       onSelectVideo,
@@ -609,126 +618,13 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
       isAutoTTSSpeakingRef.current = false;
     }, [videoId]);
 
-    // Automatic TTS Narration loop per cue during playback
+    // Spoken cue state reset on activeCue change when not speaking
     useEffect(() => {
-      if (isSyncActive || !autoTTSEnabled || !isPlaying || !activeCue || !isCaptionsActive) {
-        return;
+      if (!isTTSSpeakingState && !isSyncSpeaking) {
+        isAutoTTSSpeakingRef.current = false;
+        isAutoTTSPausingRef.current = false;
       }
-
-      // Prevent duplicate speech for the same cue
-      if (lastSpokenCueIdRef.current === activeCue.id || isAutoTTSSpeakingRef.current) {
-        return;
-      }
-
-      lastSpokenCueIdRef.current = activeCue.id;
-      isAutoTTSSpeakingRef.current = true;
-      isAutoTTSPausingRef.current = true;
-
-      // Strict Mutual Exclusion: Pause YouTube video during speech
-      try {
-        ytPlayerRef.current?.pauseVideo?.();
-      } catch {}
-      postIframeCommand('pauseVideo');
-
-      dispatch(
-        transition({
-          to: 'syncing_tts',
-          actionName: 'TTS_AUTO_SPEAK_STARTED',
-          payload: { cueId: activeCue.id, text: activeCue.text },
-        })
-      );
-
-      (async () => {
-        try {
-          unlockTTSAudio();
-
-          let textToSpeak = effectiveDisplayTranslatedText || displayTranslatedText || translatedCueText || (activeCue ? localTranslatedMap[activeCue.id] : '') || '';
-
-          // Check authentic cached target subtitles first
-          if (!textToSpeak && activeCue?.text) {
-            const srtCues = getCachedTargetSubtitles(videoId, normTargetLang);
-            if (srtCues && srtCues.length > 0) {
-              const match =
-                srtCues.find((c) => Math.abs(c.start - activeCue.start) < 0.75) ||
-                srtCues.find((c) => c.id === activeCue.id);
-              if (match && match.text) {
-                textToSpeak = match.text;
-              }
-            }
-          }
-
-          if (!textToSpeak && activeCue?.text) {
-            const sample = SAMPLE_TRANSLATIONS[activeCue.text]?.[normTargetLang] || SAMPLE_TRANSLATIONS[activeCue.text]?.[targetLangCode];
-            if (sample) {
-              textToSpeak = sample;
-            }
-          }
-
-          if (!textToSpeak && activeCue?.text) {
-            try {
-              textToSpeak = await translateText(activeCue.text, 'auto', targetLangCode);
-            } catch {
-              textToSpeak = activeCue.text;
-            }
-          }
-
-          if (!textToSpeak && activeCue?.text) {
-            textToSpeak = activeCue.text;
-          }
-
-          if (textToSpeak) {
-            const isOriginalSpoken = textToSpeak === activeCue.text;
-            const speakLang = isOriginalSpoken
-              ? (detectedFormat?.language && detectedFormat.language !== 'auto' ? detectedFormat.language : 'auto')
-              : targetLangCode;
-
-            if (!isOriginalSpoken && activeCue?.id) {
-              setLocalTranslatedMap((prev) => ({ ...prev, [activeCue.id]: textToSpeak }));
-            }
-
-            setIsTTSSpeakingState(true);
-            setActiveTTSTarget(isOriginalSpoken ? 'original' : 'translated');
-            setActiveTTSCharIndex(0);
-
-            const vSettings = getVideoSettings(videoId);
-            const langConfig = vSettings?.targetLanguages?.find((l: any) => l.code === targetLangCode);
-
-            await speakText(textToSpeak, speakLang, langConfig?.ttsRate || 1.0, langConfig?.voice, (charIdx) => {
-              setActiveTTSCharIndex(charIdx);
-            });
-          }
-        } catch (err) {
-          console.warn('[Auto-TTS] Speech failed:', err);
-        } finally {
-          setIsTTSSpeakingState(false);
-          setActiveTTSTarget(null);
-          setActiveTTSCharIndex(null);
-          isAutoTTSSpeakingRef.current = false;
-
-          const wasPausingForTTS = isAutoTTSPausingRef.current;
-          isAutoTTSPausingRef.current = false;
-
-          dispatch(
-            transition({
-              to: 'playing',
-              actionName: 'TTS_AUTO_SPEAK_COMPLETED',
-              payload: { cueId: activeCue.id },
-            })
-          );
-
-          // Resume playback after TTS narration finishes if player was running or pausing for TTS
-          if (isPlayingRef.current || wasPausingForTTS) {
-            isPlayingRef.current = true;
-            setIsPlaying(true);
-            playStartTimeRef.current = Date.now() - currentTimeRef.current * 1000;
-            try {
-              ytPlayerRef.current?.playVideo?.();
-            } catch {}
-            postIframeCommand('playVideo');
-          }
-        }
-      })();
-    }, [activeCue?.id, isSyncActive, autoTTSEnabled, isPlaying, isCaptionsActive, displayTranslatedText, targetLangCode, cleanTargetLang, videoId, dispatch]);
+    }, [activeCue?.id, isTTSSpeakingState, isSyncSpeaking]);
 
     const resetHideControlsTimer = useCallback(() => {
       if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
@@ -2239,44 +2135,141 @@ export const VideoPlayer = forwardRef<YouTubePlayerHandle, VideoPlayerProps>(
           </div>
         </div>
 
-        {/* Real-time TTS Input & Queue Debugger (default ON, toggleable in Settings) */}
-        {settings.showTtsDebugQueue !== false && (
-          <div className="mt-3">
-            <TTSQueueDebugger
-              activeCue={activeCue}
-              nextCue={(() => {
-                const cues = getCachedSubtitles(videoId) || [];
-                if (!activeCue || cues.length === 0) return null;
-                const idx = cues.findIndex(
-                  (c) => c.id === activeCue.id || Math.abs(c.start - activeCue.start) < 0.3
+        {/* Direct SRT Speech Flow Status & Sync Controller (Zero Queues - Pure SRT Subtitles) */}
+        <div className="mt-3 p-3.5 rounded-xl glass-panel-elevated border border-neutral-800/80 shadow-xl">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-neutral-800/60">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-neutral-900 border border-neutral-700/60 text-xs font-medium">
+                {isSyncActive ? (
+                  isSyncSpeaking ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                      <span className="text-amber-300 font-semibold">🗣️ Narrating: {targetLangCode.toUpperCase()} (SRT)</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-emerald-300 font-semibold">🟢 Playing Video Dialogue</span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-neutral-500" />
+                    <span className="text-neutral-400">⚪ Speech Flow: Ready</span>
+                  </>
+                )}
+              </div>
+              {activeCue && (
+                <span className="text-xs text-neutral-400 font-mono hidden sm:inline">
+                  #{activeCue.id} • {formatTimestamp(activeCue.start)} ➔ {formatTimestamp(activeCue.start + (activeCue.duration || 2.5))}
+                </span>
+              )}
+            </div>
+
+            {/* Quick Target Language SRT Pills */}
+            <div className="flex items-center gap-1">
+              <span className="text-[11px] text-neutral-400 font-medium mr-1 hidden md:inline">Target SRT:</span>
+              {[
+                { code: 'he', label: '🇮🇱 HE', name: 'Hebrew' },
+                { code: 'it', label: '🇮🇹 IT', name: 'Italian' },
+                { code: 'en', label: '🇺🇸 EN', name: 'English' },
+                { code: 'ar', label: '🇸🇦 AR', name: 'Arabic' },
+                { code: 'ru', label: '🇷🇺 RU', name: 'Russian' },
+              ].map((lang) => {
+                const isSelected = normTargetLang === lang.code;
+                return (
+                  <button
+                    key={lang.code}
+                    type="button"
+                    title={`Switch target SRT track to ${lang.name}`}
+                    onClick={() => onSelectTargetLanguage?.(lang.code)}
+                    className={`px-2 py-0.5 text-xs rounded font-medium transition-all ${
+                      isSelected
+                        ? 'bg-amber-400/90 text-neutral-950 font-bold shadow-md ring-1 ring-amber-300'
+                        : 'bg-neutral-800/80 hover:bg-neutral-700 text-neutral-300'
+                    }`}
+                  >
+                    {lang.label}
+                  </button>
                 );
-                return idx >= 0 && idx + 1 < cues.length ? cues[idx + 1] : null;
-              })()}
-              targetLangCode={targetLangCode}
-              translatedText={displayTranslatedText}
-              nextTranslatedText={(() => {
-                const cues = getCachedSubtitles(videoId) || [];
-                if (!activeCue || cues.length === 0) return null;
-                const idx = cues.findIndex(
-                  (c) => c.id === activeCue.id || Math.abs(c.start - activeCue.start) < 0.3
-                );
-                const next = idx >= 0 && idx + 1 < cues.length ? cues[idx + 1] : null;
-                if (!next) return null;
-                const srtCues = getCachedTargetSubtitles(videoId, normTargetLang) || [];
-                const match = srtCues.find(
-                  (c) => c.id === next.id || Math.abs(c.start - next.start) < 0.5
-                );
-                return match?.text || SAMPLE_TRANSLATIONS[next.text]?.[normTargetLang] || null;
-              })()}
-              isSpeaking={isOriginalSpeaking || isTranslatedSpeaking || isTTSSpeakingState}
-              isSyncActive={isSyncActive}
-              autoTTSEnabled={autoTTSEnabled}
-              onToggleAutoTTS={toggleAutoTTS}
-              onTestSpeak={playCurrentCueTTS}
-              onOpenSettings={onOpenSettings}
-            />
+              })}
+            </div>
           </div>
-        )}
+
+          {/* Sync Engine Action Controls */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2.5">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onToggleSync}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md ${
+                  isSyncActive
+                    ? 'bg-amber-500 hover:bg-amber-400 text-neutral-950 glow-amber'
+                    : 'bg-indigo-600 hover:bg-indigo-500 text-white glow-indigo'
+                }`}
+              >
+                {isSyncActive ? (
+                  <>
+                    <Pause className="w-3.5 h-3.5" />
+                    <span>Pause Sentence Sync</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Start Dual-Language Sync</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={onToggleLoopCue}
+                title="Loop active sentence and translation"
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 border transition-all ${
+                  isLoopingCue
+                    ? 'bg-amber-400/20 border-amber-400 text-amber-300 font-bold'
+                    : 'bg-neutral-800/80 border-neutral-700/60 text-neutral-300 hover:bg-neutral-700'
+                }`}
+              >
+                <Repeat className={`w-3.5 h-3.5 ${isLoopingCue ? 'animate-spin' : ''}`} />
+                <span>Loop Cue</span>
+              </button>
+
+              {onPrevCue && (
+                <button
+                  type="button"
+                  onClick={onPrevCue}
+                  title="Previous SRT cue"
+                  className="px-2 py-1.5 rounded-lg text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700/60"
+                >
+                  Prev
+                </button>
+              )}
+
+              {onNextCue && (
+                <button
+                  type="button"
+                  onClick={onNextCue}
+                  title="Next SRT cue"
+                  className="px-2 py-1.5 rounded-lg text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700/60"
+                >
+                  Next
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => playCurrentCueTTS()}
+              disabled={!activeCue}
+              title="Test play TTS for current active SRT subtitle cue"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-neutral-800/90 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 flex items-center gap-1.5 disabled:opacity-40"
+            >
+              <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>Speak SRT Cue</span>
+            </button>
+          </div>
+        </div>
       </div>
     );
   }

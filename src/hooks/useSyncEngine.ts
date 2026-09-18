@@ -41,6 +41,16 @@ export function useSyncEngine({
   const [currentTTSLang, setCurrentTTSLang] = useState<string | null>(null);
   const [currentTTSText, setCurrentTTSText] = useState<string | null>(null);
   const [activeCharIndex, setActiveCharIndex] = useState<number | null>(null);
+  const [isLoopingCue, setIsLoopingCue] = useState<boolean>(false);
+  const isLoopingCueRef = useRef<boolean>(false);
+  isLoopingCueRef.current = isLoopingCue;
+  const toggleLoopCue = useCallback(() => {
+    setIsLoopingCue((prev) => {
+      const next = !prev;
+      isLoopingCueRef.current = next;
+      return next;
+    });
+  }, []);
   const [translations, setTranslations] = useState<Record<string, Record<string, string>>>(() => {
     const vId = videoId || 'FcRzAdI8R9U';
     const initialMap: Record<string, Record<string, string>> = {};
@@ -404,7 +414,9 @@ export function useSyncEngine({
         logSync('SyncLoop', `[Block ${idx + 1}] Finished block cleanly. Transitioning to next...`);
         // Small inter-cue delay
         await new Promise((r) => setTimeout(r, 200));
-        idx++;
+        if (!isLoopingCueRef.current) {
+          idx++;
+        }
       }
 
       isLoopRunningRef.current = false;
@@ -580,6 +592,8 @@ export function useSyncEngine({
     ttsEngineType: getTTSEngineType(),
     startSync,
     pauseSync,
+    isLoopingCue,
+    toggleLoopCue,
     jumpToCue,
     nextCue,
     prevCue,
